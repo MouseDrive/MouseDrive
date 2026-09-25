@@ -2,7 +2,7 @@
 
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](#requirements)
 [![Language](https://img.shields.io/badge/language-Rust-black)](#build)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FToxpox%2FMouseDrive.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FToxpox%2FMouseDrive?ref=badge_shield)
 
 MouseDrive is a Windows application that converts mouse and keyboard input into virtual joystick signals via [vJoy](https://github.com/BrunnerInnovation/vJoy), designed for racing simulators.
@@ -127,6 +127,10 @@ Release history in [CHANGELOG.md](CHANGELOG.md).
 ## License
 
 Copyright (c) 2025-2026 [Toxpox](https://github.com/Toxpox).
-This project is licensed under the [MIT License](https://github.com/Toxpox/MouseDrive/blob/main/LICENSE).
+MouseDrive is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](https://github.com/Toxpox/MouseDrive/blob/main/LICENSE) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+Releases up to v0.5.0 were published under the MIT License and remain available under it.
+
+The license grants no rights to the MouseDrive name or logo (GPL-3.0 section 7(e)). Modified versions must not be presented as the original MouseDrive (section 7(c)).
 
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FToxpox%2FMouseDrive.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FToxpox%2FMouseDrive?ref=badge_large)
