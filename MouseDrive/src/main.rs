@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 
-use eframe::egui::ViewportBuilder;
+use eframe::egui::{IconData, ViewportBuilder};
 use mousedrive::control::{self, Options, Shared};
 use mousedrive::{input, log, overlay, platform};
 
@@ -21,6 +21,7 @@ use crate::ui::{App, Startup, status_labels};
 const TITLE: &str = concat!("MouseDrive v", env!("CARGO_PKG_VERSION"));
 const WINDOW_SIZE: [f32; 2] = [1000.0, 640.0];
 const WINDOW_MIN_SIZE: [f32; 2] = [760.0, 500.0];
+const APP_ICON_PNG: &[u8] = include_bytes!("../image/icon.png");
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct Args {
@@ -106,11 +107,15 @@ fn run_window(
     restart: Arc<AtomicBool>,
     errors: Vec<String>,
 ) -> eframe::Result<()> {
+    let viewport = ViewportBuilder::default()
+        .with_inner_size(WINDOW_SIZE)
+        .with_min_inner_size(WINDOW_MIN_SIZE)
+        .with_title(TITLE);
     let options = eframe::NativeOptions {
-        viewport: ViewportBuilder::default()
-            .with_inner_size(WINDOW_SIZE)
-            .with_min_inner_size(WINDOW_MIN_SIZE)
-            .with_title(TITLE),
+        viewport: match app_icon() {
+            Some(icon) => viewport.with_icon(icon),
+            None => viewport,
+        },
         ..Default::default()
     };
     eframe::run_native(
@@ -122,6 +127,12 @@ fn run_window(
             Ok(Box::new(app))
         }),
     )
+}
+
+fn app_icon() -> Option<IconData> {
+    eframe::icon_data::from_png_bytes(APP_ICON_PNG)
+        .map_err(|e| log::line(&format!("uygulama ikonu okunamadı: {e}")))
+        .ok()
 }
 
 fn shutdown(shared: &Shared, threads: Threads) {
