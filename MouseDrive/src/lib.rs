@@ -1,3 +1,4 @@
+pub mod curve;
 pub mod diagnostics;
 pub mod fsutil;
 pub mod keys;

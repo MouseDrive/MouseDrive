@@ -155,29 +155,46 @@ impl Curve {
     }
 
     pub fn validate(&mut self) -> u32 {
-        let mut corrected = 0u32;
-
-        if !(0..=1).contains(&self.mode) {
-            self.mode = self.mode.clamp(0, 1);
-            corrected += 1;
+        let mode = self.fix_mode();
+        if self.is_broken() {
+            self.points = Curve::default().points;
+            return mode + 1;
         }
+        mode + self.drop_extra_points()
+            + self.clamp_coordinates()
+            + self.sort_by_t()
+            + self.pin_ends()
+            + self.enforce_t_spacing()
+            + self.enforce_v_monotone()
+    }
 
-        let broken = self.points.len() < 2
+    fn fix_mode(&mut self) -> u32 {
+        if (0..=1).contains(&self.mode) {
+            return 0;
+        }
+        self.mode = self.mode.clamp(0, 1);
+        1
+    }
+
+    fn is_broken(&self) -> bool {
+        self.points.len() < 2
             || self
                 .points
                 .iter()
-                .any(|p| !p[0].is_finite() || !p[1].is_finite());
-        if broken {
-            self.points = Curve::default().points;
-            return corrected + 1;
-        }
+                .any(|p| !p[0].is_finite() || !p[1].is_finite())
+    }
 
-        while self.points.len() > MAX_POINTS {
+    fn drop_extra_points(&mut self) -> u32 {
+        let extra = self.points.len().saturating_sub(MAX_POINTS);
+        for _ in 0..extra {
             let idx = self.points.len() - 2;
             self.points.remove(idx);
-            corrected += 1;
         }
+        extra as u32
+    }
 
+    fn clamp_coordinates(&mut self) -> u32 {
+        let mut corrected = 0;
         for p in &mut self.points {
             let c = [p[0].clamp(0.0, 1.0), p[1].clamp(0.0, 1.0)];
             if c != *p {
@@ -185,24 +202,32 @@ impl Curve {
                 corrected += 1;
             }
         }
+        corrected
+    }
 
-        let sorted = self.points.windows(2).all(|w| w[0][0] <= w[1][0]);
-        if !sorted {
-            self.points
-                .sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
-            corrected += 1;
+    fn sort_by_t(&mut self) -> u32 {
+        if self.points.windows(2).all(|w| w[0][0] <= w[1][0]) {
+            return 0;
         }
+        self.points
+            .sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
+        1
+    }
 
+    fn pin_ends(&mut self) -> u32 {
         let last = self.points.len() - 1;
-        if self.points[0] != [0.0, 0.0] {
-            self.points[0] = [0.0, 0.0];
-            corrected += 1;
+        let mut corrected = 0;
+        for (idx, end) in [(0, [0.0, 0.0]), (last, [1.0, 1.0])] {
+            if self.points[idx] != end {
+                self.points[idx] = end;
+                corrected += 1;
+            }
         }
-        if self.points[last] != [1.0, 1.0] {
-            self.points[last] = [1.0, 1.0];
-            corrected += 1;
-        }
+        corrected
+    }
 
+    fn enforce_t_spacing(&mut self) -> u32 {
+        let mut corrected = 0;
         let mut i = 1;
         while i < self.points.len() - 1 {
             let remaining_right = self.points.len() - 1 - i;
@@ -215,7 +240,11 @@ impl Curve {
                 i += 1;
             }
         }
+        corrected
+    }
 
+    fn enforce_v_monotone(&mut self) -> u32 {
+        let mut corrected = 0;
         let mut i = 1;
         while i < self.points.len() - 1 {
             let last = self.points.len() - 1;
@@ -233,8 +262,66 @@ impl Curve {
             }
             i += 1;
         }
-
         corrected
+    }
+
+    fn point_bounds(&self, i: usize) -> Option<(f64, f64, f64, f64)> {
+        if i == 0 || i + 1 >= self.points.len() {
+            return None;
+        }
+        let (prev, next) = (self.points[i - 1], self.points[i + 1]);
+        let b = (
+            prev[0] + MIN_T_SPACING,
+            next[0] - MIN_T_SPACING,
+            prev[1] + MIN_V_SPACING,
+            next[1] - MIN_V_SPACING,
+        );
+        (b.0 <= b.1 && b.2 <= b.3).then_some(b)
+    }
+
+    pub fn move_point(&mut self, i: usize, t: f64, v: f64) -> bool {
+        let Some((t_lo, t_hi, v_lo, v_hi)) = self.point_bounds(i) else {
+            return false;
+        };
+        if !t.is_finite() || !v.is_finite() {
+            return false;
+        }
+        let next = [t.clamp(t_lo, t_hi), v.clamp(v_lo, v_hi)];
+        if self.points[i] == next {
+            return false;
+        }
+        self.points[i] = next;
+        true
+    }
+
+    pub fn insert_point(&mut self, t: f64, v: f64) -> Option<usize> {
+        let n = self.points.len();
+        if !(2..MAX_POINTS).contains(&n) || !t.is_finite() || !v.is_finite() {
+            return None;
+        }
+        let idx = self
+            .points
+            .iter()
+            .position(|p| p[0] > t)
+            .unwrap_or(n - 1)
+            .max(1);
+        let (prev, next) = (self.points[idx - 1], self.points[idx]);
+        let (t_lo, t_hi) = (prev[0] + MIN_T_SPACING, next[0] - MIN_T_SPACING);
+        let (v_lo, v_hi) = (prev[1] + MIN_V_SPACING, next[1] - MIN_V_SPACING);
+        if t_lo > t_hi || v_lo > v_hi {
+            return None;
+        }
+        self.points
+            .insert(idx, [t.clamp(t_lo, t_hi), v.clamp(v_lo, v_hi)]);
+        Some(idx)
+    }
+
+    pub fn remove_point(&mut self, i: usize) -> bool {
+        if i == 0 || i + 1 >= self.points.len() {
+            return false;
+        }
+        self.points.remove(i);
+        true
     }
 
     pub fn preset(p: CurvePreset) -> Self {
