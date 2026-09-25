@@ -108,6 +108,8 @@ E = ergonomics). The own-driver work (UMDF2/VHF) is deferred.
 - **Curve editor** — numeric entry, keyboard control (Page Up/Down, arrows,
   Delete) and screen-reader descriptions.
 - **Diagnostics line** and **Copy diagnostics** for bug reports.
+- **Logo and app icon** — the window, the taskbar and `mousedrive.exe` show
+  the new MouseDrive icon; the README shows the logo.
 - **Accessibility** — colour-blind palette (Okabe-Ito), brake always dashed,
   AccessKit labels on custom widgets, rebindable hotkeys including mouse side
   buttons, interface scale 75–200 %.

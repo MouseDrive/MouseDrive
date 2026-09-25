@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="MouseDrive/image/logo-dark.png">
+    <img src="MouseDrive/image/logo-light.png" alt="MouseDrive" width="334">
+  </picture>
+</p>
+
 # MouseDrive (Rust) — v0.5.0
 
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](#requirements)
