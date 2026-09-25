@@ -1,5 +1,6 @@
 pub mod bind;
 pub mod config;
+pub mod control;
 pub mod curve;
 pub mod diagnostics;
 pub mod ergonomics;
