@@ -64,7 +64,7 @@ impl Default for Tuning {
             steering_smoothing_ms: 13.9,
             steering_adaptive_min_cutoff_hz: 5.0,
             steering_adaptive_beta: 5.0,
-            steering_deadzone: 0.02,
+            steering_deadzone: 0.0,
             steering_saturation: 1.0,
             steering_spring_strength: 0.15,
 

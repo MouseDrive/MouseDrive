@@ -97,7 +97,7 @@ MouseDrive already shapes the input (steering mode, smoothing, throttle cut, bra
 
 | Setting | Value | Why |
 |---------|-------|-----|
-| Deadzone (steering, throttle, brake) | **0** | MouseDrive has its own deadzone; a second one hides small corrections. |
+| Deadzone (steering, throttle, brake) | **0** | A game deadzone hides small corrections; MouseDrive's own (experimental) deadzone is off by default. |
 | Linearity / gamma / sensitivity curve | **1 / linear** | Curves belong in MouseDrive (Expo mode, envelope editors). |
 | Filtering / smoothing | **off** | MouseDrive's filters are time-based; a game filter adds lag on top. |
 | Speed-sensitive steering | **off** | It reduces steering with speed — mouse steering is already precise. |
