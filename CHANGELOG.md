@@ -122,7 +122,9 @@ E = ergonomics). The own-driver work (UMDF2/VHF) is deferred.
   at 250 Hz.
 - **CI** — `cargo fmt --check` and clippy with and without the updater feature;
   multi-line steps run in bash so every command's exit code counts. The release
-  zip contains `mousedrive.exe`, README and LICENSE.
+  zip contains `mousedrive.exe`, README and LICENSE; `mousedrive.exe` is also
+  attached on its own, and `SHA256SUMS.txt` lists both (auto-update still
+  installs from the zip).
 - Code split into focused modules (`control/`, `logic/`, `ui/`, `lang/`, …).
 
 ### Documentation

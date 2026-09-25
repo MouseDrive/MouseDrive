@@ -19,7 +19,7 @@ MouseDrive is a Windows application that converts mouse and keyboard input into 
 
 Or browse all versions at [Releases](https://github.com/Toxpox/MouseDrive/releases/).
 
-> Extract the `.zip`, place `vJoyInterface.dll` next to `mousedrive.exe`, and run.
+> Extract the `.zip`, place `vJoyInterface.dll` next to `mousedrive.exe`, and run. Each release also has `mousedrive.exe` on its own; `SHA256SUMS.txt` lists the checksums of both.
 
 ## Features
 
