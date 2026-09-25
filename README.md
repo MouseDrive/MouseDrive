@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-# MouseDrive (Rust) — v0.5.0
+# MouseDrive (Rust) — v0.6.0
 
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](#requirements)
 [![Language](https://img.shields.io/badge/language-Rust-black)](#build)
