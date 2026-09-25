@@ -1,7 +1,10 @@
+pub mod config;
 pub mod curve;
 pub mod diagnostics;
 pub mod fsutil;
 pub mod keys;
+pub mod logic;
 pub mod output;
+pub mod profiles;
 pub mod setup;
 pub mod status;
