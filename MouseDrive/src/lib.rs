@@ -2,6 +2,7 @@ pub mod config;
 pub mod curve;
 pub mod diagnostics;
 pub mod fsutil;
+pub mod input;
 pub mod keys;
 pub mod log;
 pub mod logic;
