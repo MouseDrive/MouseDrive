@@ -15,9 +15,9 @@ MouseDrive is a Windows application that converts mouse and keyboard input into 
 
 ## Download
 
-**[Download latest release](https://github.com/Toxpox/MouseDrive/releases/latest)**
+**[Download latest release](https://github.com/MouseDrive/MouseDrive/releases/latest)**
 
-Or browse all versions at [Releases](https://github.com/Toxpox/MouseDrive/releases/).
+Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/releases/).
 
 > Extract the `.zip`, place `vJoyInterface.dll` next to `mousedrive.exe`, and run. Each release also has `mousedrive.exe` on its own; `SHA256SUMS.txt` lists the checksums of both.
 
@@ -78,7 +78,7 @@ All keys can be reassigned in **Settings → General → Keys**.
 ## Quick start
 
 1. Install [vJoy](https://github.com/BrunnerInnovation/vJoy) and enable a device with **X / Y / Rz** axes and **2 buttons** (Device 1 by default).
-2. Run [MouseDrive](https://github.com/Toxpox/MouseDrive/releases/latest). If anything is missing, the **Setup** window lists what to fix.
+2. Run [MouseDrive](https://github.com/MouseDrive/MouseDrive/releases/latest). If anything is missing, the **Setup** window lists what to fix.
 3. Bind the axes in your game with the **Axis bind helper**.
 4. Set the game's deadzone to 0, linearity to 1 and filtering off — see [In-game settings](#in-game-settings).
 
@@ -112,7 +112,7 @@ MouseDrive already shapes the input (steering mode, smoothing, throttle cut, bra
 ## Requirements
 
 - Windows 10/11
-- [Executable MouseDrive](https://github.com/Toxpox/MouseDrive/releases/latest)
+- [Executable MouseDrive](https://github.com/MouseDrive/MouseDrive/releases/latest)
 - [vJoy Driver**](https://github.com/BrunnerInnovation/vJoy) installed and enabled
 - `vJoyInterface.dll` available (next to exe, Program Files, or in `PATH`)
 
@@ -202,7 +202,7 @@ Start with the **Setup** window: it checks every requirement and says how to fix
 ## License
 
 Copyright (c) 2025-2026 [Toxpox](https://github.com/Toxpox).
-MouseDrive is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](https://github.com/Toxpox/MouseDrive/blob/main/LICENSE) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+MouseDrive is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](https://github.com/MouseDrive/MouseDrive/blob/main/LICENSE) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
 Releases up to v0.5.0 were published under the MIT License and remain available under it.
 

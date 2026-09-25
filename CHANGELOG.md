@@ -133,12 +133,15 @@ E = ergonomics). The own-driver work (UMDF2/VHF) is deferred.
 - README troubleshooting now covers process death: if MouseDrive is killed,
   vJoy keeps the last axis values until MouseDrive starts again.
 
-### License
+### License and repository
 
 - MouseDrive is now licensed under GPL-3.0-or-later. Releases up to v0.5.0
   remain available under the MIT License.
 - The license grants no rights to the MouseDrive name or logo; modified versions
   must not be presented as the original.
+- The repository moved to [MouseDrive/MouseDrive](https://github.com/MouseDrive/MouseDrive).
+  Old `Toxpox/MouseDrive` links and the update check of earlier versions are
+  redirected.
 
 ## [0.5.0] - 2026-06-14
 
@@ -231,21 +234,21 @@ The headline of this release is the **decoupled control architecture**: the
 ## [0.4.0] - 2026-03-21
 
 - Steering, throttle and brake tuning improvements; UI polish.
-- See the [v0.4.0 release](https://github.com/Toxpox/MouseDrive/releases/tag/v0.4.0).
+- See the [v0.4.0 release](https://github.com/MouseDrive/MouseDrive/releases/tag/v0.4.0).
 
 ## [0.3.0] - 2026-02-09
 
 - Rust rewrite of the original C++ version: raw-input capture thread, atomic
   lock-free state sharing, eframe/egui interface, TOML configuration, TR/EN
   localization.
-- See the [V0.3.0 release](https://github.com/Toxpox/MouseDrive/releases/tag/V0.3.0).
+- See the [V0.3.0 release](https://github.com/MouseDrive/MouseDrive/releases/tag/V0.3.0).
 
 ## [0.1.0-alpha] - 2026-02-04
 
 - First public alpha.
-- See the [V0.1.0-alpha release](https://github.com/Toxpox/MouseDrive/releases/tag/V0.1.0-alpha).
+- See the [V0.1.0-alpha release](https://github.com/MouseDrive/MouseDrive/releases/tag/V0.1.0-alpha).
 
-[0.5.0]: https://github.com/Toxpox/MouseDrive/compare/v0.4.0...main
-[0.4.0]: https://github.com/Toxpox/MouseDrive/compare/V0.3.0...v0.4.0
-[0.3.0]: https://github.com/Toxpox/MouseDrive/compare/V0.1.0-alpha...V0.3.0
-[0.1.0-alpha]: https://github.com/Toxpox/MouseDrive/releases/tag/V0.1.0-alpha
+[0.5.0]: https://github.com/MouseDrive/MouseDrive/compare/v0.4.0...main
+[0.4.0]: https://github.com/MouseDrive/MouseDrive/compare/V0.3.0...v0.4.0
+[0.3.0]: https://github.com/MouseDrive/MouseDrive/compare/V0.1.0-alpha...V0.3.0
+[0.1.0-alpha]: https://github.com/MouseDrive/MouseDrive/releases/tag/V0.1.0-alpha

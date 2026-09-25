@@ -3,7 +3,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const RELEASES_API: &str = "https://api.github.com/repos/Toxpox/MouseDrive/releases/latest";
+const RELEASES_API: &str = "https://api.github.com/repos/MouseDrive/MouseDrive/releases/latest";
 const HTTP_TIMEOUT_SECS: u64 = 5;
 const DOWNLOAD_TIMEOUT_SECS: u64 = 120;
 const MAX_ZIP_BYTES: u64 = 100 * 1024 * 1024;

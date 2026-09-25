@@ -15,7 +15,7 @@ use super::widgets::{
 };
 use crate::lang::{Lang, fill};
 
-const GAME_GUIDE_URL: &str = "https://github.com/Toxpox/MouseDrive#in-game-settings";
+const GAME_GUIDE_URL: &str = "https://github.com/MouseDrive/MouseDrive#in-game-settings";
 pub const LOOP_INTERVALS_MS: [i32; 6] = [1, 2, 4, 5, 8, 10];
 const MOUSE_COMBO_WIDTH: f32 = 220.0;
 
