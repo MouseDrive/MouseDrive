@@ -14,3 +14,4 @@ pub mod profiles;
 pub mod setup;
 pub mod status;
 pub mod telemetry;
+pub mod vjoy;
