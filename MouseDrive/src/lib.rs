@@ -10,6 +10,7 @@ pub mod log;
 pub mod logic;
 pub mod output;
 pub mod overlay;
+pub mod platform;
 pub mod preview;
 pub mod profiles;
 pub mod setup;
