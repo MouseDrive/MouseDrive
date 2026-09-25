@@ -1,8 +1,8 @@
 use libloading::Library;
 
-pub const HID_USAGE_X: u32 = 0x30; // direksiyon
-pub const HID_USAGE_Y: u32 = 0x31; // gaz
-pub const HID_USAGE_RZ: u32 = 0x35; // fren
+pub const HID_USAGE_X: u32 = 0x30;
+pub const HID_USAGE_Y: u32 = 0x31;
+pub const HID_USAGE_RZ: u32 = 0x35;
 
 pub const AXIS_MAX: i32 = 32767;
 pub const AXIS_MIN: i32 = 0;
@@ -29,7 +29,6 @@ pub enum VJoyStatus {
     Unknown,
 }
 
-// vJoy SDK fonksiyonlari __cdecl kullaniyor (x64'te fark etmez ama dogrusu bu)
 type FnVJoyEnabled = unsafe extern "C" fn() -> bool;
 type FnGetVJDStatus = unsafe extern "C" fn(u32) -> u32;
 type FnAcquireVJD = unsafe extern "C" fn(u32) -> bool;
@@ -47,15 +46,10 @@ pub struct VJoyApi {
     set_axis: FnSetAxis,
     set_btn: FnSetBtn,
     reset_vjd: FnResetVJD,
-    /// Sahiplenilen cihaz; Drop'ta otomatik birakma + cift-birakma korumasi.
-    /// Cell: tek thread sahibi (kontrol thread'i), Send olmasi yeterli.
     acquired: std::cell::Cell<Option<u32>>,
 }
 
-/// Bilinen konumlarda vJoyInterface.dll'i arar.
-/// Bulamazsa None doner ve load() standard PATH aramasina duser.
 fn find_vjoy_dll() -> Option<std::path::PathBuf> {
-    // 1. Exe dizini (portable — DLL exe'nin yaninda)
     if let Ok(exe) = std::env::current_exe()
         && let Some(dir) = exe.parent()
     {
@@ -65,7 +59,6 @@ fn find_vjoy_dll() -> Option<std::path::PathBuf> {
         }
     }
 
-    // 2. Standard vJoy kurulum yolu (x64)
     if let Ok(pf) = std::env::var("ProgramFiles") {
         let path = std::path::PathBuf::from(&pf)
             .join("vJoy")
@@ -83,11 +76,9 @@ impl VJoyApi {
     #[allow(clippy::missing_transmute_annotations)]
     pub fn load() -> Option<Self> {
         unsafe {
-            // Oncelikle bilinen guvenli konumlardan yukle (DLL hijacking koruması)
             let lib = if let Some(path) = find_vjoy_dll() {
                 Library::new(path).ok()?
             } else {
-                // Fallback: standard DLL arama sirasi (System32, PATH vs.)
                 Library::new("vJoyInterface.dll").ok()?
             };
 
@@ -124,7 +115,6 @@ impl VJoyApi {
     }
     pub fn relinquish(&self, dev: u32) {
         unsafe { (self.relinquish_vjd)(dev) }
-        // ayni cihazsa sahiplik kaydini temizle (Drop cift-birakma yapmasin)
         if self.acquired.get() == Some(dev) {
             self.acquired.set(None);
         }
@@ -152,8 +142,6 @@ impl VJoyApi {
 }
 
 impl Drop for VJoyApi {
-    /// Kapanis emniyeti: acik birakma cagrilmadan dusulurse cihazi birak.
-    /// relinquish() acquired'i temizledigi icin cift-birakma olmaz.
     fn drop(&mut self) {
         if let Some(dev) = self.acquired.get() {
             unsafe { (self.relinquish_vjd)(dev) }

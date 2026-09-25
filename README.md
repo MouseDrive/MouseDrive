@@ -81,7 +81,6 @@ cargo build
 cargo build --release
 ```
 
-
 ## Configuration
 
 Settings are stored in TOML format. The config file is loaded from:

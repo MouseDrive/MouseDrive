@@ -23,43 +23,29 @@ const TAB_GENERAL: u8 = 3;
 
 const WM_QUIT: u32 = 0x0012;
 
-// --- Renk paleti (UImake.md §2): renk = anlam. Tek accent mavi; her kanalin
-// kendi rengi. Renk asla tek basina bilgi tasimaz — yaninda daima metin/yuzde.
-/// Accent / Direksiyon — secili sekme, slider dolgusu, direksiyon cubugu.
 pub(crate) const ACCENT: egui::Color32 = egui::Color32::from_rgb(55, 138, 221);
-/// Gaz gostergesi.
 const COL_THROTTLE: egui::Color32 = egui::Color32::from_rgb(99, 153, 34);
-/// Fren gostergesi.
 const COL_BRAKE: egui::Color32 = egui::Color32::from_rgb(226, 75, 74);
-/// Basari / aktif girdi (vJoy bagli, basili tus).
 const COL_OK: egui::Color32 = egui::Color32::from_rgb(29, 158, 117);
 
 impl eframe::App for MouseDriveApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Kontrol thread'inden guncel anlik goruntuyu ve durumu oku
         self.snapshot = self.shared.snapshot();
         self.vjoy_status = self.shared.vjoy_status();
 
-        // Otomatik kurulum tamamlandiysa: kontrol thread'ini durdur (vJoy birakilir),
-        // yeni sureci baslat, kapan
         self.handle_update_restart(ctx);
 
-        // Kapatinca cikma: exit_on_close kapaliyken pencereyi kapatmak yerine
-        // simge durumuna kucult (kontrol thread'i arka planda calismaya devam eder)
         if ctx.input(|i| i.viewport().close_requested()) && !self.config.exit_on_close {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
         }
 
-        // Tembel repaint: odakliyken akici gosterge (60Hz), arka planda yavas.
-        // Kontrol dongusu repaint'ten bagimsiz oldugu icin bu yalniz GUI'yi etkiler.
         let focused = ctx.input(|i| i.focused);
         let repaint_ms = if focused { 16 } else { 250 };
         ctx.request_repaint_after(Duration::from_millis(repaint_ms));
 
         let s = strings(Lang::from_i32(self.config.language));
 
-        // --- Sol acilir-kapanir ayar paneli ---
         egui::SidePanel::left("settings_panel")
             .resizable(true)
             .default_width(340.0)
@@ -70,7 +56,6 @@ impl eframe::App for MouseDriveApp {
                 });
                 ui.separator();
 
-                // Sekme butonlari
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().button_padding = egui::vec2(8.0, 4.0);
                     ui.selectable_value(&mut self.settings_tab, TAB_STEERING, s.tab_steering);
@@ -90,7 +75,6 @@ impl eframe::App for MouseDriveApp {
 
                 ui.separator();
 
-                // Alt butonlar
                 ui.horizontal_wrapped(|ui| {
                     if ui.button(s.btn_load).clicked()
                         && let Some(path) = get_config_path()
@@ -114,7 +98,6 @@ impl eframe::App for MouseDriveApp {
                 });
             });
 
-        // --- Merkez panel (gostergeler + durum) ---
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.spacing_mut().item_spacing = egui::vec2(8.0, 6.0);
 
@@ -127,7 +110,6 @@ impl eframe::App for MouseDriveApp {
             });
             ui.separator();
 
-            // Config onarim bildirimi (validate() sinir disi degerleri duzelttiyse)
             if let Some(n) = self.config_notice {
                 egui::Frame::NONE
                     .inner_margin(egui::Margin::symmetric(6, 4))
@@ -147,8 +129,6 @@ impl eframe::App for MouseDriveApp {
                 ui.add_space(2.0);
             }
 
-            // Durum cipleri (UImake.md §3.4): vJoy + yakalama + F8.
-            // Renk noktasi durumu kodlar; metin daima yaninda (erisilebilirlik).
             ui.horizontal(|ui| {
                 let neutral = ui.visuals().faint_bg_color;
                 let weak = ui.visuals().weak_text_color();
@@ -162,7 +142,11 @@ impl eframe::App for MouseDriveApp {
                 let cap = self.snapshot.capture_enabled;
                 chip(
                     ui,
-                    if cap { s.capture_active } else { s.capture_paused },
+                    if cap {
+                        s.capture_active
+                    } else {
+                        s.capture_paused
+                    },
                     Some(if cap { ACCENT } else { weak }),
                     neutral,
                 );
@@ -171,8 +155,6 @@ impl eframe::App for MouseDriveApp {
 
             ui.add_space(4.0);
 
-            // Gostergeler (UImake.md §3.2/§3.3): dikey, tam genislik, renk kodlu.
-            // Direksiyon cift yonlu (merkez-cikis); gaz/fren tek yonlu dolu cubuk.
             {
                 let norm =
                     (self.snapshot.steering_filtered / STEERING_RANGE).clamp(-1.0, 1.0) as f32;
@@ -211,7 +193,6 @@ impl eframe::App for MouseDriveApp {
 
             ui.separator();
 
-            // Girdi rozetleri (UImake.md §3.5): aktif olan yesil zemin + nokta.
             let lmb = LEFT_BUTTON.load(Ordering::Acquire);
             let rmb = RIGHT_BUTTON.load(Ordering::Acquire);
             let w_on = self.snapshot.w_key_pressed;
@@ -221,7 +202,12 @@ impl eframe::App for MouseDriveApp {
                 let neutral = ui.visuals().faint_bg_color;
                 let active_bg = COL_OK.linear_multiply(0.25);
                 let pill = |ui: &mut egui::Ui, text: &str, on: bool| {
-                    chip(ui, text, on.then_some(COL_OK), if on { active_bg } else { neutral });
+                    chip(
+                        ui,
+                        text,
+                        on.then_some(COL_OK),
+                        if on { active_bg } else { neutral },
+                    );
                 };
                 pill(ui, s.left_click, lmb);
                 pill(ui, s.right_click, rmb);
@@ -231,7 +217,6 @@ impl eframe::App for MouseDriveApp {
 
             ui.add_space(4.0);
 
-            // Hizli islem butonlari
             ui.horizontal(|ui| {
                 if ui.button(s.btn_reset_steering).clicked() {
                     self.shared.request_reset_steering();
@@ -242,16 +227,12 @@ impl eframe::App for MouseDriveApp {
             });
         });
 
-        // Config'i kontrol thread'ine yayinla (degisiklikler buradan akar).
-        // Repaint hizinda olur (tembel), kontrol thread'i yalniz dirty'de klonlar.
         self.publish_config();
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        // Kontrol thread'ini durdur: vJoy eksenleri sifirlanir ve cihaz birakilir
         self.stop_control_thread();
 
-        // Graceful shutdown: raw input thread'e WM_QUIT gonder
         let thread_id = RAW_INPUT_THREAD_ID.load(Ordering::SeqCst);
         if thread_id != 0 {
             unsafe {
@@ -260,8 +241,6 @@ impl eframe::App for MouseDriveApp {
         }
     }
 }
-
-// --- vJoy durum metni (lokalize) ---
 
 fn vjoy_status_text<'a>(status: &VJoyStatus, s: &'a Strings) -> &'a str {
     match status {
@@ -275,20 +254,11 @@ fn vjoy_status_text<'a>(status: &VJoyStatus, s: &'a Strings) -> &'a str {
     }
 }
 
-// --- Sekme icerik fonksiyonlari ---
-
 impl MouseDriveApp {
-    /// Otomatik kurulum bittiyse yeniden baslat (yalniz updater feature).
     #[cfg(feature = "updater")]
     fn handle_update_restart(&mut self, _ctx: &egui::Context) {
-        if !self.restart_initiated
-            && self.update_checker.status() == UpdateStatus::ReadyToRestart
-        {
+        if !self.restart_initiated && self.update_checker.status() == UpdateStatus::ReadyToRestart {
             self.restart_initiated = true;
-            // vJoy birakilir + raw input thread kapanir, sonra yeni exe baslatilir.
-            // process::exit kullaniyoruz: ViewportCommand::Close, exit_on_close=false
-            // ile minimize mantigina takilirdi; ayrica eski surecin tam kapanmasi
-            // self-replace edilen yeni exe'nin temiz calismasini garanti eder.
             self.stop_control_thread();
             let thread_id = crate::input::RAW_INPUT_THREAD_ID.load(Ordering::SeqCst);
             if thread_id != 0 {
@@ -306,9 +276,6 @@ impl MouseDriveApp {
     #[cfg(not(feature = "updater"))]
     fn handle_update_restart(&mut self, _ctx: &egui::Context) {}
 
-    /// Ust satirdaki guncelleme butonu/durumu.
-    /// Yesil butona tiklama otomatik kurulumu baslatir; release'te standart
-    /// varliklar (zip + SHA256SUMS.txt) yoksa surum sayfasina dusulur.
     #[cfg(feature = "updater")]
     fn draw_update_button(&mut self, ui: &mut egui::Ui, s: &Strings) {
         match self.update_checker.status() {
@@ -355,7 +322,6 @@ impl MouseDriveApp {
     #[cfg(not(feature = "updater"))]
     fn draw_update_button(&mut self, _ui: &mut egui::Ui, _s: &Strings) {}
 
-    /// Genel sekmesindeki guncelleme bolumu (yalniz updater feature).
     #[cfg(feature = "updater")]
     fn draw_update_section(&mut self, ui: &mut egui::Ui, s: &Strings) {
         ui.checkbox(&mut self.config.auto_check_updates, s.upd_auto_check);
@@ -473,8 +439,8 @@ impl MouseDriveApp {
         );
 
         ui.separator();
-        let rise_phase = (self.snapshot.throttle_dir == RampDir::Rising)
-            .then_some(self.snapshot.throttle_phase);
+        let rise_phase =
+            (self.snapshot.throttle_dir == RampDir::Rising).then_some(self.snapshot.throttle_phase);
         let fall_phase = (self.snapshot.throttle_dir == RampDir::Falling)
             .then_some(self.snapshot.throttle_phase);
         let mut changed = false;
@@ -562,7 +528,6 @@ impl MouseDriveApp {
         ui.separator();
         let apply_phase = (self.snapshot.brake_state == BrakeState::Press)
             .then_some(self.snapshot.brake_apply_phase);
-        // basili tutarken hold suresi sonrasi kademeli dusus (PostHold)
         let posthold_phase = (self.snapshot.brake_state == BrakeState::PostHold)
             .then_some(self.snapshot.brake_posthold_phase);
         let mut changed = false;
@@ -631,10 +596,6 @@ impl MouseDriveApp {
     }
 }
 
-// --- Egri bolumu ---
-
-/// Acilir baslik icinde egri editoru + interpolasyon/sablon/sifirla satiri.
-/// Degisiklik olduysa true doner (cagiran taraf fazlari yeniden tohumlar).
 fn curve_section(
     ui: &mut egui::Ui,
     s: &Strings,
@@ -699,8 +660,6 @@ fn curve_section(
     changed
 }
 
-// --- Slider yardimlari ---
-
 fn slider_f64(
     ui: &mut egui::Ui,
     label: &str,
@@ -727,10 +686,6 @@ fn slider_i32(
     .inner
 }
 
-// --- Gosterge & cip yardimcilari (UImake.md §3) ---
-
-/// Tek yonlu renk kodlu gosterge: solda etiket, saga hizali yuzde, altta tam
-/// genislik dolu cubuk. `value` 0..1, `pct` onceden bicimlenmis yuzde metni.
 fn gauge(ui: &mut egui::Ui, label: &str, value: f32, pct: &str, color: egui::Color32) {
     ui.horizontal(|ui| {
         ui.label(label);
@@ -746,8 +701,6 @@ fn gauge(ui: &mut egui::Ui, label: &str, value: f32, pct: &str, color: egui::Col
     ui.add_space(6.0);
 }
 
-/// Cift yonlu direksiyon cubugu: merkezden saga (pozitif) / sola (negatif) dolar.
-/// `norm`: -1.0..1.0 (sol negatif). ProgressBar merkez-cikis dolduramaz; ozel cizim.
 fn steering_bar(ui: &mut egui::Ui, norm: f32) {
     let width = ui.available_width();
     let (resp, p) = ui.allocate_painter(egui::vec2(width, 14.0), egui::Sense::hover());
@@ -774,7 +727,6 @@ fn steering_bar(ui: &mut egui::Ui, norm: f32) {
     p.rect_filled(fr, 3.0, ACCENT);
 }
 
-/// Renkli durum/girdi cipi: opsiyonel renk noktasi + metin, yuvarlak zemin.
 fn chip(ui: &mut egui::Ui, text: &str, dot: Option<egui::Color32>, bg: egui::Color32) {
     egui::Frame::NONE
         .fill(bg)
@@ -783,8 +735,7 @@ fn chip(ui: &mut egui::Ui, text: &str, dot: Option<egui::Color32>, bg: egui::Col
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 if let Some(c) = dot {
-                    let (r, p) =
-                        ui.allocate_painter(egui::vec2(9.0, 9.0), egui::Sense::hover());
+                    let (r, p) = ui.allocate_painter(egui::vec2(9.0, 9.0), egui::Sense::hover());
                     p.circle_filled(r.rect.center(), 3.5, c);
                 }
                 ui.label(text);

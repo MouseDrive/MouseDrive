@@ -33,7 +33,6 @@ jobs:
 
   release:
     name: Build & Release
-    # yalnizca v* tag push'unda calisir (orn. v0.5.0)
     if: startsWith(github.ref, 'refs/tags/v')
     needs: test
     runs-on: windows-latest
@@ -48,9 +47,6 @@ jobs:
         with:
           workspaces: MouseDrive
 
-      # surum tek kaynaktan gelir: tag. Cargo.toml'daki version satiri
-      # tag'den yazilir; boylece exe basligi, auto-update karsilastirmasi
-      # ve release adi her zaman tutarli olur.
       - name: Set version from tag
         shell: pwsh
         run: |
@@ -76,7 +72,6 @@ jobs:
           Copy-Item MouseDrive/target/release/mousedrive.exe dist/
           Copy-Item README.md, LICENSE dist/
           Compress-Archive -Path dist/* -DestinationPath $zipName
-          # auto-update v2'nin dogrulayacagi checksum dosyasi
           $hash = (Get-FileHash $zipName -Algorithm SHA256).Hash.ToLower()
           "$hash  $zipName" | Out-File SHA256SUMS.txt -Encoding ascii
           Get-Content SHA256SUMS.txt

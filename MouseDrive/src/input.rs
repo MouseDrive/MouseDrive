@@ -18,16 +18,11 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::PCWSTR;
 
-// raw input button flags
 const RI_MOUSE_LEFT_BUTTON_DOWN: u16 = 0x0001;
 const RI_MOUSE_LEFT_BUTTON_UP: u16 = 0x0002;
 const RI_MOUSE_RIGHT_BUTTON_DOWN: u16 = 0x0004;
 const RI_MOUSE_RIGHT_BUTTON_UP: u16 = 0x0008;
 const RI_MOUSE_MIDDLE_BUTTON_DOWN: u16 = 0x0010;
-
-// --- Thread arasi paylasilan atomik state ---
-// Raw input thread yaziyor (Release), GUI thread okuyor (Acquire).
-// MOUSE_DELTA_X icin Relaxed yeterli: siralama garantisi gereksiz, sadece taze deger onemli.
 
 pub static MOUSE_DELTA_X: AtomicI64 = AtomicI64::new(0);
 pub static LEFT_BUTTON: AtomicBool = AtomicBool::new(false);
@@ -38,8 +33,7 @@ pub static RAW_INPUT_THREAD_ID: AtomicU32 = AtomicU32::new(0);
 pub static INPUT_SINK_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static MOUSE_DELTA_CAP: AtomicI32 = AtomicI32::new(180);
 
-// f64'u atomik saklamak icin bit pattern kullaniyoruz (lock-free)
-static MOUSE_DPI_SCALE: AtomicU64 = AtomicU64::new(0x3FF0000000000000); // 1.0f64
+static MOUSE_DPI_SCALE: AtomicU64 = AtomicU64::new(0x3FF0000000000000);
 
 pub fn load_dpi_scale() -> f64 {
     f64::from_bits(MOUSE_DPI_SCALE.load(Ordering::Relaxed))
@@ -48,12 +42,9 @@ pub fn store_dpi_scale(v: f64) {
     MOUSE_DPI_SCALE.store(v.to_bits(), Ordering::Relaxed);
 }
 
-/// RAWINPUT struct'i 8-byte alignment gerektirir.
-/// Vec heap allocation yerine stack buffer — hot path'te alloc yok.
 #[repr(C, align(8))]
 struct AlignedBuf([u8; 256]);
 
-/// WM_INPUT mesajlarini yakalar, mouse delta ve buton state'lerini gunceller.
 unsafe extern "system" fn raw_wnd_proc(
     hwnd: HWND,
     msg: u32,
@@ -71,7 +62,6 @@ unsafe extern "system" fn raw_wnd_proc(
                 std::mem::size_of::<RAWINPUTHEADER>() as u32,
             );
 
-            // mouse RAWINPUT ~48 byte, 256 fazlasiyla yeter
             if size > 0 && (size as usize) <= std::mem::size_of::<AlignedBuf>() {
                 let mut buf = AlignedBuf([0u8; 256]);
                 let result = GetRawInputData(
@@ -87,7 +77,6 @@ unsafe extern "system" fn raw_wnd_proc(
                     if raw.header.dwType == RIM_TYPEMOUSE.0 {
                         let mouse = &raw.data.mouse;
 
-                        // relative mouse hareketi — Relaxed yeterli, GUI thread her frame sifirlar
                         if (mouse.usFlags.0 & 0x01) == 0 {
                             let dx = mouse.lLastX;
                             let cap = MOUSE_DELTA_CAP.load(Ordering::Relaxed);
@@ -102,7 +91,6 @@ unsafe extern "system" fn raw_wnd_proc(
                             );
                         }
 
-                        // buton durumlari — Release ordering, GUI thread Acquire ile okur
                         let bf = mouse.Anonymous.Anonymous.usButtonFlags;
                         if (bf & RI_MOUSE_LEFT_BUTTON_DOWN) != 0 {
                             LEFT_BUTTON.store(true, Ordering::Release);
@@ -130,11 +118,9 @@ unsafe extern "system" fn raw_wnd_proc(
 
 pub fn start_raw_input_thread() -> std::thread::JoinHandle<()> {
     std::thread::spawn(|| unsafe {
-        // Thread ID'yi kaydet (graceful shutdown icin PostThreadMessageW kullanilacak)
         RAW_INPUT_THREAD_ID.store(GetCurrentThreadId(), Ordering::SeqCst);
 
-        // Input thread'e en yuksek onceligi ver — tutarli <1ms gecikme icin
-        let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY(2)); // THREAD_PRIORITY_HIGHEST
+        let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY(2));
 
         let class_name: Vec<u16> = "RawInputHostWindow\0".encode_utf16().collect();
 
@@ -177,8 +163,8 @@ pub fn start_raw_input_thread() -> std::thread::JoinHandle<()> {
 pub fn register_raw_input(hwnd: HWND, input_sink: bool) {
     unsafe {
         let rid = RAWINPUTDEVICE {
-            usUsagePage: 0x01, // generic desktop
-            usUsage: 0x02,     // mouse
+            usUsagePage: 0x01,
+            usUsage: 0x02,
             dwFlags: if input_sink {
                 RIDEV_INPUTSINK
             } else {

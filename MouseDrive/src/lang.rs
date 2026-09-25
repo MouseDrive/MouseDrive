@@ -1,8 +1,5 @@
 #![deny(unsafe_code)]
 
-/// UI localization.
-/// Language: 0 = Turkce, 1 = English
-
 #[derive(Clone, Copy, PartialEq)]
 pub enum Lang {
     Tr = 0,
@@ -25,30 +22,24 @@ impl Lang {
     }
 }
 
-// updater kapaliyken upd_* alanlari kullanilmaz; lean build'de dead_code'a izin
-// ver (varsayilan build tam dead_code denetimini korur)
 #[cfg_attr(not(feature = "updater"), allow(dead_code))]
 pub struct Strings {
-    // panel & tabs
     pub settings: &'static str,
     pub tab_steering: &'static str,
     pub tab_throttle: &'static str,
     pub tab_brake: &'static str,
     pub tab_general: &'static str,
 
-    // buttons
     pub btn_load: &'static str,
     pub btn_save: &'static str,
     pub btn_default: &'static str,
     pub btn_reset_steering: &'static str,
     pub btn_reconnect_vjoy: &'static str,
 
-    // status
     pub capture_active: &'static str,
     pub capture_paused: &'static str,
     pub capture_toggle_hint: &'static str,
 
-    // gauges
     pub gauge_steering: &'static str,
     pub gauge_throttle: &'static str,
     pub gauge_brake: &'static str,
@@ -57,7 +48,6 @@ pub struct Strings {
     pub left_click: &'static str,
     pub right_click: &'static str,
 
-    // steering settings
     pub sensitivity: &'static str,
     pub dpi_scale: &'static str,
     pub delta_cap: &'static str,
@@ -72,7 +62,6 @@ pub struct Strings {
     pub filter_alpha: &'static str,
     pub self_center_strength: &'static str,
 
-    // throttle settings
     pub cut_start: &'static str,
     pub cut_max: &'static str,
     pub min_at_full_lock: &'static str,
@@ -80,7 +69,6 @@ pub struct Strings {
     pub drop_ms: &'static str,
     pub curve_power: &'static str,
 
-    // brake settings
     pub min_ratio_base: &'static str,
     pub min_ratio_max: &'static str,
     pub brake_curve_power: &'static str,
@@ -93,7 +81,6 @@ pub struct Strings {
     pub post_hold_ratio: &'static str,
     pub post_hold_ms: &'static str,
 
-    // curve editor
     pub curve_rise: &'static str,
     pub curve_fall: &'static str,
     pub curve_apply: &'static str,
@@ -109,14 +96,12 @@ pub struct Strings {
     pub curve_reset: &'static str,
     pub curve_hint: &'static str,
 
-    // general settings
     pub update_interval_ms: &'static str,
     pub vjoy_device: &'static str,
     pub background_capture: &'static str,
     pub exit_on_close: &'static str,
     pub language: &'static str,
 
-    // update check
     pub upd_auto_check: &'static str,
     pub upd_check_now: &'static str,
     pub upd_checking: &'static str,
@@ -130,7 +115,6 @@ pub struct Strings {
     pub upd_restarting: &'static str,
     pub upd_update_failed: &'static str,
 
-    // vjoy status
     pub vjoy_connected: &'static str,
     pub vjoy_dll_not_found: &'static str,
     pub vjoy_driver_disabled: &'static str,
@@ -139,7 +123,6 @@ pub struct Strings {
     pub vjoy_acquire_failed: &'static str,
     pub vjoy_unknown: &'static str,
 
-    // config validation
     pub config_corrected: &'static str,
 }
 

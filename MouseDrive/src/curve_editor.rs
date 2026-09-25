@@ -9,25 +9,13 @@ const EDITOR_MAX_WIDTH: f32 = 300.0;
 const HANDLE_SIZE: f32 = 14.0;
 const CURVE_SAMPLES: usize = 64;
 
-/// Egrinin grafikte nasil yonlendirilecegi (depolama hep kanonik artan form)
 #[derive(Clone, Copy, PartialEq)]
 pub enum CurveDisplay {
-    /// Yukselme: zaman ileri, deger yukari
     Normal,
-    /// Dusme (throttle fall): faz zamanda geriye akar, x ekseni aynalanir
     MirrorX,
-    /// Dusen oran (fren PostHold): egri "dusen oran" tutar, y aynalanir —
-    /// kullanici "zaman ilerledikce inen seviye" gorur
     MirrorY,
 }
 
-/// Etkilesimli zarf egrisi editoru.
-///
-/// - Orta noktalar suruklenir (komsular arasina kelepceli — gecersiz egri uretilemez)
-/// - Sag tik: orta nokta sil, cift tik: nokta ekle (en fazla MAX_POINTS)
-/// - `live_phase`: surus sirasinda egri uzerinde hareket eden isaretci
-///
-/// Degisiklik olduysa true doner (cagiran taraf fazlari yeniden tohumlar).
 pub fn curve_editor(
     ui: &mut egui::Ui,
     curve: &mut Curve,
@@ -43,14 +31,10 @@ pub fn curve_editor(
         ui.allocate_painter(vec2(width, EDITOR_HEIGHT), Sense::click_and_drag());
     let rect = response.rect;
 
-    // normalize (0..1)^2 <-> ekran donusumu
-    let to_screen = emath::RectTransform::from_to(
-        Rect::from_min_size(Pos2::ZERO, vec2(1.0, 1.0)),
-        rect,
-    );
+    let to_screen =
+        emath::RectTransform::from_to(Rect::from_min_size(Pos2::ZERO, vec2(1.0, 1.0)), rect);
     let to_norm = to_screen.inverse();
 
-    // egri uzayi (t, v) -> ekran: y ters (ekranda asagi buyur), aynalar istege bagli
     let curve_to_screen = |t: f64, v: f64| -> Pos2 {
         let x = if flip_x { 1.0 - t } else { t } as f32;
         let y = if flip_y { v as f32 } else { 1.0 - v as f32 };
@@ -58,20 +42,11 @@ pub fn curve_editor(
     };
     let screen_to_curve = |p: Pos2| -> (f64, f64) {
         let n = to_norm.transform_pos(p);
-        let t = if flip_x {
-            1.0 - n.x as f64
-        } else {
-            n.x as f64
-        };
-        let v = if flip_y {
-            n.y as f64
-        } else {
-            1.0 - n.y as f64
-        };
+        let t = if flip_x { 1.0 - n.x as f64 } else { n.x as f64 };
+        let v = if flip_y { n.y as f64 } else { 1.0 - n.y as f64 };
         (t.clamp(0.0, 1.0), v.clamp(0.0, 1.0))
     };
 
-    // arka plan + izgara + cerceve
     painter.rect_filled(rect, 4.0, ui.visuals().extreme_bg_color);
     let grid_stroke = Stroke::new(1.0, Color32::from_gray(55));
     for i in 1..4 {
@@ -97,7 +72,6 @@ pub fn curve_editor(
     painter.line_segment([rect.right_bottom(), rect.left_bottom()], frame_stroke);
     painter.line_segment([rect.left_bottom(), rect.left_top()], frame_stroke);
 
-    // egri cizimi (orneklenmis polyline)
     let samples: Vec<Pos2> = (0..=CURVE_SAMPLES)
         .map(|i| {
             let t = i as f64 / CURVE_SAMPLES as f64;
@@ -109,7 +83,6 @@ pub fn curve_editor(
         Stroke::new(2.0, ui.visuals().selection.stroke.color),
     ));
 
-    // kontrol noktalari: surukleme / silme
     let n = curve.points.len();
     let mut remove_idx: Option<usize> = None;
     for i in 0..n {
@@ -139,7 +112,11 @@ pub fn curve_editor(
             }
         }
 
-        let radius = if pr.hovered() || pr.dragged() { 6.0 } else { 4.5 };
+        let radius = if pr.hovered() || pr.dragged() {
+            6.0
+        } else {
+            4.5
+        };
         let color = if is_endpoint {
             ui.visuals().weak_text_color()
         } else if pr.dragged() {
@@ -155,7 +132,6 @@ pub fn curve_editor(
         changed = true;
     }
 
-    // cift tik: nokta ekle
     if response.double_clicked()
         && curve.points.len() < MAX_POINTS
         && let Some(pos) = response.interact_pointer_pos()
@@ -179,7 +155,6 @@ pub fn curve_editor(
         }
     }
 
-    // canli faz isaretcisi: aktif egri uzerinde hareket eden nokta
     if let Some(p) = live_phase {
         let p = p.clamp(0.0, 1.0);
         let pos = curve_to_screen(p, curve.eval(p));

@@ -1,29 +1,18 @@
 #![deny(unsafe_code)]
 
-//! Kontrol dongusu — kendi OS thread'inde calisir, vJoy handle'ina sahiptir.
-//!
-//! GUI artik kontrol matematigini calistirmaz; yalniz paylasilan anlik
-//! goruntuyu (Snapshot) okur ve config'i yayinlar. Boylece vJoy beslemesi
-//! pencere odagi/repaint'inden bagimsizdir — pencere kucultulse/arkada kalsa
-//! bile direksiyon/gaz/fren beslemesi 250Hz devam eder.
-
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use crate::config::Config;
-use crate::input::{
-    LEFT_BUTTON, MIDDLE_BUTTON_CLICKED, MOUSE_DELTA_X, RIGHT_BUTTON, is_key_down,
-};
+use crate::input::{LEFT_BUTTON, MIDDLE_BUTTON_CLICKED, MOUSE_DELTA_X, RIGHT_BUTTON, is_key_down};
 use crate::logic::{BrakeState, MouseDriveState, RampDir, STEERING_RANGE};
 use crate::vjoy::{
     AXIS_CENTER, AXIS_MAX, AXIS_MIN, HID_USAGE_RZ, HID_USAGE_X, HID_USAGE_Y, VJoyApi, VJoyStatus,
     VjdStat,
 };
 
-/// Kontrol thread'inin GUI'ye yayinladigi anlik durum (gostergeler + canli
-/// egri isaretcileri icin). Kontrol yazar, GUI okur.
 #[derive(Clone)]
 pub struct Snapshot {
     pub steering_filtered: f64,
@@ -57,15 +46,11 @@ impl Default for Snapshot {
     }
 }
 
-/// GUI <-> kontrol thread'i arasinda paylasilan durum.
 pub struct Shared {
-    /// GUI yazar (publish_config), kontrol thread config_dirty olunca okur.
     config: Mutex<Config>,
     config_dirty: AtomicBool,
-    /// Kontrol yazar, GUI her repaint'te okur.
     snapshot: Mutex<Snapshot>,
     vjoy_status: Mutex<VJoyStatus>,
-    /// Komutlar (GUI -> kontrol) ve yasam dongusu.
     running: AtomicBool,
     reconnect_req: AtomicBool,
     reset_steering_req: AtomicBool,
@@ -87,10 +72,7 @@ impl Shared {
     }
 
     pub fn snapshot(&self) -> Snapshot {
-        self.snapshot
-            .lock()
-            .map(|s| s.clone())
-            .unwrap_or_default()
+        self.snapshot.lock().map(|s| s.clone()).unwrap_or_default()
     }
 
     pub fn vjoy_status(&self) -> VJoyStatus {
@@ -100,9 +82,6 @@ impl Shared {
             .unwrap_or(VJoyStatus::Unknown)
     }
 
-    /// GUI config'i degistirdiginde cagirir (her repaint sonu). Kontrol thread'i
-    /// yalniz dirty olunca klonlar — bayrak yazimi mutex yaziminin ARDINDAN gelir
-    /// (Release), kontrol once bayragi (Acquire) okur, sonra kilitler.
     pub fn publish_config(&self, cfg: &Config) {
         if let Ok(mut c) = self.config.lock() {
             c.clone_from(cfg);
@@ -120,13 +99,11 @@ impl Shared {
         self.curves_edited_req.store(true, Ordering::Release);
     }
 
-    /// Kapanis: dongu sonraki tick'te cikar ve vJoy'u birakir.
     pub fn stop(&self) {
         self.running.store(false, Ordering::Release);
     }
 }
 
-/// vJoy baglantisini kur. Basarisizlik nedenleri loglanir (Task 4).
 fn connect_vjoy(device_id: u32) -> (Option<VJoyApi>, VJoyStatus) {
     match VJoyApi::load() {
         Some(api) => {
@@ -163,7 +140,6 @@ fn connect_vjoy(device_id: u32) -> (Option<VJoyApi>, VJoyStatus) {
     }
 }
 
-/// Kontrol dongusunun iç durumu (eski MouseDriveApp'in kontrol yarisi).
 struct ControlLoop {
     config: Config,
     state: MouseDriveState,
@@ -196,13 +172,11 @@ impl ControlLoop {
         status
     }
 
-    /// Bir kontrol tick'i — eski MouseDriveApp::update_input mantigi.
     fn tick(&mut self) {
         let now = Instant::now();
         let delta_ms = now.duration_since(self.state.last_update).as_secs_f64() * 1000.0;
         self.state.last_update = now;
 
-        // F8 yakalama anahtari
         let key_pressed = is_key_down(self.config.capture_toggle_key);
         if key_pressed && !self.state.capture_key_prev {
             self.state.capture_enabled = !self.state.capture_enabled;
@@ -210,14 +184,13 @@ impl ControlLoop {
         }
         self.state.capture_key_prev = key_pressed;
 
-        // orta tik -> direksiyon sifirla
         if MIDDLE_BUTTON_CLICKED.swap(false, Ordering::Acquire) {
             self.state.steering = 0.0;
             self.state.steering_filtered = 0.0;
         }
 
-        self.state.w_key_pressed = is_key_down(0x57); // W
-        self.state.s_key_pressed = is_key_down(0x53); // S
+        self.state.w_key_pressed = is_key_down(0x57);
+        self.state.s_key_pressed = is_key_down(0x53);
 
         let safe_interval = self.config.thread_interval_ms.max(1) as f64;
         let time_scale = (delta_ms / safe_interval).clamp(0.5, 2.0);
@@ -272,13 +245,9 @@ impl ControlLoop {
         vjoy.set_btn(self.state.s_key_pressed, self.device_id, 2);
     }
 
-    /// Egri degistiginde fazlari mevcut degerlerden yeniden tohumla.
     fn on_curves_edited(&mut self) {
         self.state.throttle_dir = RampDir::Hold;
-        self.state.brake_apply_phase = self
-            .config
-            .brake_apply_curve
-            .inverse_eval(self.state.brake);
+        self.state.brake_apply_phase = self.config.brake_apply_curve.inverse_eval(self.state.brake);
     }
 
     fn snapshot(&self) -> Snapshot {
@@ -298,8 +267,6 @@ impl ControlLoop {
     }
 }
 
-/// Kontrol thread'ini baslatir. vJoy handle'i bu thread'de olusturulur ve
-/// yalniz burada kullanilir (FFI tek-thread'e bagli).
 pub fn spawn(shared: Arc<Shared>) -> JoinHandle<()> {
     std::thread::spawn(move || run_loop(shared))
 }
@@ -316,19 +283,16 @@ fn run_loop(shared: Arc<Shared>) {
     while shared.running.load(Ordering::Acquire) {
         let tick_start = Instant::now();
 
-        // 1) config guncellemesi (yalniz dirty olunca klonla)
         if shared.config_dirty.swap(false, Ordering::Acquire)
             && let Ok(c) = shared.config.lock()
         {
             ctl.config.clone_from(&c);
             drop(c);
-            // cihaz no degistiyse yeniden baglan
             if ctl.config.vjoy_device_id.max(1) as u32 != ctl.device_id {
                 shared.reconnect_req.store(true, Ordering::Release);
             }
         }
 
-        // 2) komutlar
         if shared.curves_edited_req.swap(false, Ordering::Acquire) {
             ctl.on_curves_edited();
         }
@@ -343,15 +307,12 @@ fn run_loop(shared: Arc<Shared>) {
             ctl.state.steering_filtered = 0.0;
         }
 
-        // 3) kontrol matematigi + vJoy
         ctl.tick();
 
-        // 4) GUI icin anlik goruntu yayinla
         if let Ok(mut snap) = shared.snapshot.lock() {
             *snap = ctl.snapshot();
         }
 
-        // 5) sabit kadans uyku (timeBeginPeriod(1) altinda ~1ms cozunurluk)
         let interval = Duration::from_millis(ctl.config.thread_interval_ms.max(1) as u64);
         let elapsed = tick_start.elapsed();
         if elapsed < interval {
@@ -359,7 +320,6 @@ fn run_loop(shared: Arc<Shared>) {
         }
     }
 
-    // temiz kapanis: eksenleri sifirla + cihazi birak (Drop da yedekler)
     if let Some(ref vjoy) = ctl.vjoy {
         vjoy.reset(ctl.device_id);
         vjoy.relinquish(ctl.device_id);
@@ -368,12 +328,11 @@ fn run_loop(shared: Arc<Shared>) {
 }
 
 fn set_high_priority() {
-    // Kontrol thread'i artik gecikme-kritik olan; en yuksek thread onceligi.
     #[allow(unsafe_code)]
     unsafe {
         use windows::Win32::System::Threading::{
             GetCurrentThread, SetThreadPriority, THREAD_PRIORITY,
         };
-        let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY(2)); // HIGHEST
+        let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY(2));
     }
 }
