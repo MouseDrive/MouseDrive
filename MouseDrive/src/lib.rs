@@ -14,6 +14,7 @@ pub mod overlay;
 pub mod platform;
 pub mod preview;
 pub mod profiles;
+pub mod session;
 pub mod setup;
 pub mod sound;
 pub mod status;
