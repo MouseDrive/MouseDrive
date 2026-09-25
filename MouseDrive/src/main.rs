@@ -1,164 +1,150 @@
 #![windows_subsystem = "windows"]
+#![deny(unsafe_code)]
 
-mod config;
-mod control;
-mod curve;
 mod curve_editor;
-mod input;
 mod lang;
-mod log;
-mod logic;
 mod ui;
 #[cfg(feature = "updater")]
 mod update;
-mod vjoy;
 
-use std::ffi::c_void;
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
 
-use eframe::egui;
-use windows::Win32::Foundation::HWND;
-use windows::Win32::Media::{timeBeginPeriod, timeEndPeriod};
-use windows::Win32::System::Threading::{
-    GetCurrentProcess, PROCESS_CREATION_FLAGS, SetPriorityClass,
-};
+use eframe::egui::ViewportBuilder;
+use mousedrive::control::{self, Options, Shared};
+use mousedrive::{input, log, overlay, platform};
 
-use crate::config::{Config, get_config_path};
-use crate::control::{Shared, Snapshot};
-use crate::input::*;
-use crate::vjoy::VJoyStatus;
+use crate::lang::Lang;
+use crate::ui::{App, Startup, status_labels};
 
-pub(crate) struct MouseDriveApp {
-    pub(crate) config: Config,
-    pub(crate) shared: Arc<Shared>,
-    pub(crate) snapshot: Snapshot,
-    pub(crate) vjoy_status: VJoyStatus,
-    pub(crate) settings_panel_open: bool,
-    pub(crate) settings_tab: u8,
-    pub(crate) title: String,
-    #[cfg(feature = "updater")]
-    pub(crate) update_checker: update::UpdateChecker,
-    #[cfg(feature = "updater")]
-    pub(crate) restart_initiated: bool,
-    pub(crate) config_notice: Option<u32>,
-    _raw_input_handle: Option<std::thread::JoinHandle<()>>,
-    control_handle: Option<std::thread::JoinHandle<()>>,
+const TITLE: &str = concat!("MouseDrive v", env!("CARGO_PKG_VERSION"));
+const WINDOW_SIZE: [f32; 2] = [1000.0, 640.0];
+const WINDOW_MIN_SIZE: [f32; 2] = [760.0, 500.0];
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Args {
+    test_counter: bool,
+    allow_injected: bool,
 }
 
-impl MouseDriveApp {
-    pub(crate) fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let mut visuals = egui::Visuals::dark();
-        visuals.selection.bg_fill = crate::ui::ACCENT;
-        visuals.selection.stroke.color = egui::Color32::WHITE;
-        cc.egui_ctx.set_visuals(visuals);
+fn parse_args(args: impl IntoIterator<Item = String>) -> Args {
+    args.into_iter()
+        .fold(Args::default(), |a, arg| match arg.as_str() {
+            "--test-counter" => Args {
+                test_counter: true,
+                ..a
+            },
+            "--allow-injected" => Args {
+                allow_injected: true,
+                ..a
+            },
+            _ => a,
+        })
+}
 
-        crate::log::line(concat!(
-            "MouseDrive v",
-            env!("CARGO_PKG_VERSION"),
-            " baslatildi"
-        ));
+struct Threads {
+    control: Option<JoinHandle<()>>,
+    input: Option<JoinHandle<()>>,
+    overlay: Option<JoinHandle<()>>,
+}
 
-        let mut config = get_config_path()
-            .and_then(|p| Config::load_from_file(&p))
-            .unwrap_or_default();
-
-        let corrected = config.validate();
-        let config_notice = (corrected > 0).then_some(corrected);
-
-        INPUT_SINK_ENABLED.store(config.input_sink_enabled, Ordering::Release);
-        MOUSE_DELTA_CAP.store(config.mouse_delta_cap, Ordering::Release);
-        store_dpi_scale(config.mouse_dpi_scale);
-
-        let raw_input_handle = start_raw_input_thread();
-
-        let shared = Shared::new(config.clone());
-        let control_handle = control::spawn(Arc::clone(&shared));
-
-        #[cfg(feature = "updater")]
-        let update_checker = {
-            let checker = update::UpdateChecker::new();
-            if config.auto_check_updates {
-                let now_ts = update::unix_now();
-                if now_ts - config.last_update_check >= 86_400 {
-                    config.last_update_check = now_ts;
-                    if let Some(path) = get_config_path() {
-                        let _ = config.save_to_file(&path);
-                    }
-                    shared.publish_config(&config);
-                    checker.spawn_check();
-                }
-            }
-            checker
-        };
-
-        Self {
-            config,
-            shared,
-            snapshot: Snapshot::default(),
-            vjoy_status: VJoyStatus::Unknown,
-            settings_panel_open: true,
-            settings_tab: 0,
-            title: format!("MouseDrive v{}", env!("CARGO_PKG_VERSION")),
-            #[cfg(feature = "updater")]
-            update_checker,
-            #[cfg(feature = "updater")]
-            restart_initiated: false,
-            config_notice,
-            _raw_input_handle: Some(raw_input_handle),
-            control_handle: Some(control_handle),
-        }
-    }
-
-    pub(crate) fn stop_control_thread(&mut self) {
-        self.shared.stop();
-        if let Some(handle) = self.control_handle.take() {
-            let _ = handle.join();
-        }
-    }
-
-    pub(crate) fn publish_config(&self) {
-        self.shared.publish_config(&self.config);
-    }
-
-    pub(crate) fn sync_globals_from_config(&self) {
-        INPUT_SINK_ENABLED.store(self.config.input_sink_enabled, Ordering::Release);
-        MOUSE_DELTA_CAP.store(self.config.mouse_delta_cap, Ordering::Release);
-        store_dpi_scale(self.config.mouse_dpi_scale);
-
-        let hwnd = RAW_INPUT_HWND.load(Ordering::SeqCst);
-        if hwnd != 0 {
-            register_raw_input(HWND(hwnd as *mut c_void), self.config.input_sink_enabled);
-        }
-    }
+fn started(
+    name: &str,
+    result: std::io::Result<JoinHandle<()>>,
+    errors: &mut Vec<String>,
+) -> Option<JoinHandle<()>> {
+    result
+        .map_err(|e| {
+            log::line(&format!("{name} thread'i başlatılamadı: {e}"));
+            errors.push(format!("{name}: {e}"));
+        })
+        .ok()
 }
 
 fn main() -> eframe::Result<()> {
-    unsafe {
-        timeBeginPeriod(1);
-    }
+    let args = parse_args(std::env::args().skip(1));
+    let _timer = platform::setup_process();
+    log::line(&format!("{TITLE} başlatıldı"));
 
-    unsafe {
-        let _ = SetPriorityClass(GetCurrentProcess(), PROCESS_CREATION_FLAGS(0x80));
-    }
+    let startup = Startup::load();
+    let cfg = &startup.config;
+    let mut errors = Vec::new();
+    let input_thread = input::start(
+        cfg.input_sink_enabled,
+        &cfg.mouse_device,
+        args.allow_injected,
+    );
+    let input_thread = started("raw-input", input_thread, &mut errors);
+    let overlay_thread = started("overlay", overlay::start(), &mut errors);
+    overlay::configure(cfg.overlay_enabled, cfg.overlay_corner);
+    overlay::set_labels(status_labels(Lang::from_i32(cfg.language)));
 
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1000.0, 620.0])
-            .with_min_inner_size([750.0, 480.0])
-            .with_title(format!("MouseDrive v{}", env!("CARGO_PKG_VERSION"))),
-        ..Default::default()
+    let (shared, commands) = Shared::new(startup.config.clone());
+    let options = Options {
+        test_counter: args.test_counter,
+    };
+    let control_thread = control::spawn(Arc::clone(&shared), commands, options);
+    let threads = Threads {
+        control: started("control", control_thread, &mut errors),
+        input: input_thread,
+        overlay: overlay_thread,
     };
 
-    let result = eframe::run_native(
+    let restart = Arc::new(AtomicBool::new(false));
+    let result = run_window(startup, Arc::clone(&shared), Arc::clone(&restart), errors);
+    shutdown(&shared, threads);
+    if restart.load(Ordering::Acquire) {
+        relaunch();
+    }
+    result
+}
+
+fn run_window(
+    startup: Startup,
+    shared: Arc<Shared>,
+    restart: Arc<AtomicBool>,
+    errors: Vec<String>,
+) -> eframe::Result<()> {
+    let options = eframe::NativeOptions {
+        viewport: ViewportBuilder::default()
+            .with_inner_size(WINDOW_SIZE)
+            .with_min_inner_size(WINDOW_MIN_SIZE)
+            .with_title(TITLE),
+        ..Default::default()
+    };
+    eframe::run_native(
         "MouseDrive",
         options,
-        Box::new(|cc| Ok(Box::new(MouseDriveApp::new(cc)))),
-    );
+        Box::new(move |_cc| {
+            let mut app = App::new(startup, shared, restart);
+            errors.iter().for_each(|e| app.report_launch_error(e));
+            Ok(Box::new(app))
+        }),
+    )
+}
 
-    unsafe {
-        timeEndPeriod(1);
+fn shutdown(shared: &Shared, threads: Threads) {
+    shared.stop();
+    join("control", threads.control);
+    input::stop();
+    join("raw-input", threads.input);
+    overlay::stop();
+    join("overlay", threads.overlay);
+    log::line("kapatıldı");
+}
+
+fn join(name: &str, handle: Option<JoinHandle<()>>) {
+    if let Some(handle) = handle
+        && handle.join().is_err()
+    {
+        log::line(&format!("{name} thread'i panikle bitti"));
     }
+}
 
-    result
+fn relaunch() {
+    let result = std::env::current_exe().and_then(|exe| std::process::Command::new(exe).spawn());
+    if let Err(e) = result {
+        log::line(&format!("yeniden başlatılamadı: {e}"));
+    }
 }
