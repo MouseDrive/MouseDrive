@@ -1,3 +1,4 @@
+pub mod diagnostics;
 pub mod fsutil;
 pub mod keys;
 pub mod output;
