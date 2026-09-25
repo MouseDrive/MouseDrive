@@ -12,6 +12,7 @@ pub mod output;
 pub mod preview;
 pub mod profiles;
 pub mod setup;
+pub mod sound;
 pub mod status;
 pub mod telemetry;
 pub mod vjoy;
