@@ -9,6 +9,7 @@ pub mod keys;
 pub mod log;
 pub mod logic;
 pub mod output;
+pub mod overlay;
 pub mod preview;
 pub mod profiles;
 pub mod setup;
