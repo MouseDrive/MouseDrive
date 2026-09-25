@@ -43,7 +43,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 **Profiles and tuning workflow**
 
 - **Profiles** — Driving settings per car/track in `profiles\<name>.toml` (shareable; app settings stay in `config.toml`). Save, save as, duplicate, rename, delete; an unsaved-changes dot and a prompt before switching.
-- **Undo / redo** (Ctrl+Z / Ctrl+Y), *Revert to saved*, per-setting *reset to default*.
+- **Undo / redo** (Ctrl+Z / Ctrl+Y or Ctrl+Shift+Z), *Revert to saved*, per-setting *reset to default*.
 - **A/B comparison** — Keep the current settings as A, edit B, and switch with a hotkey while driving. Profile and A/B switches apply only when both pedals are released.
 
 **Feedback and diagnostics**
@@ -80,7 +80,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 | Capture key (default F8) | — | Toggle input capture |
 | A/B key (unset by default) | — | Switch between A and B settings |
 
-All keys can be reassigned in **Settings → General → Keys**.
+All keys can be reassigned in **General → Keys**.
 
 ## Quick start
 
@@ -120,10 +120,8 @@ MouseDrive already shapes the input (steering mode, smoothing, throttle cut, bra
 
 - Windows 10/11
 - [Executable MouseDrive](https://github.com/MouseDrive/MouseDrive/releases/latest)
-- [vJoy Driver**](https://github.com/BrunnerInnovation/vJoy) installed and enabled
+- [vJoy driver](https://github.com/BrunnerInnovation/vJoy) installed and enabled (tested with 2.2.2.0)
 - `vJoyInterface.dll` available (next to exe, Program Files, or in `PATH`)
-
->  ** Tested with V2.2.2.0
 
 ## Build
 
@@ -159,30 +157,38 @@ Changes are saved automatically for app settings; profiles are saved with **Save
 ## Project layout
 
 ```
-MouseDrive/src/
-├── main.rs            # Startup/shutdown order, CLI flags, eframe window
-├── lib.rs             # Core library (everything except the GUI)
-├── logic.rs, logic/   # Pure driving logic (steering, throttle, brake) + filters
-├── curve.rs           # Envelope curve model (PCHIP eval/inverse, presets)
-├── control/           # Control thread: engine (tick), connection/reconnect, stuck-button guard, IO seam
-├── output.rs          # OutputBackend trait + normalised OutputFrame
-├── vjoy.rs            # vJoy backend (runtime DLL loading, single-report writes, removal callback)
-├── input.rs           # Raw Input thread: lossless counts, buttons, mouse selection
-├── keys.rs            # Hotkey helpers (GetAsyncKeyState)
-├── config.rs          # Config + Tuning, validation, migration, atomic IO
-├── profiles.rs        # Profile files
-├── session.rs         # GUI editing session: epochs, undo history, save state
-├── status.rs          # Status model and sound cue planning
-├── setup.rs           # Setup/health check report
-├── telemetry.rs       # Lock-free ring buffer for the input monitor
-├── diagnostics.rs     # Loop timing, mouse rate, bug-report text
-├── preview.rs         # Offline simulation for the brake timeline and throttle chart
-├── bind.rs            # Axis bind helper
-├── ergonomics.rs      # cm per full lock
-├── sound.rs, overlay.rs, platform.rs, fsutil.rs, log.rs, update.rs
-├── curve_editor.rs    # Drag-point curve editor widget
-├── lang/              # TR / EN strings
-└── ui/                # egui screens: status bar, dashboard, tabs, profiles, monitor, setup, ...
+MouseDrive/
+├── build.rs               # Embeds the app icon and version info in mousedrive.exe
+├── image/                 # Logo, app icon (.svg / .png / .ico), screenshot
+└── src/
+    ├── main.rs            # App binary: startup/shutdown order, CLI flags, eframe window
+    ├── ui/                # egui screens: status bar, dashboard, tabs, profiles, monitor, setup, ...
+    ├── curve_editor.rs    # Drag-point curve editor widget
+    ├── lang/              # TR / EN strings
+    ├── update.rs          # Auto-update: release check, SHA-256 verify, self-replace ("updater" feature)
+    ├── lib.rs             # Library: all modules below, no GUI
+    ├── logic.rs, logic/   # Pure driving logic (steering, throttle, brake) + filters
+    ├── curve.rs           # Envelope curve model (PCHIP eval/inverse, point editing, presets)
+    ├── control/           # Control thread: engine (tick), connection/reconnect, stuck-button guard, IO seam
+    ├── output.rs          # OutputBackend trait + normalised OutputFrame
+    ├── vjoy.rs            # vJoy backend (runtime DLL loading, single-report writes, removal callback)
+    ├── input.rs           # Raw Input thread: lossless counts, buttons, mouse selection
+    ├── keys.rs            # Hotkey helpers (GetAsyncKeyState)
+    ├── config.rs          # Config + Tuning, validation, migration, atomic IO
+    ├── profiles.rs        # Profile files
+    ├── session.rs         # GUI editing session: epochs, undo history, save state
+    ├── status.rs          # Status model and sound cue planning
+    ├── setup.rs           # Setup/health check report
+    ├── telemetry.rs       # Lock-free ring buffer for the input monitor
+    ├── diagnostics.rs     # Loop timing, mouse rate, bug-report text
+    ├── preview.rs         # Offline simulation for the brake timeline and throttle chart
+    ├── bind.rs            # Axis bind helper
+    ├── ergonomics.rs      # cm per full lock
+    ├── sound.rs           # Status tones
+    ├── overlay.rs         # Click-through status overlay window
+    ├── platform.rs        # Process/thread priority, timer resolution
+    ├── fsutil.rs          # Atomic writes, timestamped backups
+    └── log.rs             # Event log (mousedrive.log, rotated at 1 MB)
 ```
 
 Release history in [CHANGELOG.md](CHANGELOG.md).
