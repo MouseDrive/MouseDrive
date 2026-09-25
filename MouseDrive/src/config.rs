@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use crate::curve::Curve;
 use crate::logic::filters::{MAX_SMOOTHING_MS, tau_from_legacy_alpha};
 
-pub const CURRENT_CONFIG_VERSION: u32 = 2;
+pub const CURRENT_CONFIG_VERSION: u32 = 3;
+
+const LEGACY_DEFAULT_DEADZONE: f64 = 0.02;
 
 pub const DEFAULT_PROFILE: &str = "Default";
 
@@ -315,6 +317,10 @@ impl Config {
     }
 
     pub fn from_toml_str(content: &str) -> Result<Self, ConfigError> {
+        Self::parse(content).map(|(cfg, _)| cfg)
+    }
+
+    fn parse(content: &str) -> Result<(Self, i64), ConfigError> {
         let raw: toml::Table = toml::from_str(content).map_err(parse_error)?;
         let mut cfg: Config = toml::from_str(content).map_err(parse_error)?;
         let file_version = raw
@@ -325,13 +331,20 @@ impl Config {
             let interval = f64::from(cfg.thread_interval_ms.max(1));
             migrate_legacy_tuning(&mut cfg.tuning, &raw, interval);
         }
+        if file_version < 3 {
+            reset_legacy_deadzone(&mut cfg.tuning);
+        }
         cfg.config_version = CURRENT_CONFIG_VERSION;
-        Ok(cfg)
+        Ok((cfg, file_version))
     }
 
     pub fn load_from_file(path: &Path) -> Result<Self, ConfigError> {
+        Self::read(path).map(|(cfg, _)| cfg)
+    }
+
+    fn read(path: &Path) -> Result<(Self, i64), ConfigError> {
         let content = std::fs::read_to_string(path).map_err(ConfigError::Io)?;
-        Self::from_toml_str(&content)
+        Self::parse(&content)
     }
 
     pub fn save_to_file(&self, path: &Path) -> Result<(), ConfigError> {
@@ -348,6 +361,14 @@ fn migrate_legacy_tuning(tuning: &mut Tuning, raw: &toml::Table, interval_ms: f6
     if let Some(alpha) = raw.get("steering_filter_alpha").and_then(toml_number) {
         tuning.steering_smoothing_ms = tau_from_legacy_alpha(alpha, interval_ms);
     }
+}
+
+pub fn reset_legacy_deadzone(tuning: &mut Tuning) -> bool {
+    let is_legacy = (tuning.steering_deadzone - LEGACY_DEFAULT_DEADZONE).abs() < f64::EPSILON;
+    if is_legacy {
+        tuning.steering_deadzone = 0.0;
+    }
+    is_legacy
 }
 
 fn toml_number(v: &toml::Value) -> Option<f64> {
@@ -388,6 +409,7 @@ pub enum LoadNotice {
 pub struct Loaded {
     pub config: Config,
     pub notice: Option<LoadNotice>,
+    pub outdated: bool,
 }
 
 pub fn load_startup(path: Option<&Path>) -> Loaded {
@@ -395,19 +417,22 @@ pub fn load_startup(path: Option<&Path>) -> Loaded {
         return Loaded {
             config: Config::default(),
             notice: None,
+            outdated: false,
         };
     };
-    match Config::load_from_file(path) {
-        Ok(mut config) => {
+    match Config::read(path) {
+        Ok((mut config, file_version)) => {
             let fixed = config.validate();
             Loaded {
                 config,
                 notice: (!fixed.is_empty()).then_some(LoadNotice::Corrected(fixed)),
+                outdated: file_version < i64::from(CURRENT_CONFIG_VERSION),
             }
         }
         Err(ConfigError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => Loaded {
             config: Config::default(),
             notice: None,
+            outdated: false,
         },
         Err(e) => Loaded {
             config: Config::default(),
@@ -415,6 +440,7 @@ pub fn load_startup(path: Option<&Path>) -> Loaded {
                 error: e.to_string(),
                 backup: crate::fsutil::backup_file(path).ok(),
             }),
+            outdated: false,
         },
     }
 }

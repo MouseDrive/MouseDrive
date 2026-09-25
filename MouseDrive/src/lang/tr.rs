@@ -358,6 +358,8 @@ pub(super) static TR: Strings = Strings {
     notice_corrected: "config.toml'da {n} değer sınır dışıydı ve düzeltildi: {fields}",
     notice_unreadable: "config.toml okunamadı ({error}); varsayılan ayarlar kullanılıyor.",
     notice_backup: "Bozuk dosyanın yedeği: {path}",
+    notice_deadzone_reset: "Direksiyon ölü bölgesi artık varsayılan olarak kapalı. Eski %2 varsayılanında kalan profillerde 0'a çekildi: {names}",
+    err_deadzone_reset: "“{name}” profilinde ölü bölge kapatılamadı: {error}. Direksiyon sekmesinden 0'a çekin.",
     err_config_save: "Ayarlar kaydedilemedi: {error}",
     err_no_config_dir: "Ayar klasörü bulunamadı; ayarlar ve profiller kaydedilemeyecek.",
     btn_dismiss: "Kapat",

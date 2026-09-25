@@ -383,6 +383,8 @@ pub struct Strings {
     pub notice_corrected: &'static str,
     pub notice_unreadable: &'static str,
     pub notice_backup: &'static str,
+    pub notice_deadzone_reset: &'static str,
+    pub err_deadzone_reset: &'static str,
     pub err_config_save: &'static str,
     pub err_no_config_dir: &'static str,
     pub btn_dismiss: &'static str,

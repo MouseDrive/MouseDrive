@@ -27,14 +27,16 @@ impl Startup {
             .iter()
             .flat_map(|n| load_notices(n, s))
             .collect();
-        let disk = (file_exists && loaded.notice.is_none()).then(|| loaded.config.clone());
+        let disk = (file_exists && loaded.notice.is_none() && !loaded.outdated)
+            .then(|| loaded.config.clone());
         let store = config_path
             .as_deref()
             .and_then(Path::parent)
             .map(ProfileStore::new);
         let config = match &store {
             Some(store) => {
-                let (config, profile_notices) = init_profiles(store, loaded.config, s);
+                let (config, profile_notices) =
+                    init_profiles(store, loaded.config, loaded.outdated, s);
                 notices.extend(profile_notices);
                 config
             }
@@ -94,7 +96,44 @@ fn error_notice(template: &str, error: &dyn std::fmt::Display) -> Notice {
     )
 }
 
-fn init_profiles(store: &ProfileStore, config: Config, s: &Strings) -> (Config, Vec<Notice>) {
+fn init_profiles(
+    store: &ProfileStore,
+    config: Config,
+    outdated: bool,
+    s: &Strings,
+) -> (Config, Vec<Notice>) {
+    let migrated = if outdated {
+        migrate_profiles(store, &config, s)
+    } else {
+        Vec::new()
+    };
+    let (config, activated) = activate_profile(store, config, s);
+    (config, migrated.into_iter().chain(activated).collect())
+}
+
+fn migrate_profiles(store: &ProfileStore, config: &Config, s: &Strings) -> Vec<Notice> {
+    let report = match store.reset_legacy_deadzone(f64::from(config.thread_interval_ms)) {
+        Ok(report) => report,
+        Err(e) => return vec![error_notice(s.err_profile_list, &e)],
+    };
+    let changed = (!report.changed.is_empty()).then(|| {
+        let names = report.changed.join(", ");
+        Notice::new(
+            Level::Info,
+            fill(s.notice_deadzone_reset, &[("names", &names)]),
+        )
+    });
+    let failed = report.failed.iter().map(|(name, e)| {
+        let text = fill(
+            s.err_deadzone_reset,
+            &[("name", name), ("error", &e.to_string())],
+        );
+        Notice::new(Level::Error, text)
+    });
+    changed.into_iter().chain(failed).collect()
+}
+
+fn activate_profile(store: &ProfileStore, config: Config, s: &Strings) -> (Config, Vec<Notice>) {
     if let Err(e) = store.ensure_initialized(&config.tuning) {
         return (config, vec![error_notice(s.err_profile_list, &e)]);
     }

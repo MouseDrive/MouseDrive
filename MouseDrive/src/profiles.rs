@@ -81,8 +81,20 @@ pub struct LoadedProfile {
     pub corrected: Vec<&'static str>,
 }
 
+#[derive(Debug, Default)]
+pub struct DeadzoneReset {
+    pub changed: Vec<String>,
+    pub failed: Vec<(String, ProfileError)>,
+}
+
 pub struct ProfileStore {
     dir: PathBuf,
+}
+
+fn write_tuning(path: &Path, tuning: &Tuning) -> Result<(), ProfileError> {
+    let text = tuning.to_toml().map_err(ProfileError::Config)?;
+    crate::fsutil::write_atomic(path, text.as_bytes())?;
+    Ok(())
 }
 
 impl ProfileStore {
@@ -140,9 +152,7 @@ impl ProfileStore {
         validate_name(name).map_err(ProfileError::Name)?;
         std::fs::create_dir_all(&self.dir)?;
         let target = self.find(name).unwrap_or_else(|| name.to_string());
-        let text = tuning.to_toml().map_err(ProfileError::Config)?;
-        crate::fsutil::write_atomic(&self.path_of(&target), text.as_bytes())?;
-        Ok(())
+        write_tuning(&self.path_of(&target), tuning)
     }
 
     pub fn save_new(&self, name: &str, tuning: &Tuning) -> Result<(), ProfileError> {
@@ -195,6 +205,27 @@ impl ProfileStore {
         }
         self.save(DEFAULT_PROFILE, current)?;
         Ok(true)
+    }
+
+    pub fn reset_legacy_deadzone(&self, interval_ms: f64) -> Result<DeadzoneReset, ProfileError> {
+        let mut report = DeadzoneReset::default();
+        for name in self.list()? {
+            let path = self.path_of(&name);
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let Ok(mut tuning) = Tuning::from_toml_str(&text, interval_ms) else {
+                continue;
+            };
+            if !crate::config::reset_legacy_deadzone(&mut tuning) {
+                continue;
+            }
+            match write_tuning(&path, &tuning) {
+                Ok(()) => report.changed.push(name),
+                Err(e) => report.failed.push((name, e)),
+            }
+        }
+        Ok(report)
     }
 
     pub fn resolve_active(&self, wanted: &str) -> Option<String> {

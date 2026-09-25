@@ -352,6 +352,8 @@ pub(super) static EN: Strings = Strings {
     notice_corrected: "{n} values in config.toml were out of range and have been corrected: {fields}",
     notice_unreadable: "config.toml could not be read ({error}); using default settings.",
     notice_backup: "Backup of the broken file: {path}",
+    notice_deadzone_reset: "The steering deadzone is now off by default. Profiles still on the old 2% default were set to 0: {names}",
+    err_deadzone_reset: "Could not turn off the deadzone in profile “{name}”: {error}. Set it to 0 on the Steering tab.",
     err_config_save: "Could not save settings: {error}",
     err_no_config_dir: "No settings folder found; settings and profiles cannot be saved.",
     btn_dismiss: "Dismiss",

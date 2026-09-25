@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Steering deadzone is off by default** and marked experimental; it did not
-  help in practice. Existing profiles keep their value; set it to 0 on the
-  *Steering* tab to turn it off.
+  help in practice. Profiles still on the old 2 % default are set to 0 once
+  after the update, and a notice lists them; other values are kept.
 
 ## [0.6.0] - 2026-09-25
 
