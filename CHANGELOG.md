@@ -198,7 +198,7 @@ The headline of this release is the **decoupled control architecture**: the
   double-click to add, right-click to remove. Two interpolation modes: Linear
   and Smooth (monotone cubic / PCHIP — guaranteed no overshoot). Presets:
   Linear, S-Curve, Aggressive, Progressive. A live marker travels along the
-  active curve while driving. (Design notes: `graph.md`)
+  active curve while driving.
 - **Phase-tracking ramp algorithm**: throttle/brake envelopes follow the curves
   with inverse re-seeding on every direction change, so output is continuous
   across press/release/steering-cut transitions. Default identity curves
@@ -211,7 +211,6 @@ The headline of this release is the **decoupled control architecture**: the
   it against `SHA256SUMS.txt`, swaps the running executable and restarts
   automatically. Falls back to opening the release page if the release lacks
   standardized assets or installation fails. "Skip" silences a given version.
-  (Design notes: `auto-update.md`)
 - **CI/CD pipeline** (`.github/workflows/ci.yml`): tests + clippy on every
   push/PR; pushing a `vX.Y.Z` tag builds with the version taken from the tag,
   packages `MouseDrive-vX.Y.Z-windows-x64.zip` + `SHA256SUMS.txt`, and
