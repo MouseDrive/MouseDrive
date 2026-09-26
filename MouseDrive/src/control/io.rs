@@ -3,7 +3,12 @@ use crate::output::OutputBackend;
 use crate::setup::SetupReport;
 use crate::sound::SoundPlayer;
 use crate::status::{AppStatus, Cue};
-use crate::{keys, overlay, vjoy};
+use crate::{keys, overlay};
+
+#[cfg(target_os = "linux")]
+use crate::uinput as backend;
+#[cfg(windows)]
+use crate::vjoy as backend;
 
 pub(crate) trait ControlIo {
     fn take_counts(&mut self) -> i64;
@@ -33,11 +38,11 @@ pub(crate) trait ControlIo {
     fn overlay_config(&mut self, enabled: bool, corner: i32);
 }
 
-pub(crate) struct WinIo {
+pub(crate) struct SystemIo {
     sound: Option<SoundPlayer>,
 }
 
-impl WinIo {
+impl SystemIo {
     pub(crate) fn new() -> Self {
         let sound = SoundPlayer::start()
             .inspect_err(|e| crate::log::line(&format!("ses thread'i başlatılamadı: {e}")))
@@ -46,7 +51,7 @@ impl WinIo {
     }
 }
 
-impl ControlIo for WinIo {
+impl ControlIo for SystemIo {
     fn take_counts(&mut self) -> i64 {
         input::take_counts()
     }
@@ -101,7 +106,7 @@ impl ControlIo for WinIo {
     }
 
     fn device_events(&self) -> (u64, u64) {
-        vjoy::device_events()
+        backend::device_events()
     }
 
     fn connect(
@@ -109,7 +114,7 @@ impl ControlIo for WinIo {
         device_id: u32,
         buttons_required: i32,
     ) -> (SetupReport, Option<Box<dyn OutputBackend>>) {
-        let (report, device) = vjoy::probe(device_id, buttons_required);
+        let (report, device) = backend::probe(device_id, buttons_required);
         (
             report,
             device.map(|d| Box::new(d) as Box<dyn OutputBackend>),

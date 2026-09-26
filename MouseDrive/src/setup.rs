@@ -51,6 +51,7 @@ pub struct SetupReport {
     pub dll_error: Option<String>,
     pub alternate_dll: Option<PathBuf>,
     pub driver_enabled: Option<bool>,
+    pub driver_detail: Option<String>,
     pub versions: Option<Versions>,
     pub device_state: Option<DeviceState>,
     pub owner: Option<Owner>,

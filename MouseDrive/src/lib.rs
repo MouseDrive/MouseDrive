@@ -19,4 +19,7 @@ pub mod setup;
 pub mod sound;
 pub mod status;
 pub mod telemetry;
+#[cfg(target_os = "linux")]
+pub mod uinput;
+#[cfg(windows)]
 pub mod vjoy;

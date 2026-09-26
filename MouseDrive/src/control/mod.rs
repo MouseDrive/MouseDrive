@@ -256,14 +256,14 @@ pub fn spawn(
             if !crate::platform::raise_current_thread_priority() {
                 crate::log::line("kontrol thread'i önceliği yükseltilemedi");
             }
-            let mut io = io::WinIo::new();
+            let mut io = io::SystemIo::new();
             let (epoch, config) = shared.config();
             let mut engine = Engine::new(config, epoch, options);
             run(&shared, &commands, &mut engine, &mut io);
         })
 }
 
-fn run(shared: &Shared, commands: &Receiver<Command>, engine: &mut Engine, io: &mut io::WinIo) {
+fn run(shared: &Shared, commands: &Receiver<Command>, engine: &mut Engine, io: &mut io::SystemIo) {
     let start = Instant::now();
     let mut next_ms = 0.0;
     while shared.running() {
