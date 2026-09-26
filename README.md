@@ -7,14 +7,14 @@
 
 # MouseDrive (Rust) — v0.6.0
 
-[![CI](https://github.com/MouseDrive/MouseDrive/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MouseDrive/MouseDrive/actions/workflows/ci.yml)
+[![CI](https://github.com/MouseDrive/MouseDrive/actions/workflows/ci.yml/badge.svg?branch=linux)](https://github.com/MouseDrive/MouseDrive/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/MouseDrive/MouseDrive)](https://github.com/MouseDrive/MouseDrive/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/MouseDrive/MouseDrive/total)](https://github.com/MouseDrive/MouseDrive/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](#requirements)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0078D6)](#requirements)
 [![Language](https://img.shields.io/badge/language-Rust-black)](#build)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
 
-MouseDrive is a Windows application that converts mouse and keyboard input into virtual joystick signals via [vJoy](https://github.com/BrunnerInnovation/vJoy), designed for racing simulators.
+MouseDrive converts mouse and keyboard input into virtual joystick signals for racing simulators: through [vJoy](https://github.com/BrunnerInnovation/vJoy) on Windows and through the kernel's uinput on [Linux](#linux).
 
 [Old C++ version](https://github.com/Toxpox/MouseDrive-old-cpp)
 
@@ -28,19 +28,23 @@ MouseDrive is a Windows application that converts mouse and keyboard input into 
 
 Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/releases/).
 
-> Extract the `.zip`, place `vJoyInterface.dll` next to `mousedrive.exe`, and run. Each release also has `mousedrive.exe` on its own; `SHA256SUMS.txt` lists the checksums of both.
+> **Windows:** extract `MouseDrive-vX.Y.Z-windows-x64.zip`, place `vJoyInterface.dll` next to `mousedrive.exe`, and run. Each release also has `mousedrive.exe` on its own.
+>
+> **Linux:** extract `MouseDrive-vX.Y.Z-linux-x64.zip`, run `./mousedrive` and follow the one-time [Linux setup](#linux).
+>
+> `SHA256SUMS.txt` lists the checksums of every file.
 
 ## Features
 
 **Driving**
 
-- **Steering** — Mouse X movement mapped to the vJoy X axis with 5 modes: *Linear*, *Expo* (soft centre), *Smoothed* (time constant in ms), *Self-centering* and *Adaptive* (One Euro filter: smooth when slow, no lag when fast). Filters are time-based, so the feel does not change with the loop rate.
+- **Steering** — Mouse X movement mapped to the virtual X axis with 5 modes: *Linear*, *Expo* (soft centre), *Smoothed* (time constant in ms), *Self-centering* and *Adaptive* (One Euro filter: smooth when slow, no lag when fast). Filters are time-based, so the feel does not change with the loop rate.
 - **Lossless mouse counts** — Raw counts are accumulated without rounding or per-event caps; an optional *spike filter* (max steering rate, %/s) limits single-event jumps and counts what it clips.
 - **Steering speed in cm** — Shows how many centimetres of mouse travel give full lock; type a distance to set the speed. A built-in *DPI measure* tool finds your mouse DPI with a ruler.
 - **Throttle** — Left mouse button with rise/drop times, envelope curves and an optional *throttle cut in corners* summarised as a sentence and a mini chart.
 - **Brake** — Right mouse button with a five-phase envelope (fill, full pressure, decay while held, short hold after release, release), an optional trail floor that rises with steering, and a **brake ceiling** (max output %) that scales every phase. A live timeline simulated by the real logic shows what the game will receive.
 - **Graphical curve editors** — Drag-point envelope editors (2–8 points, linear or smooth/monotone-cubic) with presets, a live marker, numeric entry and full keyboard control.
-- **Gear buttons** — Configurable keys (default W/S) mapped to vJoy buttons 1/2.
+- **Gear buttons** — Configurable keys (default W/S) mapped to virtual buttons 1/2.
 
 **Profiles and tuning workflow**
 
@@ -54,16 +58,16 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 - **Status sounds** — Distinct tones for capture on/off, warnings, connection lost/restored, profile change. Work in exclusive fullscreen and VR.
 - **Status overlay** — Optional click-through status label in a screen corner (windowed/borderless games).
 - **Input monitor** — Scrolling 5/10/30 s chart of mouse input against the values sent to the game, with capture and profile markers and a freeze button.
-- **Setup and health check** — ✔/⚠/✖ list (DLL, driver, version match, device, axes, buttons) with a "how to fix" for every failure, a live axis test and next steps.
+- **Setup and health check** — ✔/⚠/✖ list (Windows: DLL, driver, version match, device, axes, buttons; Linux: uinput, permissions, virtual wheel, mouse access) with a "how to fix" for every failure, a live axis test and next steps.
 - **Axis bind helper** — Countdown, then only the chosen axis or button moves, so the game binds the right one.
-- **Automatic reconnect** — Retries when vJoy is fixed or re-plugged; a vJoy removal notice or repeated write failures switch to CONNECTION LOST and it recovers on its own.
+- **Automatic reconnect** — Retries when the virtual device is fixed or re-plugged; a vJoy removal notice or repeated write failures switch to CONNECTION LOST and it recovers on its own.
 - **Stuck-button guard** — If Windows swallows a button release (UAC prompt, Ctrl+Alt+Del), the pedal is released automatically.
 - **Diagnostics line** — Write success/failure, measured loop rate and p99, clipped events, reconnects, mouse rate; *Copy diagnostics* puts a bug-report summary on the clipboard.
 - **Mouse selection** — Read all mice or only one device ("pick the last moved mouse").
 
 **App**
 
-- **Decoupled control loop** — A dedicated high-priority 250 Hz thread owns vJoy and writes all axes in **one report per tick** (no torn frames); the window can be minimised or stall without affecting the output.
+- **Decoupled control loop** — A dedicated high-priority 250 Hz thread owns the virtual device and writes all axes in **one report per tick** (no torn frames); the window can be minimised or stall without affecting the output.
 - **Safe config** — Atomic writes (`.tmp` then rename), out-of-range values corrected and reported by name, unreadable files backed up instead of overwritten.
 - **Accessibility** — Colour-blind palette (Okabe-Ito), brake always dashed in charts, screen-reader labels on custom widgets, rebindable hotkeys (including mouse side buttons), interface scale 75–200 %.
 - **Auto-update** — Background check against GitHub releases with one-click self-update (download → SHA-256 verify → replace → restart).
@@ -71,8 +75,8 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 
 ## Input / Output mapping
 
-| Input | vJoy Output | Control |
-|-------|-------------|---------|
+| Input | Virtual joystick | Control |
+|-------|------------------|---------|
 | Mouse X movement | X Axis | Steering |
 | Left mouse button (held) | Y Axis | Throttle |
 | Right mouse button (held) | Rz Axis | Brake |
@@ -86,12 +90,35 @@ All keys can be reassigned in **General → Keys**.
 
 ## Quick start
 
-1. Install [vJoy](https://github.com/BrunnerInnovation/vJoy) and enable a device with **X / Y / Rz** axes and **2 buttons** (Device 1 by default).
+1. **Windows:** install [vJoy](https://github.com/BrunnerInnovation/vJoy) and enable a device with **X / Y / Rz** axes and **2 buttons** (Device 1 by default). **Linux:** run the one-time [Linux setup](#linux).
 2. Run [MouseDrive](https://github.com/MouseDrive/MouseDrive/releases/latest). If anything is missing, the **Setup** window lists what to fix.
 3. Bind the axes in your game with the **Axis bind helper**.
 4. Set the game's deadzone to 0, linearity to 1 and filtering off — see [In-game settings](#in-game-settings).
 
 `vJoyInterface.dll` is searched next to the exe, then in `Program Files\vJoy\x64`, then on the standard DLL path. If several copies exist, the one matching the installed driver version is used.
+
+## Linux
+
+MouseDrive runs natively on x86-64 Linux. It reads mice and keyboards through **evdev** and creates a virtual joystick, **MouseDrive Virtual Wheel**, through **uinput**, so no extra driver is needed. Games see it like any other wheel, including Windows games under Proton or Wine.
+
+One-time setup: load `uinput` and give your login session access to `/dev/uinput` and the input devices. **Setup → Copy setup commands** puts these commands on the clipboard:
+
+```bash
+sudo modprobe uinput
+echo uinput | sudo tee /etc/modules-load.d/mousedrive.conf
+sudo tee /etc/udev/rules.d/70-mousedrive.rules <<'EOF'
+KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"
+SUBSYSTEM=="input", KERNEL=="event*", TAG+="uaccess"
+EOF
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=misc --subsystem-match=input
+```
+
+- The `uaccess` tag grants access only to the user at the local seat (systemd-logind) and applies at once, without logging out. Reading input devices lets a program see every key press, which is why access is limited to the local session. Steam uses the same rule for `/dev/uinput`.
+- Without systemd-logind, use `KERNEL=="uinput", GROUP="input", MODE="0660"` for the first rule, add yourself to the `input` group (`sudo usermod -aG input "$USER"`) and log in again.
+- **Status overlay** uses X11; on Wayland desktops it runs through XWayland. Reading the mouse and the virtual wheel work on X11 and Wayland alike.
+- **Sounds** use ALSA (`libasound.so.2`, also routed through PipeWire or PulseAudio). Without it MouseDrive runs silently.
+- **Check what the game receives:** `evtest` (pick *MouseDrive Virtual Wheel*) or `jstest-gtk` shows the raw axes.
 
 ## In-game settings
 
@@ -108,22 +135,30 @@ MouseDrive already shapes the input (steering mode, smoothing, throttle cut, bra
 | Axis direction | **0 = released** | If a pedal reads inverted, toggle the game's *invert* option for that axis. |
 
 - **Binding:** use the **Axis bind helper** (under the live gauges, or in the *Setup* window). Pick the axis, switch to the game during the 5 s countdown and click the binding row; for the next 4 s only that axis (or gear button) moves.
-- **Check what the game receives:** *Set up USB game controllers* (`joy.cpl`) → vJoy Device → *Properties* shows the raw axes. If they are right but the car is not, the problem is a game setting.
+- **Check what the game receives:** *Set up USB game controllers* (`joy.cpl`) → vJoy Device → *Properties* shows the raw axes (Linux: `evtest` or `jstest-gtk`). If they are right but the car is not, the problem is a game setting.
 - Prefer the game's *wheel* input mode over *gamepad* mode: gamepad modes often add their own steering assist and filtering.
 
 ## How it works
 
-- **Raw Input thread** — A hidden window receives `WM_INPUT` for mouse counts and buttons (also while the game has focus). Counts are accumulated losslessly; scaling happens later in floating point.
-- **Control thread** — A dedicated `THREAD_PRIORITY_HIGHEST` loop (250 Hz by default) owns vJoy. Each tick runs the pure driving logic on a logical clock and writes one complete report. Status, sounds, overlay, telemetry and the stuck-button guard live here too.
+- **Input thread** — On Windows a hidden window receives `WM_INPUT` for mouse counts and buttons (also while the game has focus); on Linux one thread polls every evdev mouse and keyboard node and follows hotplug through inotify. Counts are accumulated losslessly; scaling happens later in floating point.
+- **Control thread** — A dedicated high-priority loop (250 Hz by default) owns the virtual device. Each tick runs the pure driving logic on a logical clock and writes one complete report. Status, sounds, overlay, telemetry and the stuck-button guard live here too.
 - **GUI thread** — eframe/egui reads a snapshot at the start of each frame and publishes config changes with an epoch counter at the end; it never waits for the control thread. Repaint is lazy (~60 Hz focused, ~4 Hz backgrounded).
-- **Output backend** — The logic produces a normalised frame; the backend (vJoy today) maps it to its axis range. This keeps a future own driver or USB dongle a drop-in replacement.
+- **Output backend** — The logic produces a normalised frame; the backend (vJoy on Windows, uinput on Linux) maps it to its axis range. This keeps a future own driver or USB dongle a drop-in replacement.
 
 ## Requirements
+
+**Windows**
 
 - Windows 10/11
 - [Executable MouseDrive](https://github.com/MouseDrive/MouseDrive/releases/latest)
 - [vJoy driver](https://github.com/BrunnerInnovation/vJoy) installed and enabled (tested with 2.2.2.0)
 - `vJoyInterface.dll` available (next to exe, Program Files, or in `PATH`)
+
+**Linux**
+
+- x86-64 with glibc 2.35 or newer (Ubuntu 22.04, Debian 12, Fedora 36 and later)
+- The `uinput` module and the one-time [Linux setup](#linux)
+- X11 or XWayland for the window and the overlay
 
 ## Build
 
@@ -146,11 +181,11 @@ cargo clippy --manifest-path MouseDrive/Cargo.toml --all-targets --no-default-fe
 Settings are stored as TOML in one folder:
 
 1. Next to the exe if a `config.toml` exists there (portable mode)
-2. Otherwise `%APPDATA%\MouseDrive\`
+2. Otherwise `%APPDATA%\MouseDrive\` on Windows, `~/.config/mousedrive/` on Linux (`$XDG_CONFIG_HOME` is honoured)
 
 | File | Contents |
 |------|----------|
-| `config.toml` | App settings: language, vJoy device, keys, mouse, sounds, overlay, view, active profile |
+| `config.toml` | App settings: language, vJoy device (Windows), keys, mouse, sounds, overlay, view, active profile |
 | `profiles\<name>.toml` | Driving settings of one profile — copy it to share a setup |
 | `mousedrive.log` | Connection and update events (small, never written from the control loop) |
 
@@ -173,9 +208,10 @@ MouseDrive/
     ├── curve.rs           # Envelope curve model (PCHIP eval/inverse, point editing, presets)
     ├── control/           # Control thread: engine (tick), connection/reconnect, stuck-button guard, IO seam
     ├── output.rs          # OutputBackend trait + normalised OutputFrame
-    ├── vjoy.rs            # vJoy backend (runtime DLL loading, single-report writes, removal callback)
-    ├── input.rs           # Raw Input thread: lossless counts, buttons, mouse selection
-    ├── keys.rs            # Hotkey helpers (GetAsyncKeyState)
+    ├── vjoy.rs            # Windows output: vJoy backend (runtime DLL loading, single-report writes, removal callback)
+    ├── uinput.rs          # Linux output: uinput virtual wheel
+    ├── input.rs, input/   # Input thread: lossless counts, buttons, mouse selection (Raw Input / evdev)
+    ├── keys.rs, keys/     # Key state and names (GetAsyncKeyState / evdev)
     ├── config.rs          # Config + Tuning, validation, migration, atomic IO
     ├── profiles.rs        # Profile files
     ├── session.rs         # GUI editing session: epochs, undo history, save state
@@ -186,9 +222,9 @@ MouseDrive/
     ├── preview.rs         # Offline simulation for the brake timeline and throttle chart
     ├── bind.rs            # Axis bind helper
     ├── ergonomics.rs      # cm per full lock
-    ├── sound.rs           # Status tones
-    ├── overlay.rs         # Click-through status overlay window
-    ├── platform.rs        # Process/thread priority, timer resolution
+    ├── sound.rs, sound/   # Status tones (PlaySound / ALSA)
+    ├── overlay.rs, overlay/ # Click-through status overlay (layered window / X11)
+    ├── platform.rs, platform/ # Process/thread priority, timer resolution or slack
     ├── fsutil.rs          # Atomic writes, timestamped backups
     └── log.rs             # Event log (mousedrive.log, rotated at 1 MB)
 ```
@@ -206,13 +242,14 @@ Start with the **Setup** window: it checks every requirement and says how to fix
 | "vJoy not enabled" | Check that the vJoy driver is installed and enabled (vJoyConf) |
 | DEVICE BUSY | Another feeder (Joystick Gremlin, SimHub, UCR…) owns the device — close it or choose another vJoy device in **General → Output** |
 | CONNECTION LOST | MouseDrive retries every second on its own; after 15 s the status becomes SETUP REQUIRED and it keeps retrying every 2 s. **Reconnect** forces a retry |
-| MOUSE NOT READ | Turn on **Read mouse while the game has focus** in **General → Mouse** |
+| MOUSE NOT READ | Turn on **Read mouse while the game has focus** in **General → Mouse**. On Linux, check **Mouse access** in the Setup window |
+| Linux: uinput, permission or mouse access row fails | Run the commands from **Setup → Copy setup commands** ([Linux setup](#linux)); they apply within seconds |
 | PAUSED | Press the capture key (default **F8**) |
 | The game binds the wrong axis | Use the **Axis bind helper** |
 | Steering feels laggy or has a deadzone | Set the game's deadzone to 0, linearity to 1, filtering off — [in-game settings](#in-game-settings) |
 | **Brake or throttle stays pressed after MouseDrive crashed or was killed** | vJoy keeps the last values when the feeding process dies (measured with vJoy 2.2.2.0). Start MouseDrive again: it writes neutral values as soon as it takes the device. A normal exit always leaves neutral values. |
 | A pedal stayed pressed after a UAC prompt | The stuck-button guard releases it within ~200 ms; the count appears in diagnostics |
-| Settings not saving | Check write permissions in `%APPDATA%\MouseDrive\` (or the exe folder in portable mode) |
+| Settings not saving | Check write permissions in `%APPDATA%\MouseDrive\` or `~/.config/mousedrive/` (or the exe folder in portable mode) |
 
 ## License
 

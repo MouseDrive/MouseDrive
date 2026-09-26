@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Linux support.** A native x86-64 build reads mice and keyboards through
+  evdev (hotplug through inotify) and writes to a uinput virtual joystick,
+  *MouseDrive Virtual Wheel* (X, Y, Rz, 8 buttons, vJoy's axis range). The
+  status overlay uses X11 (XWayland on Wayland), sounds use ALSA and settings
+  live in `~/.config/mousedrive/`. The Setup window checks uinput, its
+  permission and mouse access, and copies the one-time udev commands.
+- Releases include `MouseDrive-vX.Y.Z-linux-x64.zip`; auto-update installs the
+  build for the running platform.
+
 ### Changed
 
 - **Steering deadzone is off by default** and marked experimental; it did not
