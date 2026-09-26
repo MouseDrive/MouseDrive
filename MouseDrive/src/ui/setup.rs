@@ -1,9 +1,14 @@
 #![deny(unsafe_code)]
 
+#[cfg(windows)]
 use std::path::{Path, PathBuf};
 
+#[cfg(target_os = "linux")]
+use eframe::egui::Id;
 use eframe::egui::{Context, DragValue, Grid, OpenUrl, RichText, Ui, Window};
 use mousedrive::control::{Command, SetupInfo, Shared, Snapshot};
+#[cfg(target_os = "linux")]
+use mousedrive::input;
 use mousedrive::setup::{
     Check, CheckId, CheckState, DeviceState, Owner, SetupReport, format_version,
 };
@@ -12,9 +17,30 @@ use super::notices::Notices;
 use super::widgets::{Cx, bar, steering_bar};
 use crate::lang::{Strings, fill};
 
-const VJOY_DOWNLOAD_URL: &str = "https://github.com/jshafer817/vJoy/releases";
+#[cfg(windows)]
+const SETUP_LINK_URL: &str = "https://github.com/jshafer817/vJoy/releases";
+#[cfg(windows)]
 const VJOY_CONF_EXE: &str = "vJoyConf.exe";
+#[cfg(windows)]
 const VJOY_DEFAULT_DIR: &str = r"C:\Program Files\vJoy\x64";
+
+#[cfg(target_os = "linux")]
+const SETUP_LINK_URL: &str = "https://github.com/MouseDrive/MouseDrive/tree/linux#linux";
+#[cfg(target_os = "linux")]
+const SETUP_COMMANDS: &str = r#"sudo modprobe uinput
+echo uinput | sudo tee /etc/modules-load.d/mousedrive.conf
+sudo tee /etc/udev/rules.d/70-mousedrive.rules <<'EOF'
+KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"
+SUBSYSTEM=="input", KERNEL=="event*", TAG+="uaccess"
+EOF
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=misc --subsystem-match=input
+"#;
+#[cfg(target_os = "linux")]
+const COPIED_VISIBLE_S: f64 = 2.0;
+
+const SHOW_VERSIONS: bool = cfg!(windows);
+const SHOW_DEVICE_NUMBER: bool = cfg!(windows);
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
@@ -32,6 +58,7 @@ pub fn check_rows(report: &SetupReport, s: &Strings) -> Vec<Row> {
     report
         .checks()
         .into_iter()
+        .filter(|c| SHOW_VERSIONS || c.id != CheckId::Versions)
         .map(|c| row(report, c, s))
         .collect()
 }
@@ -44,7 +71,7 @@ fn row(r: &SetupReport, c: Check, s: &Strings) -> Row {
         CheckId::Dll => dll_parts(r, failed, s),
         CheckId::Driver => (
             s.chk_driver.into(),
-            String::new(),
+            r.driver_detail.clone().unwrap_or_default(),
             failed.then(|| s.fix_driver.into()),
         ),
         CheckId::Versions => versions_parts(r, s),
@@ -150,6 +177,53 @@ fn buttons_parts(r: &SetupReport, failed: bool, s: &Strings) -> Parts {
     )
 }
 
+#[cfg(target_os = "linux")]
+pub fn mouse_access_row(readable: bool, denied: &[String], s: &Strings) -> Row {
+    let state = match (readable, denied.is_empty()) {
+        (true, true) => CheckState::Pass,
+        (true, false) => CheckState::Warn,
+        (false, _) => CheckState::Fail,
+    };
+    let detail = if !denied.is_empty() {
+        fill(s.mouse_access_denied, &[("mice", &denied.join(", "))])
+    } else if readable {
+        String::new()
+    } else {
+        s.mouse_access_none.to_string()
+    };
+    Row {
+        state,
+        title: s.chk_mouse_access.into(),
+        detail,
+        fix: (!denied.is_empty()).then(|| s.fix_mouse_access.into()),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn live_rows(s: &Strings) -> Vec<Row> {
+    vec![mouse_access_row(
+        input::registration_ok(),
+        &input::denied_mice(),
+        s,
+    )]
+}
+
+#[cfg(windows)]
+fn live_rows(_s: &Strings) -> Vec<Row> {
+    Vec::new()
+}
+
+#[cfg(target_os = "linux")]
+fn mouse_blocked() -> bool {
+    !input::registration_ok() && !input::denied_mice().is_empty()
+}
+
+#[cfg(windows)]
+fn mouse_blocked() -> bool {
+    false
+}
+
+#[cfg(windows)]
 fn vjoy_conf_path(dll: Option<&Path>) -> PathBuf {
     dll.and_then(Path::parent)
         .map(|dir| dir.join(VJOY_CONF_EXE))
@@ -175,6 +249,10 @@ pub struct SetupUi {
 
 impl SetupUi {
     pub fn pull(&mut self, shared: &Shared) {
+        if !self.auto_opened && mouse_blocked() {
+            self.open = true;
+            self.auto_opened = true;
+        }
         let Some(info) = shared.setup_if_newer(self.seen_seq) else {
             return;
         };
@@ -203,7 +281,11 @@ impl SetupUi {
             .show(ctx, |ui| {
                 ui.label(cx.s.setup_intro);
                 ui.add_space(6.0);
-                rows_grid(ui, cx, &check_rows(report, cx.s));
+                let rows: Vec<Row> = check_rows(report, cx.s)
+                    .into_iter()
+                    .chain(live_rows(cx.s))
+                    .collect();
+                rows_grid(ui, cx, &rows);
                 ui.add_space(6.0);
                 actions(ui, cx, report, shared, notices);
                 device_number(ui, cx, device_id);
@@ -253,22 +335,53 @@ fn actions(ui: &mut Ui, cx: &Cx, report: &SetupReport, shared: &Shared, notices:
         if ui.button(cx.s.btn_recheck).clicked() {
             shared.send(Command::Reconnect);
         }
-        if ui.button(cx.s.btn_open_vjoy_conf).clicked() {
-            let exe = vjoy_conf_path(report.dll_path.as_deref());
-            if let Err(e) = std::process::Command::new(&exe).spawn() {
-                notices.error(fill(
-                    cx.s.err_launch,
-                    &[("error", &format!("{}: {e}", exe.display()))],
-                ));
-            }
+        if ui.button(cx.s.btn_setup_tool).clicked() {
+            setup_tool(ui, cx, report, notices);
         }
-        if ui.button(cx.s.btn_download_vjoy).clicked() {
-            ui.ctx().open_url(OpenUrl::new_tab(VJOY_DOWNLOAD_URL));
+        if ui.button(cx.s.btn_setup_link).clicked() {
+            ui.ctx().open_url(OpenUrl::new_tab(SETUP_LINK_URL));
         }
+        #[cfg(target_os = "linux")]
+        copied_hint(ui, cx);
     });
 }
 
+#[cfg(windows)]
+fn setup_tool(_ui: &Ui, cx: &Cx, report: &SetupReport, notices: &mut Notices) {
+    let exe = vjoy_conf_path(report.dll_path.as_deref());
+    if let Err(e) = std::process::Command::new(&exe).spawn() {
+        notices.error(fill(
+            cx.s.err_launch,
+            &[("error", &format!("{}: {e}", exe.display()))],
+        ));
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn setup_tool(ui: &Ui, _cx: &Cx, _report: &SetupReport, _notices: &mut Notices) {
+    ui.ctx().copy_text(SETUP_COMMANDS.to_string());
+    let now = ui.input(|i| i.time);
+    ui.ctx().data_mut(|d| d.insert_temp(copied_id(), now));
+}
+
+#[cfg(target_os = "linux")]
+fn copied_id() -> Id {
+    Id::new("setup_commands_copied")
+}
+
+#[cfg(target_os = "linux")]
+fn copied_hint(ui: &mut Ui, cx: &Cx) {
+    let now = ui.input(|i| i.time);
+    let copied_at: Option<f64> = ui.ctx().data(|d| d.get_temp(copied_id()));
+    if copied_at.is_some_and(|t| now - t < COPIED_VISIBLE_S) {
+        ui.label(RichText::new(cx.s.copied).weak());
+    }
+}
+
 fn device_number(ui: &mut Ui, cx: &Cx, device_id: &mut i32) {
+    if !SHOW_DEVICE_NUMBER {
+        return;
+    }
     ui.horizontal(|ui| {
         let label = ui
             .label(cx.s.device_number)

@@ -1,6 +1,28 @@
 use super::Strings;
 
+#[cfg(windows)]
+pub(super) static TR: Strings = BASE;
+
+#[cfg(target_os = "linux")]
 pub(super) static TR: Strings = Strings {
+    det_setup_required: "Sanal direksiyon hazır değil; oyuna girdi gitmiyor. Kurulum listesindeki ✖ satırlarını düzeltin.",
+    det_lost: "Sanal direksiyon bağlantısı koptu. {secs} s içinde yeniden denenecek.",
+    reason_write_failures: "sanal direksiyon yazma hataları",
+    chip_vjoy: "Sanal direksiyon",
+    chk_dll: "uinput kullanılabilir",
+    chk_driver: "Sanal direksiyon oluşturma izni",
+    chk_device: "Sanal direksiyon",
+    fix_dll: "/dev/uinput bulunamadı. “Kurulum komutlarını kopyala” ile alınan komutları bir terminalde çalıştırın, sonra “Tekrar kontrol et”e basın.",
+    fix_driver: "MouseDrive /dev/uinput'u açamıyor. “Kurulum komutlarını kopyala” ile alınan komutları bir terminalde çalıştırın, sonra “Tekrar kontrol et”e basın.",
+    fix_device_acquire: "Sanal direksiyon oluşturulamadı. “Tekrar kontrol et”e basın; nedeni günlük dosyasına yazılır.",
+    btn_setup_tool: "Kurulum komutlarını kopyala",
+    btn_setup_link: "Linux kurulum rehberini aç",
+    diag_registration: "Hiçbir fare okunamıyor; kurulum listesindeki “Fare erişimi” satırına bakın.",
+    tip_gear_keys: "Yakalama açıkken bu tuşlar sanal direksiyonun 1. ve 2. butonuna gider.",
+    ..BASE
+};
+
+const BASE: Strings = Strings {
     status_labels: [
         "KURULUM GEREKLİ",
         "CİHAZ MEŞGUL",
@@ -65,10 +87,18 @@ pub(super) static TR: Strings = Strings {
     setup_next_bind: "Sonraki adım, oyunda eksenleri bağlamak:",
     setup_next_game: "Oyun içi ayarlar: ölü bölge 0, doğrusallık 1, filtre kapalı (Genel ➡ Oyun içi ayarlar).",
     btn_recheck: "Tekrar kontrol et",
-    btn_open_vjoy_conf: "Configure vJoy'u aç",
-    btn_download_vjoy: "vJoy'u indir",
+    btn_setup_tool: "Configure vJoy'u aç",
+    btn_setup_link: "vJoy'u indir",
     device_number: "Cihaz no",
     err_launch: "Uygulama açılamadı: {error}",
+    #[cfg(target_os = "linux")]
+    chk_mouse_access: "Fare erişimi",
+    #[cfg(target_os = "linux")]
+    mouse_access_denied: "izin yok: {mice}",
+    #[cfg(target_os = "linux")]
+    mouse_access_none: "fare bulunamadı",
+    #[cfg(target_os = "linux")]
+    fix_mouse_access: "MouseDrive fareyi okuyamıyor. “Kurulum komutlarını kopyala” ile alınan komutları bir terminalde çalıştırın; değişiklik birkaç saniye içinde uygulanır.",
 
     g_steering: "Direksiyon",
     g_throttle: "Gaz",

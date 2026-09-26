@@ -13,6 +13,10 @@ use super::widgets::Cx;
 use crate::lang::{Strings, fill};
 
 const DIALOG_WIDTH: f32 = 340.0;
+#[cfg(windows)]
+const FILE_MANAGER: &str = "explorer";
+#[cfg(target_os = "linux")]
+const FILE_MANAGER: &str = "xdg-open";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NameAction {
@@ -177,7 +181,7 @@ impl ProfilesUi {
             return;
         };
         let result = std::fs::create_dir_all(store.dir()).and_then(|()| {
-            std::process::Command::new("explorer")
+            std::process::Command::new(FILE_MANAGER)
                 .arg(store.dir())
                 .spawn()
         });

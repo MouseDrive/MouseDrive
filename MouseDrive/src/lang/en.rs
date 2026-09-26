@@ -1,6 +1,28 @@
 use super::Strings;
 
+#[cfg(windows)]
+pub(super) static EN: Strings = BASE;
+
+#[cfg(target_os = "linux")]
 pub(super) static EN: Strings = Strings {
+    det_setup_required: "The virtual wheel is not ready; no input reaches the game. Fix the ✖ rows in the setup list.",
+    det_lost: "Virtual wheel connection lost. Retrying in {secs} s.",
+    reason_write_failures: "virtual wheel write errors",
+    chip_vjoy: "Virtual wheel",
+    chk_dll: "uinput available",
+    chk_driver: "Permission to create the virtual wheel",
+    chk_device: "Virtual wheel",
+    fix_dll: "/dev/uinput was not found. Run the commands from “Copy setup commands” in a terminal, then press “Check again”.",
+    fix_driver: "MouseDrive may not open /dev/uinput. Run the commands from “Copy setup commands” in a terminal, then press “Check again”.",
+    fix_device_acquire: "The virtual wheel could not be created. Press “Check again”; the reason is written to the log.",
+    btn_setup_tool: "Copy setup commands",
+    btn_setup_link: "Open Linux setup guide",
+    diag_registration: "No mouse can be read; see “Mouse access” in the setup list.",
+    tip_gear_keys: "While capture is on, these keys press virtual wheel buttons 1 and 2.",
+    ..BASE
+};
+
+const BASE: Strings = Strings {
     status_labels: [
         "SETUP REQUIRED",
         "DEVICE BUSY",
@@ -65,10 +87,18 @@ pub(super) static EN: Strings = Strings {
     setup_next_bind: "Next step, bind the axes in the game:",
     setup_next_game: "In-game settings: deadzone 0, linearity 1, filtering off (General ➡ In-game settings).",
     btn_recheck: "Check again",
-    btn_open_vjoy_conf: "Open Configure vJoy",
-    btn_download_vjoy: "Download vJoy",
+    btn_setup_tool: "Open Configure vJoy",
+    btn_setup_link: "Download vJoy",
     device_number: "Device no.",
     err_launch: "Could not start the application: {error}",
+    #[cfg(target_os = "linux")]
+    chk_mouse_access: "Mouse access",
+    #[cfg(target_os = "linux")]
+    mouse_access_denied: "no permission: {mice}",
+    #[cfg(target_os = "linux")]
+    mouse_access_none: "no mouse found",
+    #[cfg(target_os = "linux")]
+    fix_mouse_access: "MouseDrive may not read the mouse. Run the commands from “Copy setup commands” in a terminal; the change applies within a few seconds.",
 
     g_steering: "Steering",
     g_throttle: "Throttle",

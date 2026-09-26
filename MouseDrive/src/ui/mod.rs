@@ -540,6 +540,8 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         let now_ms = self.now_ms();
+        #[cfg(target_os = "linux")]
+        mousedrive::keys::set_app_focused(ctx.input(|i| i.viewport().focused).unwrap_or(true));
         self.pull(now_ms);
         self.apply_view(ctx);
         let cx = self.cx();

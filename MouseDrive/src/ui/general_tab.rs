@@ -18,6 +18,7 @@ use crate::lang::{Lang, fill};
 const GAME_GUIDE_URL: &str = "https://github.com/MouseDrive/MouseDrive#in-game-settings";
 pub const LOOP_INTERVALS_MS: [i32; 6] = [1, 2, 4, 5, 8, 10];
 const MOUSE_COMBO_WIDTH: f32 = 220.0;
+const SHOW_VJOY_DEVICE: bool = cfg!(windows);
 
 pub struct Env<'a> {
     pub snap: &'a Snapshot,
@@ -64,14 +65,16 @@ fn output(ui: &mut Ui, cx: &Cx, cfg: &mut Config, snap: &Snapshot) {
             .on_hover_text(s.tip_loop_rate);
         ui.label("");
         ui.end_row();
-        let device = Param::new(
-            s.vjoy_device,
-            s.tip_vjoy_device,
-            f64::from(d.vjoy_device_id),
-            1.0..=16.0,
-            Fmt::Num(0),
-        );
-        param_row_i32(ui, cx, &device, &mut cfg.vjoy_device_id);
+        if SHOW_VJOY_DEVICE {
+            let device = Param::new(
+                s.vjoy_device,
+                s.tip_vjoy_device,
+                f64::from(d.vjoy_device_id),
+                1.0..=16.0,
+                Fmt::Num(0),
+            );
+            param_row_i32(ui, cx, &device, &mut cfg.vjoy_device_id);
+        }
     });
     let summary = &snap.loop_summary;
     let measured = fill(

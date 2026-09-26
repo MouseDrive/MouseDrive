@@ -121,10 +121,18 @@ pub struct Strings {
     pub setup_next_bind: &'static str,
     pub setup_next_game: &'static str,
     pub btn_recheck: &'static str,
-    pub btn_open_vjoy_conf: &'static str,
-    pub btn_download_vjoy: &'static str,
+    pub btn_setup_tool: &'static str,
+    pub btn_setup_link: &'static str,
     pub device_number: &'static str,
     pub err_launch: &'static str,
+    #[cfg(target_os = "linux")]
+    pub chk_mouse_access: &'static str,
+    #[cfg(target_os = "linux")]
+    pub mouse_access_denied: &'static str,
+    #[cfg(target_os = "linux")]
+    pub mouse_access_none: &'static str,
+    #[cfg(target_os = "linux")]
+    pub fix_mouse_access: &'static str,
 
     pub g_steering: &'static str,
     pub g_throttle: &'static str,
