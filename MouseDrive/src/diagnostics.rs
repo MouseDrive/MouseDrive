@@ -123,13 +123,17 @@ pub fn format_report(i: &DiagnosticsInfo) -> String {
     let _ = writeln!(s, "os: {}", i.os);
     let _ = writeln!(s, "status: {}", i.status);
     let _ = writeln!(s, "backend: {}", i.backend);
-    let _ = writeln!(
-        s,
-        "vjoy dll: {} ({})",
-        opt(&i.dll_version),
-        opt(&i.dll_path)
-    );
-    let _ = writeln!(s, "vjoy driver: {}", opt(&i.driver_version));
+    if cfg!(windows) {
+        let _ = writeln!(
+            s,
+            "vjoy dll: {} ({})",
+            opt(&i.dll_version),
+            opt(&i.dll_path)
+        );
+        let _ = writeln!(s, "vjoy driver: {}", opt(&i.driver_version));
+    } else {
+        let _ = writeln!(s, "uinput: {}", opt(&i.dll_path));
+    }
     let _ = writeln!(
         s,
         "loop: target {:.0} Hz, measured {:.1} Hz, p50 {:.2} ms, p99 {:.2} ms, max {:.2} ms (n={})",

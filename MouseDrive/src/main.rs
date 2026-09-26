@@ -76,7 +76,7 @@ fn main() -> eframe::Result<()> {
         &cfg.mouse_device,
         args.allow_injected,
     );
-    let input_thread = started("raw-input", input_thread, &mut errors);
+    let input_thread = started("input", input_thread, &mut errors);
     let overlay_thread = started("overlay", overlay::start(), &mut errors);
     overlay::configure(cfg.overlay_enabled, cfg.overlay_corner);
     overlay::set_labels(status_labels(Lang::from_i32(cfg.language)));
@@ -139,7 +139,7 @@ fn shutdown(shared: &Shared, threads: Threads) {
     shared.stop();
     join("control", threads.control);
     input::stop();
-    join("raw-input", threads.input);
+    join("input", threads.input);
     overlay::stop();
     join("overlay", threads.overlay);
     log::line("kapatıldı");
