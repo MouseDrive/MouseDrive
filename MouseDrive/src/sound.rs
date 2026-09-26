@@ -2,12 +2,20 @@ use std::collections::HashMap;
 use std::f64::consts::TAU;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel};
 
-use windows::Win32::Media::Audio::{PlaySoundW, SND_MEMORY, SND_NODEFAULT, SND_SYNC};
-use windows::core::PCWSTR;
-
 use crate::status::Cue;
 
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(windows)]
+mod win;
+
+#[cfg(target_os = "linux")]
+use linux as sys;
+#[cfg(windows)]
+use win as sys;
+
 const SAMPLE_RATE: u32 = 22_050;
+const WAV_HEADER_LEN: usize = 44;
 const FADE_MS: f64 = 5.0;
 const QUEUE: usize = 4;
 
@@ -90,7 +98,7 @@ pub fn synthesize(cue: Cue, volume_pct: u8) -> Vec<u8> {
 
 fn wav_bytes(samples: &[i16]) -> Vec<u8> {
     let data_len = (samples.len() * 2) as u32;
-    let mut out = Vec::with_capacity(44 + data_len as usize);
+    let mut out = Vec::with_capacity(WAV_HEADER_LEN + data_len as usize);
     out.extend_from_slice(b"RIFF");
     out.extend_from_slice(&(36 + data_len).to_le_bytes());
     out.extend_from_slice(b"WAVEfmt ");
@@ -134,17 +142,13 @@ impl SoundPlayer {
 }
 
 fn worker(rx: Receiver<(Cue, u8)>) {
+    let Some(output) = sys::Output::open() else {
+        rx.iter().for_each(drop);
+        return;
+    };
     let mut cache: HashMap<(Cue, u8), Vec<u8>> = HashMap::new();
     for key in rx {
         let wav = cache.entry(key).or_insert_with(|| synthesize(key.0, key.1));
-        // SAFETY: SND_MEMORY ile işaretçi bellek içi WAV görüntüsünü gösterir;
-        // SND_SYNC olduğu için arabellek çalma bitene kadar yaşar.
-        unsafe {
-            let _ = PlaySoundW(
-                PCWSTR(wav.as_ptr().cast()),
-                None,
-                SND_MEMORY | SND_SYNC | SND_NODEFAULT,
-            );
-        }
+        output.play(wav);
     }
 }
