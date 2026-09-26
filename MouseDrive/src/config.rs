@@ -450,6 +450,7 @@ fn portable_config_path() -> Option<PathBuf> {
     Some(exe.parent()?.join("config.toml"))
 }
 
+#[cfg(windows)]
 #[allow(unsafe_code)]
 fn shell_appdata_dir() -> Option<PathBuf> {
     use windows::Win32::UI::Shell::{CSIDL_APPDATA, SHGFP_TYPE_CURRENT, SHGetFolderPathW};
@@ -473,7 +474,8 @@ fn shell_appdata_dir() -> Option<PathBuf> {
     Some(PathBuf::from(String::from_utf16_lossy(&buf[..len])))
 }
 
-fn appdata_config_dir() -> Option<PathBuf> {
+#[cfg(windows)]
+fn user_config_dir() -> Option<PathBuf> {
     let base = std::env::var_os("APPDATA")
         .map(PathBuf::from)
         .or_else(shell_appdata_dir)?;
@@ -482,13 +484,38 @@ fn appdata_config_dir() -> Option<PathBuf> {
     Some(dir)
 }
 
+#[cfg(target_os = "linux")]
+fn user_config_dir() -> Option<PathBuf> {
+    let base = xdg_config_home(
+        std::env::var_os("XDG_CONFIG_HOME"),
+        std::env::var_os("HOME"),
+    )?;
+    let dir = base.join("mousedrive");
+    let _ = std::fs::create_dir_all(&dir);
+    Some(dir)
+}
+
+#[cfg(target_os = "linux")]
+fn xdg_config_home(
+    xdg: Option<std::ffi::OsString>,
+    home: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    xdg.map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| {
+            home.map(PathBuf::from)
+                .filter(|p| p.is_absolute())
+                .map(|h| h.join(".config"))
+        })
+}
+
 pub fn config_path() -> Option<PathBuf> {
     if let Some(portable) = portable_config_path()
         && portable.exists()
     {
         return Some(portable);
     }
-    appdata_config_dir().map(|d| d.join("config.toml"))
+    user_config_dir().map(|d| d.join("config.toml"))
 }
 
 pub fn config_dir() -> Option<PathBuf> {
