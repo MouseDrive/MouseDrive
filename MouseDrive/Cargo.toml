@@ -5,6 +5,20 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 
 [dependencies]
+libloading = "0.8"
+eframe = "0.31"
+egui = "0.31"
+egui_plot = "0.31"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+self-replace = { version = "1", optional = true }
+serde_json = { version = "1", optional = true }
+sha2 = { version = "0.10", optional = true }
+ureq = { version = "2", optional = true }
+zip = { version = "2", default-features = false, features = ["deflate"], optional = true }
+
+[target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
     "Win32_Devices_HumanInterfaceDevice",
     "Win32_Foundation",
@@ -20,18 +34,13 @@ windows = { version = "0.61", features = [
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
-libloading = "0.8"
-eframe = "0.31"
-egui = "0.31"
-egui_plot = "0.31"
-serde = { version = "1", features = ["derive"] }
-toml = "0.8"
 
-self-replace = { version = "1", optional = true }
-serde_json = { version = "1", optional = true }
-sha2 = { version = "0.10", optional = true }
-ureq = { version = "2", optional = true }
-zip = { version = "2", default-features = false, features = ["deflate"], optional = true }
+[target.'cfg(target_os = "linux")'.dependencies]
+ab_glyph = "0.2"
+epaint_default_fonts = "0.31"
+evdev = "0.13"
+libc = "0.2"
+x11rb = { version = "0.13", features = ["randr", "shape"] }
 
 [features]
 default = ["updater"]
