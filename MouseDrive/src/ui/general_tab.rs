@@ -279,23 +279,6 @@ fn feedback(ui: &mut Ui, cx: &Cx, cfg: &mut Config, shared: &Shared) {
             );
             param_row_i32(ui, cx, &volume, &mut cfg.sound_volume);
         }
-        check_row(
-            ui,
-            cx,
-            (s.overlay, s.tip_overlay),
-            &mut cfg.overlay_enabled,
-            d.overlay_enabled,
-        );
-        if cfg.overlay_enabled {
-            combo_row(
-                ui,
-                cx,
-                (s.corner, s.tip_overlay),
-                &mut cfg.overlay_corner,
-                &s.corners,
-                d.overlay_corner,
-            );
-        }
     });
     if cfg.sounds_enabled && ui.button(s.btn_test_sound).clicked() {
         shared.send(Command::PlayCue(Cue::CaptureOn));
