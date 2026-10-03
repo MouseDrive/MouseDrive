@@ -55,6 +55,7 @@ use self::widgets::Cx;
 use crate::lang::{Lang, fill, strings};
 
 pub use self::startup::Startup;
+use self::startup::updated_notice;
 
 const FAST_REPAINT: Duration = Duration::from_millis(16);
 const SLOW_REPAINT: Duration = Duration::from_millis(250);
@@ -155,6 +156,13 @@ impl App {
             Level::Error,
             fill(s.err_launch, &[("error", error)]),
         ));
+    }
+
+    pub fn report_update(&mut self, from: &str) {
+        let s = self.cx().s;
+        if let Some(notice) = updated_notice(s, from) {
+            self.notices.push(notice);
+        }
     }
 
     fn cx(&self) -> Cx {

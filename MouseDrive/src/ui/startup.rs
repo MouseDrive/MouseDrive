@@ -8,6 +8,8 @@ use mousedrive::profiles::{ProfileError, ProfileStore};
 use super::notices::{Level, Notice};
 use crate::lang::{Lang, Strings, fill, strings};
 
+const CHANGELOG_URL: &str = "https://github.com/MouseDrive/MouseDrive/blob/main/CHANGELOG.md";
+
 pub struct Startup {
     pub config: Config,
     pub disk: Option<Config>,
@@ -87,6 +89,14 @@ pub fn profile_corrected_notice(s: &Strings, name: &str, fields: &[&str]) -> Not
         &[("name", name), ("fields", &fields.join(", "))],
     );
     Notice::new(Level::Warn, text)
+}
+
+pub fn updated_notice(s: &Strings, from: &str) -> Option<Notice> {
+    let to = env!("CARGO_PKG_VERSION");
+    (from != to).then(|| {
+        let text = fill(s.notice_updated, &[("from", from), ("to", to)]);
+        Notice::new(Level::Info, text).with_link(s.link_changelog, CHANGELOG_URL)
+    })
 }
 
 fn error_notice(template: &str, error: &dyn std::fmt::Display) -> Notice {

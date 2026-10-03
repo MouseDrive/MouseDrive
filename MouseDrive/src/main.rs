@@ -23,26 +23,36 @@ const TITLE: &str = concat!("MouseDrive v", env!("CARGO_PKG_VERSION"));
 const WINDOW_SIZE: [f32; 2] = [1180.0, 680.0];
 const WINDOW_MIN_SIZE: [f32; 2] = [760.0, 560.0];
 const APP_ICON_PNG: &[u8] = include_bytes!("../image/icon.png");
+const UPDATED_FROM: &str = "--updated-from";
+const MAX_VERSION_LEN: usize = 32;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct Args {
     test_counter: bool,
     allow_injected: bool,
+    updated_from: Option<String>,
 }
 
 fn parse_args(args: impl IntoIterator<Item = String>) -> Args {
-    args.into_iter()
-        .fold(Args::default(), |a, arg| match arg.as_str() {
-            "--test-counter" => Args {
-                test_counter: true,
-                ..a
-            },
-            "--allow-injected" => Args {
-                allow_injected: true,
-                ..a
-            },
-            _ => a,
-        })
+    let mut args = args.into_iter().peekable();
+    let mut parsed = Args::default();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--test-counter" => parsed.test_counter = true,
+            "--allow-injected" => parsed.allow_injected = true,
+            UPDATED_FROM => parsed.updated_from = args.next_if(|v| is_version(v)),
+            _ => {}
+        }
+    }
+    parsed
+}
+
+fn is_version(text: &str) -> bool {
+    text.len() <= MAX_VERSION_LEN
+        && text.starts_with(|c: char| c.is_ascii_digit())
+        && text
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
 }
 
 struct Threads {
@@ -96,7 +106,13 @@ fn main() -> eframe::Result<()> {
     };
 
     let restart = Arc::new(AtomicBool::new(false));
-    let result = run_window(startup, Arc::clone(&shared), Arc::clone(&restart), errors);
+    let result = run_window(
+        startup,
+        Arc::clone(&shared),
+        Arc::clone(&restart),
+        errors,
+        args.updated_from,
+    );
     shutdown(&shared, threads);
     if restart.load(Ordering::Acquire) {
         let lang = Lang::from_i32(shared.config().1.language);
@@ -110,6 +126,7 @@ fn run_window(
     shared: Arc<Shared>,
     restart: Arc<AtomicBool>,
     errors: Vec<String>,
+    updated_from: Option<String>,
 ) -> eframe::Result<()> {
     let viewport = ViewportBuilder::default()
         .with_inner_size(WINDOW_SIZE)
@@ -128,6 +145,9 @@ fn run_window(
         Box::new(move |_cc| {
             let mut app = App::new(startup, shared, restart);
             errors.iter().for_each(|e| app.report_launch_error(e));
+            if let Some(from) = &updated_from {
+                app.report_update(from);
+            }
             Ok(Box::new(app))
         }),
     )
@@ -158,7 +178,11 @@ fn join(name: &str, handle: Option<JoinHandle<()>>) {
 }
 
 fn relaunch(exe: std::io::Result<PathBuf>, s: &Strings) {
-    let result = exe.and_then(|exe| std::process::Command::new(exe).spawn());
+    let result = exe.and_then(|exe| {
+        std::process::Command::new(exe)
+            .args([UPDATED_FROM, env!("CARGO_PKG_VERSION")])
+            .spawn()
+    });
     if let Err(e) = result {
         log::line(&format!("yeniden başlatılamadı: {e}"));
         platform::alert(s.relaunch_failed_title, s.relaunch_failed_body);

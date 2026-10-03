@@ -24,6 +24,9 @@ before you click *Update*.
   permission and mouse access, and copies the one-time udev commands.
 - Releases include `MouseDrive-vX.Y.Z-linux-x64.zip`; auto-update installs the
   build for the running platform.
+- **MouseDrive says when it was updated.** After the restart, a notice names
+  the old and the new version and links the changelog (from the next update
+  on).
 
 ### Changed
 

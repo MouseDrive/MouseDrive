@@ -17,6 +17,7 @@ pub enum Level {
 pub struct Notice {
     pub level: Level,
     pub text: String,
+    pub link: Option<(&'static str, &'static str)>,
 }
 
 impl Notice {
@@ -24,6 +25,14 @@ impl Notice {
         Self {
             level,
             text: text.into(),
+            link: None,
+        }
+    }
+
+    pub fn with_link(self, label: &'static str, url: &'static str) -> Self {
+        Self {
+            link: Some((label, url)),
+            ..self
         }
     }
 }
@@ -60,6 +69,9 @@ impl Notices {
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(icon).color(color));
                 ui.label(&notice.text);
+                if let Some((label, url)) = notice.link {
+                    ui.hyperlink_to(label, url);
+                }
                 if ui.small_button(cx.s.btn_dismiss).clicked() {
                     dismissed = Some(i);
                 }

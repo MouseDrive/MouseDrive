@@ -433,6 +433,8 @@ const BASE: Strings = Strings {
     notice_corrected: "config.toml'da {n} değer sınır dışıydı ve düzeltildi: {fields}",
     notice_unreadable: "config.toml okunamadı ({error}); varsayılan ayarlar kullanılıyor.",
     notice_backup: "Bozuk dosyanın yedeği: {path}",
+    notice_updated: "MouseDrive v{from} sürümünden v{to} sürümüne güncellendi.",
+    link_changelog: "Yenilikler",
     notice_deadzone_reset: "Direksiyon ölü bölgesi artık varsayılan olarak kapalı. Eski %2 varsayılanında kalan profillerde 0'a çekildi: {names}",
     err_deadzone_reset: "“{name}” profilinde ölü bölge kapatılamadı: {error}. Direksiyon sayfasında 0'a çekin.",
     err_config_save: "Ayarlar kaydedilemedi: {error}",
