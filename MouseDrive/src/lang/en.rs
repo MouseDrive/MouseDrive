@@ -173,6 +173,7 @@ const BASE: Strings = Strings {
 
     diag_line: "writes {ok} ✔ / {fail} ✖ · loop {hz} Hz, p99 {p99} ms · clipped {clipped} · reconnects {reconnects}",
     diag_mouse: "mouse ~{hz} Hz",
+    footer_line: "{output} · {hz} Hz · p99 {p99} ms",
     footer_write_errors: "write errors: {n}",
     footer_reconnects: "reconnects: {n}",
     diag_absolute: "Motion of {n} absolute-position events ignored (tablet or remote desktop?).",

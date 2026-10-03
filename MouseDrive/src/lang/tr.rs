@@ -173,6 +173,7 @@ const BASE: Strings = Strings {
 
     diag_line: "yazma {ok} ✔ / {fail} ✖ · döngü {hz} Hz, p99 {p99} ms · kırpılan {clipped} · yeniden bağlanma {reconnects}",
     diag_mouse: "fare ~{hz} Hz",
+    footer_line: "{output} · {hz} Hz · p99 {p99} ms",
     footer_write_errors: "yazma hatası: {n}",
     footer_reconnects: "yeniden bağlanma: {n}",
     diag_absolute: "Mutlak konumlu {n} olayın hareketi yok sayıldı (tablet ya da uzak masaüstü olabilir).",

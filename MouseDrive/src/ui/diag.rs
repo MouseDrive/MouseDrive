@@ -32,11 +32,13 @@ pub fn summary_line(snap: &Snapshot, s: &Strings, lang: Lang) -> String {
 
 pub fn footer_line(snap: &Snapshot, cfg: &Config, s: &Strings, lang: Lang) -> String {
     let l = &snap.loop_summary;
-    format!(
-        "{} · {} Hz · p99 {} ms",
-        output_name(s, cfg),
-        lang.num(l.hz, 0),
-        lang.num(l.p99_ms, 1)
+    fill(
+        s.footer_line,
+        &[
+            ("output", &output_name(s, cfg)),
+            ("hz", &lang.num(l.hz, 0)),
+            ("p99", &lang.num(l.p99_ms, 1)),
+        ],
     )
 }
 

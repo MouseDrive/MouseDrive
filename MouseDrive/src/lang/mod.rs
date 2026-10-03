@@ -199,6 +199,7 @@ pub struct Strings {
 
     pub diag_line: &'static str,
     pub diag_mouse: &'static str,
+    pub footer_line: &'static str,
     pub footer_write_errors: &'static str,
     pub footer_reconnects: &'static str,
     pub diag_absolute: &'static str,
