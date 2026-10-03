@@ -72,9 +72,9 @@ before you click *Update*.
   also works on Linux, where the running file is gone once the update is
   installed.
 - **Unreadable profiles are backed up.** If the active profile cannot be read
-  at startup, it is copied to `<name>.toml.<timestamp>.bak` before a later
-  Save can overwrite it (once per content, not on every start); a failed
-  backup is reported.
+  at startup, or a profile picked from the list cannot be loaded, it is copied
+  to `<name>.toml.<timestamp>.bak` before a later Save can overwrite it (once
+  per content, not on every start); a failed backup is reported.
 - **Profile and A/B switches wait until the pedals are really idle.** A
   switch no longer slips through when a pedal is pressed in the same moment,
   or while the throttle is still fading out after release; the new curve

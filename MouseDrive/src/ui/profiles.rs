@@ -7,8 +7,8 @@ use mousedrive::control::{AbSide, Command, Shared, Snapshot};
 use mousedrive::profiles::{MAX_NAME_LEN, NameError, ProfileError, ProfileStore, validate_name};
 use mousedrive::session::Session;
 
-use super::notices::Notices;
-use super::startup::profile_corrected_notice;
+use super::notices::{Level, Notice, Notices};
+use super::startup::{backup_notice, profile_corrected_notice};
 use super::widgets::Cx;
 use crate::lang::{Strings, fill};
 
@@ -272,10 +272,9 @@ impl ProfilesUi {
                 true
             }
             Err(e) => {
-                env.notices.error(fill(
-                    s.err_profile_load,
-                    &[("error", &profile_error_text(&e, s))],
-                ));
+                for notice in load_failed_notices(store, name, &e, s) {
+                    env.notices.push(notice);
+                }
                 false
             }
         }
@@ -522,6 +521,18 @@ pub fn name_error_text(e: &NameError, s: &Strings) -> String {
         NameError::Reserved => s.name_reserved.to_string(),
         NameError::Duplicate => s.name_duplicate.to_string(),
     }
+}
+
+fn load_failed_notices(
+    store: &ProfileStore,
+    name: &str,
+    e: &ProfileError,
+    s: &Strings,
+) -> Vec<Notice> {
+    let text = fill(s.err_profile_load, &[("error", &profile_error_text(e, s))]);
+    std::iter::once(Notice::new(Level::Error, text))
+        .chain(backup_notice(store, name, s))
+        .collect()
 }
 
 pub fn profile_error_text(e: &ProfileError, s: &Strings) -> String {

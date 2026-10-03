@@ -159,7 +159,7 @@ fn activate_profile(store: &ProfileStore, config: Config, s: &Strings) -> (Confi
     }
 }
 
-fn backup_notice(store: &ProfileStore, name: &str, s: &Strings) -> Option<Notice> {
+pub(super) fn backup_notice(store: &ProfileStore, name: &str, s: &Strings) -> Option<Notice> {
     match store.backup(name) {
         Ok(path) => {
             let text = fill(s.notice_backup, &[("path", &path.display().to_string())]);
