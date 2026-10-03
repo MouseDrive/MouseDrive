@@ -1,8 +1,9 @@
 #![deny(unsafe_code)]
 
+use eframe::egui::style::HandleShape;
 use eframe::egui::{
     Button, Color32, Context, CornerRadius, FontId, Frame, Margin, Response, RichText, Stroke,
-    TextStyle, Ui, Visuals, pos2, vec2,
+    Style, TextStyle, Ui, Vec2, Visuals, pos2, vec2,
 };
 use mousedrive::status::{AppStatus, status_rgb};
 
@@ -16,6 +17,23 @@ pub const TEXT: Color32 = Color32::from_rgb(244, 237, 225);
 pub const MUTED: Color32 = Color32::from_rgb(193, 185, 173);
 pub const SELECTED: Color32 = Color32::from_rgb(102, 18, 14);
 pub const WARN: Color32 = Color32::from_rgb(0xE6, 0x9F, 0x00);
+
+const STROKE_WIDTH: f32 = 1.0;
+const CORNER: u8 = 2;
+const WINDOW_CORNER: u8 = 3;
+const HANDLE_ASPECT: f32 = 0.38;
+const ITEM_GAP: f32 = 10.0;
+const BUTTON_PADDING: Vec2 = vec2(12.0, 8.0);
+const INTERACT_SIZE: f32 = 36.0;
+const SLIDER_WIDTH: f32 = 180.0;
+const SLIDER_RAIL: f32 = 7.0;
+const TEXT_SIZES: [(TextStyle, f32); 4] = [
+    (TextStyle::Body, 15.0),
+    (TextStyle::Button, 14.0),
+    (TextStyle::Small, 12.0),
+    (TextStyle::Heading, 25.0),
+];
+const ANIMATION_S: f32 = 0.12;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Palette {
@@ -52,63 +70,69 @@ pub fn status_color(status: AppStatus) -> Color32 {
 }
 
 pub fn apply(ctx: &Context, zoom: f64) {
-    let mut visuals = Visuals::dark();
-    visuals.panel_fill = BACKGROUND;
-    visuals.window_fill = SURFACE;
-    visuals.extreme_bg_color = BACKGROUND;
-    visuals.faint_bg_color = ELEVATED;
-    visuals.override_text_color = Some(TEXT);
-    visuals.window_stroke = Stroke::new(1.0_f32, BORDER);
-    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, BORDER);
-    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, TEXT);
-    visuals.widgets.inactive.bg_fill = ELEVATED;
-    visuals.widgets.inactive.weak_bg_fill = ELEVATED;
-    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, BORDER);
-    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, TEXT);
-    visuals.widgets.hovered.bg_fill = SELECTED;
-    visuals.widgets.hovered.weak_bg_fill = SELECTED;
-    visuals.widgets.hovered.fg_stroke = Stroke::new(1.0_f32, TEXT);
-    visuals.widgets.active.bg_fill = SELECTED;
-    visuals.widgets.active.fg_stroke = Stroke::new(1.0_f32, TEXT);
-    visuals.selection.bg_fill = SELECTED;
-    visuals.selection.stroke.color = TEXT;
-    visuals.widgets.inactive.corner_radius = CornerRadius::same(2);
-    visuals.widgets.hovered.corner_radius = CornerRadius::same(2);
-    visuals.widgets.active.corner_radius = CornerRadius::same(2);
-    visuals.widgets.open.corner_radius = CornerRadius::same(2);
-    visuals.widgets.noninteractive.corner_radius = CornerRadius::same(2);
-    visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, ACCENT);
-    visuals.widgets.active.bg_fill = PRIMARY;
-    visuals.widgets.active.weak_bg_fill = PRIMARY;
-    visuals.widgets.active.bg_stroke = Stroke::new(1.0_f32, ACCENT);
-    visuals.window_corner_radius = CornerRadius::same(3);
-    visuals.menu_corner_radius = CornerRadius::same(2);
-    visuals.slider_trailing_fill = true;
-    visuals.handle_shape = eframe::egui::style::HandleShape::Rect { aspect_ratio: 0.38 };
-    visuals.warn_fg_color = WARN;
-    visuals.error_fg_color = ACCENT;
-    ctx.set_visuals(visuals);
-    ctx.style_mut(|style| {
-        style.spacing.item_spacing = vec2(10.0, 10.0);
-        style.spacing.button_padding = vec2(12.0, 8.0);
-        style.spacing.interact_size = vec2(36.0, 36.0);
-        style.spacing.slider_width = 180.0;
-        style.spacing.slider_rail_height = 7.0;
-        style
-            .text_styles
-            .insert(TextStyle::Body, FontId::proportional(15.0));
-        style
-            .text_styles
-            .insert(TextStyle::Button, FontId::proportional(14.0));
-        style
-            .text_styles
-            .insert(TextStyle::Small, FontId::proportional(12.0));
-        style
-            .text_styles
-            .insert(TextStyle::Heading, FontId::proportional(25.0));
-        style.animation_time = 0.12;
-    });
+    ctx.set_visuals(visuals());
+    ctx.style_mut(spacing_and_text);
     ctx.set_zoom_factor(zoom as f32);
+}
+
+fn visuals() -> Visuals {
+    let line = |color: Color32| Stroke::new(STROKE_WIDTH, color);
+    let mut v = Visuals::dark();
+    v.panel_fill = BACKGROUND;
+    v.window_fill = SURFACE;
+    v.extreme_bg_color = BACKGROUND;
+    v.faint_bg_color = ELEVATED;
+    v.override_text_color = Some(TEXT);
+    v.window_stroke = line(BORDER);
+    v.window_corner_radius = CornerRadius::same(WINDOW_CORNER);
+    v.menu_corner_radius = CornerRadius::same(CORNER);
+    v.selection.bg_fill = SELECTED;
+    v.selection.stroke.color = TEXT;
+    v.slider_trailing_fill = true;
+    v.handle_shape = HandleShape::Rect {
+        aspect_ratio: HANDLE_ASPECT,
+    };
+    v.warn_fg_color = WARN;
+    v.error_fg_color = ACCENT;
+    let w = &mut v.widgets;
+    for widget in [
+        &mut w.noninteractive,
+        &mut w.inactive,
+        &mut w.hovered,
+        &mut w.active,
+        &mut w.open,
+    ] {
+        widget.corner_radius = CornerRadius::same(CORNER);
+    }
+    w.noninteractive.bg_stroke = line(BORDER);
+    w.noninteractive.fg_stroke = line(TEXT);
+    w.inactive.bg_fill = ELEVATED;
+    w.inactive.weak_bg_fill = ELEVATED;
+    w.inactive.bg_stroke = line(BORDER);
+    w.inactive.fg_stroke = line(TEXT);
+    w.hovered.bg_fill = SELECTED;
+    w.hovered.weak_bg_fill = SELECTED;
+    w.hovered.bg_stroke = line(ACCENT);
+    w.hovered.fg_stroke = line(TEXT);
+    w.active.bg_fill = PRIMARY;
+    w.active.weak_bg_fill = PRIMARY;
+    w.active.bg_stroke = line(ACCENT);
+    w.active.fg_stroke = line(TEXT);
+    v
+}
+
+fn spacing_and_text(style: &mut Style) {
+    style.spacing.item_spacing = vec2(ITEM_GAP, ITEM_GAP);
+    style.spacing.button_padding = BUTTON_PADDING;
+    style.spacing.interact_size = vec2(INTERACT_SIZE, INTERACT_SIZE);
+    style.spacing.slider_width = SLIDER_WIDTH;
+    style.spacing.slider_rail_height = SLIDER_RAIL;
+    for (text_style, size) in TEXT_SIZES {
+        style
+            .text_styles
+            .insert(text_style, FontId::proportional(size));
+    }
+    style.animation_time = ANIMATION_S;
 }
 
 pub fn card<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
