@@ -37,11 +37,8 @@ windows = { version = "0.61", features = [
 ] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-ab_glyph = "0.2"
-epaint_default_fonts = "0.31"
 evdev = "0.13"
 libc = "0.2"
-x11rb = { version = "0.13", features = ["randr", "shape"] }
 
 [features]
 default = ["updater"]

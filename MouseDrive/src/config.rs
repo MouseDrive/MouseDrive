@@ -120,8 +120,6 @@ pub struct Config {
 
     pub sounds_enabled: bool,
     pub sound_volume: i32,
-    pub overlay_enabled: bool,
-    pub overlay_corner: i32,
     pub colorblind_palette: bool,
     pub ui_zoom: f64,
 
@@ -158,8 +156,6 @@ impl Default for Config {
 
             sounds_enabled: true,
             sound_volume: 60,
-            overlay_enabled: false,
-            overlay_corner: 1,
             colorblind_palette: false,
             ui_zoom: 1.0,
 
@@ -280,7 +276,6 @@ impl Config {
         clamp_i!(self, out, ab_toggle_key, 0, 255);
 
         clamp_i!(self, out, sound_volume, 0, 100);
-        clamp_i!(self, out, overlay_corner, 0, 3);
         clamp_f!(self, d, out, ui_zoom, 0.75, 2.0);
 
         if self.last_update_check < 0 {

@@ -1838,11 +1838,9 @@ dependencies = [
 name = "mousedrive"
 version = "0.6.0"
 dependencies = [
- "ab_glyph",
  "eframe",
  "egui",
  "egui_plot",
- "epaint_default_fonts",
  "evdev",
  "libc",
  "libloading",
@@ -1854,7 +1852,6 @@ dependencies = [
  "ureq",
  "windows 0.61.3",
  "winresource",
- "x11rb",
  "zip",
 ]
 
