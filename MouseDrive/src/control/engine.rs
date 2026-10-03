@@ -198,7 +198,6 @@ impl Engine {
     fn apply_side_effects(&mut self, io: &mut impl ControlIo, now_ms: f64) {
         let c = &self.config;
         io.apply_input_settings(c.input_sink_enabled, &c.mouse_device);
-        io.overlay_config(c.overlay_enabled, c.overlay_corner);
         self.conn
             .set_target(device_id(c), buttons_required(c), now_ms);
     }
@@ -485,7 +484,6 @@ impl Engine {
         if let Some(cue) = self.cues.on_status(self.status, now_ms) {
             self.play(io, cue);
         }
-        io.overlay_status(self.status);
     }
 
     fn play(&self, io: &mut impl ControlIo, cue: Cue) {

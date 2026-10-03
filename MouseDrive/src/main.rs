@@ -14,10 +14,10 @@ use std::thread::JoinHandle;
 
 use eframe::egui::{IconData, ViewportBuilder};
 use mousedrive::control::{self, Options, Shared};
-use mousedrive::{input, log, overlay, platform};
+use mousedrive::{input, log, platform};
 
 use crate::lang::{Lang, Strings, strings};
-use crate::ui::{App, Startup, status_labels};
+use crate::ui::{App, Startup};
 
 const TITLE: &str = concat!("MouseDrive v", env!("CARGO_PKG_VERSION"));
 const WINDOW_SIZE: [f32; 2] = [1180.0, 680.0];
@@ -62,7 +62,6 @@ fn is_version(text: &str) -> bool {
 struct Threads {
     control: Option<JoinHandle<()>>,
     input: Option<JoinHandle<()>>,
-    overlay: Option<JoinHandle<()>>,
 }
 
 fn started(
@@ -90,7 +89,6 @@ fn main() -> eframe::Result<()> {
 
     let startup = Startup::load();
     let cfg = &startup.config;
-    let lang = Lang::from_i32(cfg.language);
     let mut errors = Vec::new();
     let input_thread = input::start(
         cfg.input_sink_enabled,
@@ -98,9 +96,6 @@ fn main() -> eframe::Result<()> {
         args.allow_injected,
     );
     let input_thread = started("input", input_thread, &mut errors);
-    let overlay_thread = started("overlay", overlay::start(), &mut errors);
-    overlay::configure(cfg.overlay_enabled, cfg.overlay_corner);
-    overlay::set_labels(status_labels(lang));
 
     let (shared, commands) = Shared::new(startup.config.clone());
     let options = Options {
@@ -110,7 +105,6 @@ fn main() -> eframe::Result<()> {
     let threads = Threads {
         control: started("control", control_thread, &mut errors),
         input: input_thread,
-        overlay: overlay_thread,
     };
 
     let restart = Arc::new(AtomicBool::new(false));
@@ -172,8 +166,6 @@ fn shutdown(shared: &Shared, threads: Threads) {
     join("control", threads.control);
     input::stop();
     join("input", threads.input);
-    overlay::stop();
-    join("overlay", threads.overlay);
     log::line("kapatıldı");
 }
 

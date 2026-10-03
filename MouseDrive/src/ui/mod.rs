@@ -35,9 +35,8 @@ use eframe::egui::{
 use mousedrive::control::{Command, KEYBOARD_BINDING, KEYBOARD_TEXT, Shared, Snapshot};
 use mousedrive::input::{self, MouseInfo};
 use mousedrive::keys::{self, VK_ESCAPE};
+use mousedrive::log;
 use mousedrive::session::Session;
-use mousedrive::status::AppStatus;
-use mousedrive::{log, overlay};
 
 use self::brake_tab::BrakeTab;
 use self::calibration::Calibration;
@@ -63,10 +62,6 @@ const NAV_WIDTH: f32 = 176.0;
 const WIDE_LAYOUT: f32 = 980.0;
 const LIVE_PANEL_WIDTH: f32 = 260.0;
 const LIVE_PANEL_ROOM: f32 = 800.0;
-
-pub fn status_labels(lang: Lang) -> [String; AppStatus::ALL.len()] {
-    strings(lang).status_labels.map(String::from)
-}
 
 pub fn keyboard_flags(text: bool, binding: bool) -> u8 {
     let text = if text { KEYBOARD_TEXT } else { 0 };
@@ -197,9 +192,6 @@ impl App {
         let dragging = ctx.input(|i| i.pointer.any_down());
         if self.view == Some(wanted) || (dragging && self.view.is_some()) {
             return;
-        }
-        if self.view.map(|(lang, _)| lang) != Some(wanted.0) {
-            overlay::set_labels(status_labels(Lang::from_i32(wanted.0)));
         }
         theme::apply(ctx, wanted.1);
         self.view = Some(wanted);

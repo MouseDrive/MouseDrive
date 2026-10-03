@@ -1,9 +1,9 @@
 use crate::input::{self, DeviceFilter, InputCounters, MouseButton};
+use crate::keys;
 use crate::output::OutputBackend;
 use crate::setup::SetupReport;
 use crate::sound::SoundPlayer;
-use crate::status::{AppStatus, Cue};
-use crate::{keys, overlay};
+use crate::status::Cue;
 
 #[cfg(target_os = "linux")]
 use crate::uinput as backend;
@@ -36,8 +36,6 @@ pub(crate) trait ControlIo {
     ) -> (SetupReport, Option<Box<dyn OutputBackend>>);
 
     fn play(&mut self, cue: Cue, volume_pct: u8);
-    fn overlay_status(&mut self, status: AppStatus);
-    fn overlay_config(&mut self, enabled: bool, corner: i32);
 }
 
 pub(crate) struct SystemIo {
@@ -135,13 +133,5 @@ impl ControlIo for SystemIo {
         if let Some(sound) = &self.sound {
             sound.play(cue, volume_pct);
         }
-    }
-
-    fn overlay_status(&mut self, status: AppStatus) {
-        overlay::set_status(status);
-    }
-
-    fn overlay_config(&mut self, enabled: bool, corner: i32) {
-        overlay::configure(enabled, corner);
     }
 }
