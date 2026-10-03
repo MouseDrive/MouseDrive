@@ -10,7 +10,7 @@ use win as sys;
 
 #[cfg(target_os = "linux")]
 pub use linux::set_app_focused;
-pub use sys::{app_is_foreground, buttons_swapped, is_key_down};
+pub use sys::{app_is_foreground, buttons_swapped, input_desktop_active, is_key_down};
 #[cfg(windows)]
 pub use win::key_name_lparam;
 

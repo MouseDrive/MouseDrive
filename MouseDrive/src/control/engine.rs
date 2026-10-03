@@ -12,7 +12,7 @@ use crate::status::{AppStatus, Cue, CuePlanner, Health, StatusInputs, derive_sta
 use crate::telemetry::{Marker, Sample};
 
 use super::connection::ConnectionManager;
-use super::guard::{ButtonGuard, CHECK_INTERVAL_MS, async_pressed};
+use super::guard::{ButtonGuard, CHECK_INTERVAL_MS, DesktopWatch, async_pressed};
 use super::io::ControlIo;
 use super::{Command, Options, Shared, Snapshot};
 
@@ -66,6 +66,7 @@ pub(crate) struct Engine {
     keyboard_busy: bool,
     guards: [ButtonGuard; 2],
     guard_elapsed_ms: f64,
+    desktop: DesktopWatch,
     stuck_releases: u64,
     conn: ConnectionManager,
     published_setup_seq: u64,
@@ -116,6 +117,7 @@ impl Engine {
             keyboard_busy: false,
             guards: [ButtonGuard::default(); 2],
             guard_elapsed_ms: 0.0,
+            desktop: DesktopWatch::default(),
             stuck_releases: 0,
             conn,
             published_setup_seq: 0,
@@ -355,22 +357,37 @@ impl Engine {
             return;
         }
         self.guard_elapsed_ms = 0.0;
+        if self.desktop.check(io.input_desktop_active()) {
+            for button in [MouseButton::Left, MouseButton::Right] {
+                self.release_stuck(button, "girdi masaüstü değişti", io);
+            }
+            return;
+        }
         let (left, right) = io.buttons();
         let swapped = io.buttons_swapped();
         let (l_vk, r_vk) = (io.key_down(VK_LBUTTON), io.key_down(VK_RBUTTON));
-        let checks = [
-            (MouseButton::Left, left, async_pressed(l_vk, r_vk, swapped)),
+        let [left_guard, right_guard] = &mut self.guards;
+        let stuck = [
+            (
+                MouseButton::Left,
+                left_guard.check(left, async_pressed(l_vk, r_vk, swapped)),
+            ),
             (
                 MouseButton::Right,
-                right,
-                async_pressed(r_vk, l_vk, swapped),
+                right_guard.check(right, async_pressed(r_vk, l_vk, swapped)),
             ),
         ];
-        for (guard, (button, raw, async_down)) in self.guards.iter_mut().zip(checks) {
-            if guard.check(raw, async_down) && io.force_release(button) {
-                self.stuck_releases += 1;
-                crate::log::line(&format!("takılı buton bırakıldı: {button:?}"));
+        for (button, released) in stuck {
+            if released {
+                self.release_stuck(button, "bırakma olayı kaçtı", io);
             }
+        }
+    }
+
+    fn release_stuck(&mut self, button: MouseButton, reason: &str, io: &mut impl ControlIo) {
+        if io.force_release(button) {
+            self.stuck_releases += 1;
+            crate::log::line(&format!("takılı buton bırakıldı ({reason}): {button:?}"));
         }
     }
 

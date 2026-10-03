@@ -30,6 +30,29 @@ impl ButtonGuard {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DesktopWatch {
+    seen: bool,
+    misses: u8,
+}
+
+impl DesktopWatch {
+    pub fn check(&mut self, active: bool) -> bool {
+        if active {
+            *self = Self {
+                seen: true,
+                misses: 0,
+            };
+            return false;
+        }
+        if !self.seen {
+            return false;
+        }
+        self.misses = self.misses.saturating_add(1);
+        self.misses == MISSES_TO_RELEASE
+    }
+}
+
 pub fn async_pressed(own_vk_down: bool, other_vk_down: bool, swapped: bool) -> bool {
     own_vk_down || (swapped && other_vk_down)
 }

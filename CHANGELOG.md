@@ -83,6 +83,11 @@ before you click *Update*.
   moment are released. *Use all mice* clears the saved selection. MouseDrive
   keeps looking for the selected mouse while it is missing, and *Pick the last
   moved mouse* now works in that state too.
+- **A pedal no longer stays pressed after a UAC prompt or the lock screen.**
+  When the secure desktop (UAC, Ctrl+Alt+Del) or the lock screen takes over
+  input, both pedals are released within about 200 ms (Windows). Before, a
+  press made just before the switch, which the stuck-button guard had not yet
+  confirmed, could stay held.
 
 ## [0.6.0] - 2026-09-25
 

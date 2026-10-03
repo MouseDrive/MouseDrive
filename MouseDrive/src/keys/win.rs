@@ -1,4 +1,9 @@
-use windows::Win32::System::Threading::GetCurrentProcessId;
+use windows::Win32::Foundation::HANDLE;
+use windows::Win32::System::StationsAndDesktops::{
+    CloseDesktop, DESKTOP_CONTROL_FLAGS, DESKTOP_READOBJECTS, GetThreadDesktop,
+    GetUserObjectInformationW, HDESK, OpenInputDesktop, UOI_NAME,
+};
+use windows::Win32::System::Threading::{GetCurrentProcessId, GetCurrentThreadId};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyNameTextW, MAPVK_VK_TO_VSC_EX, MapVirtualKeyW,
 };
@@ -51,4 +56,38 @@ pub fn app_is_foreground() -> bool {
         GetWindowThreadProcessId(hwnd, Some(&mut pid));
         pid == GetCurrentProcessId()
     }
+}
+
+pub fn input_desktop_active() -> bool {
+    // SAFETY: girdi masaüstü yalnız ad sorgusu için açılır ve hemen kapatılır.
+    let opened = unsafe { OpenInputDesktop(DESKTOP_CONTROL_FLAGS(0), false, DESKTOP_READOBJECTS) };
+    let Ok(input) = opened else {
+        return false;
+    };
+    let input_name = desktop_name(input);
+    // SAFETY: tutamaç yukarıda açıldı ve başka yerde kullanılmıyor. Kapatma
+    // başarısız olursa yapılacak bir şey yok; bedeli sızan bir tutamaç.
+    let _ = unsafe { CloseDesktop(input) };
+    // SAFETY: thread'in masaüstü tutamacı sistemindir, kapatılmaz.
+    let own = unsafe { GetThreadDesktop(GetCurrentThreadId()) }
+        .ok()
+        .and_then(desktop_name);
+    input_name.is_some() && input_name == own
+}
+
+fn desktop_name(desktop: HDESK) -> Option<String> {
+    let mut buf = [0u16; 256];
+    // SAFETY: buf yazılabilir; uzunluk bayt cinsinden verilir.
+    unsafe {
+        GetUserObjectInformationW(
+            HANDLE(desktop.0),
+            UOI_NAME,
+            Some(buf.as_mut_ptr().cast()),
+            std::mem::size_of_val(&buf) as u32,
+            None,
+        )
+    }
+    .ok()?;
+    let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+    Some(String::from_utf16_lossy(&buf[..end]))
 }

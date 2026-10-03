@@ -26,6 +26,7 @@ pub(crate) trait ControlIo {
     fn key_down(&self, vk: i32) -> bool;
     fn buttons_swapped(&self) -> bool;
     fn app_foreground(&self) -> bool;
+    fn input_desktop_active(&self) -> bool;
 
     fn device_events(&self) -> (u64, u64);
     fn connect(
@@ -108,6 +109,10 @@ impl ControlIo for SystemIo {
 
     fn app_foreground(&self) -> bool {
         keys::app_is_foreground()
+    }
+
+    fn input_desktop_active(&self) -> bool {
+        keys::input_desktop_active()
     }
 
     fn device_events(&self) -> (u64, u64) {

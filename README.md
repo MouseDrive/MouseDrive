@@ -61,7 +61,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 - **Setup and health check** — ✔/⚠/✖ list (Windows: DLL, driver, version match, device, axes, buttons; Linux: uinput, permissions, virtual wheel, mouse access) with a "how to fix" for every failure, a live axis test and next steps.
 - **Axis bind helper** — Countdown, then only the chosen axis or button moves, so the game binds the right one.
 - **Automatic reconnect** — Retries when the virtual device is fixed or re-plugged; a vJoy removal notice or repeated write failures switch to CONNECTION LOST and it recovers on its own.
-- **Stuck-button guard** — If Windows swallows a button release (UAC prompt, Ctrl+Alt+Del), the pedal is released automatically.
+- **Stuck-button guard** — If Windows swallows a button release (UAC prompt, Ctrl+Alt+Del, lock screen), the pedal is released automatically.
 - **Diagnostics line** — The output, measured loop rate and p99 at a glance; write failures and reconnects appear only when they happen. *Connection details* adds write counts, clipped events and mouse rate, and *Copy diagnostics* puts a bug-report summary on the clipboard.
 - **Mouse selection** — Read all mice or only one device ("pick the last moved mouse"). If the selected mouse is not found, no mouse is read until it is back, you pick it again or you choose *Use all mice* (this clears the selection).
 
@@ -248,7 +248,7 @@ Start with the **Setup** window: it checks every requirement and says how to fix
 | The game binds the wrong axis | Use the **Axis bind helper** |
 | Steering feels laggy or has a deadzone | Set the game's deadzone to 0, linearity to 1, filtering off — [in-game settings](#in-game-settings) |
 | **Brake or throttle stays pressed after MouseDrive crashed or was killed** | vJoy keeps the last values when the feeding process dies (measured with vJoy 2.2.2.0). Start MouseDrive again: it writes neutral values as soon as it takes the device. A normal exit always leaves neutral values. |
-| A pedal stayed pressed after a UAC prompt | The stuck-button guard releases it within ~200 ms; the count appears in diagnostics |
+| A pedal stayed pressed after a UAC prompt | Both pedals are released within ~200 ms when a UAC prompt, Ctrl+Alt+Del or the lock screen takes over input. Any other missed release is caught within ~200 ms once Windows has seen the press. The count appears in diagnostics |
 | Settings not saving | Check write permissions in `%APPDATA%\MouseDrive\` or `~/.config/mousedrive/` (or the exe folder in portable mode) |
 
 ## License

@@ -183,6 +183,10 @@ pub fn app_is_foreground() -> bool {
     APP_FOCUSED.load(Ordering::Acquire)
 }
 
+pub fn input_desktop_active() -> bool {
+    true
+}
+
 pub fn set_app_focused(focused: bool) {
     APP_FOCUSED.store(focused, Ordering::Release);
 }
