@@ -38,8 +38,8 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 
 **Driving**
 
-- **Steering** — Mouse X movement mapped to the virtual X axis with 5 modes: *Linear*, *Expo* (soft centre), *Smoothed* (time constant in ms), *Self-centering* and *Adaptive* (One Euro filter: smooth when slow, no lag when fast). Filters are time-based, so the feel does not change with the loop rate.
-- **Lossless mouse counts** — Raw counts are accumulated without rounding or per-event caps; an optional *spike filter* (max steering rate, %/s) limits single-event jumps and counts what it clips.
+- **Steering** — Mouse X movement mapped to the virtual X axis with 5 modes: *Linear*, *Expo* (soft centre), *Smoothed* (time constant in ms), *Self-centering* and *Adaptive* (One Euro filter: smooth when slow, little lag when fast). Filters are time-based, so the feel does not change with the loop rate.
+- **Lossless mouse counts** — Raw counts are accumulated without rounding or per-event caps (only a ±16.7 million count safety limit between ticks); an optional *spike filter* (max steering rate, %/s) limits single-event jumps and counts what it clips.
 - **Steering speed in cm** — Shows how many centimetres of mouse travel give full lock; type a distance to set the speed. A built-in *DPI measure* tool finds your mouse DPI with a ruler.
 - **Throttle** — Left mouse button with rise/drop times, envelope curves and an optional *throttle cut in corners* summarised as a sentence and a mini chart.
 - **Brake** — Right mouse button with a five-phase envelope (fill, full pressure, decay while held, short hold after release, release), an optional trail floor that rises with steering, and a **brake ceiling** (max output %) that scales every phase. A live timeline simulated by the real logic shows what the game will receive.
@@ -68,7 +68,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 **App**
 
 - **Decoupled control loop** — A dedicated high-priority 250 Hz thread owns the virtual device and writes all axes in **one report per tick** (no torn frames); the window can be minimised or stall without affecting the output.
-- **Safe config** — Atomic writes (`.tmp` then rename), out-of-range values corrected and reported by name, unreadable files backed up instead of overwritten.
+- **Safe config** — Config and profile saves are atomic (`.tmp` then rename), out-of-range values corrected and reported by name, unreadable files backed up (a plain copy) instead of overwritten.
 - **Accessibility** — Colour-blind palette (Okabe-Ito), brake always dashed in charts, screen-reader labels on custom widgets, rebindable hotkeys (including mouse side buttons), interface scale 75–200 %.
 - **Auto-update** — Background check against GitHub releases with one-click self-update (download → SHA-256 verify → replace → restart). The restart asks first about unsaved profile changes and never happens while another window, such as the game, is in front.
 - **Languages** — Turkish and English.
@@ -189,7 +189,7 @@ Settings are stored as TOML in one folder:
 | `profiles\<name>.toml` | Driving settings of one profile — copy it to share a setup |
 | `mousedrive.log` | Connection and update events (small, never written from the control loop) |
 
-Changes are saved automatically for app settings; profiles are saved with **Save** (Ctrl+S). Files are written atomically. Out-of-range values are corrected on load and reported by name; a file that cannot be read is backed up as `<file>.<timestamp>.bak`; for config.toml the defaults are used, for the active profile the last saved settings stay in use. In-game recommendations: [In-game settings](#in-game-settings).
+Changes are saved automatically for app settings; profiles are saved with **Save** (Ctrl+S). Saves are atomic (`.tmp` then rename); backups and duplicated profiles are plain copies. Out-of-range values are corrected on load and reported by name; a file that cannot be read is backed up as `<file>.<timestamp>.bak` (once per content); for config.toml the defaults are used, for the active profile the last saved settings stay in use. In-game recommendations: [In-game settings](#in-game-settings).
 
 ## Project layout
 

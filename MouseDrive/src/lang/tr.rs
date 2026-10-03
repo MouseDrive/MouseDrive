@@ -175,7 +175,7 @@ const BASE: Strings = Strings {
     diag_mouse: "fare ~{hz} Hz",
     footer_write_errors: "yazma hatası: {n}",
     footer_reconnects: "yeniden bağlanma: {n}",
-    diag_absolute: "Mutlak konumlu {n} olay yok sayıldı (tablet ya da uzak masaüstü olabilir).",
+    diag_absolute: "Mutlak konumlu {n} olayın hareketi yok sayıldı (tablet ya da uzak masaüstü olabilir).",
     diag_stuck: "Takılı kalan buton {n} kez bırakıldı.",
     diag_registration: "Raw Input kaydı kayboldu; yeniden kaydediliyor.",
     btn_copy_diag: "Tanılamayı kopyala",

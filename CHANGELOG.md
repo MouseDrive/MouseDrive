@@ -100,8 +100,8 @@ Input fidelity, a robust vJoy backend, profiles and a reworked interface.
 
 - **Lossless mouse counts.** Raw X counts are accumulated as integers on
   the Raw Input thread; DPI scale and sensitivity are applied later in `f64`.
-  Previously each event was rounded, so slow movements with a DPI scale below
-  1 were lost entirely.
+  Previously each event was scaled and rounded on its own, so slow movements
+  came out too small or too large depending on the DPI scale.
 - **No per-event cap.** The fixed 180-count cap is gone. An optional
   *spike filter* (maximum steering rate, %/s; off by default) limits single
   jumps and counts clipped ticks in diagnostics.
@@ -109,13 +109,13 @@ Input fidelity, a robust vJoy backend, profiles and a reworked interface.
   instead of a per-tick alpha, so the feel no longer changes with the loop
   rate. Old configs are migrated (`config_version` 2) to the same feel.
 - **New *Adaptive* steering mode** — One Euro filter: smooth when the mouse is
-  slow, no lag on fast corrections.
+  slow, little lag on fast corrections.
 - **Logical clock.** The driving logic is pure: one `TickInput` per tick
   and a single logical clock (tick gaps capped at 50 ms). Ramps and hold phases
   run on real durations; the old compressed `time_scale` is gone.
 - **Mouse selection.** Read all mice or only one device ("pick the last
-  moved mouse"); absolute-position events (tablets, remote desktop) are
-  ignored and reported once.
+  moved mouse"); absolute-position events (tablets, remote desktop) do not
+  steer and are reported once; their buttons still count.
 - **Deadline pacing.** The control loop schedules each tick from the
   previous deadline instead of sleeping a relative interval, so it holds 250 Hz
   instead of ~230 Hz. Measured loop rate and p99 are shown in diagnostics.
@@ -126,7 +126,8 @@ Input fidelity, a robust vJoy backend, profiles and a reworked interface.
 
 - **One report per tick.** All axes and buttons are written with a single
   `UpdateVJD` call, so a game can never read steering from one tick and brake
-  from another. Measured at 250 Hz: 0 torn reports in 1252.
+  from another. Developer measurement (Windows 11, vJoy 2.2.2.0, 250 Hz):
+  0 torn reports in 1252.
 - **Correct FFI types.** `BOOL` returns are `i32`, matching the SDK.
 - **Health tracking and reconnect.** Write results are checked; 25
   consecutive failures or a vJoy removal notice (`RegisterRemovalCB`) switch
@@ -183,7 +184,7 @@ Input fidelity, a robust vJoy backend, profiles and a reworked interface.
 - **Setup and health check** window with ✔/⚠/✖ rows, fixes, live axis test and
   next steps.
 - **Input monitor** — 5/10/30 s chart of raw input against the output sent to
-  the game, with capture/profile markers and freeze. Fed by a lock-free
+  the game, with capture/profile markers and freeze. Fed by a preallocated
   telemetry ring buffer on the control thread.
 - **Settings rework** — basic/advanced split, mode-dependent sliders, units on
   every value, tooltips with range and default, changed markers.
@@ -201,12 +202,13 @@ Input fidelity, a robust vJoy backend, profiles and a reworked interface.
 - **Microcopy** — labels with units, verb buttons, errors that say what happened
   and what to do; Turkish strings with proper Turkish characters.
 - **No silent fallbacks** — corrected values and unreadable files are reported
-  by name; broken files are backed up; all writes are atomic.
+  by name; broken files are backed up; config and profile saves are atomic.
 
 ### Tooling
 
 - **Measured output** — SendInput → HID report latency p50 2.3 ms, p99 4.3 ms
-  at 250 Hz.
+  at 250 Hz (developer measurement, Windows 11, vJoy 2.2.2.0; not repeated
+  in CI).
 - **CI** — `cargo fmt --check` and clippy with and without the updater feature;
   multi-line steps run in bash so every command's exit code counts. The release
   zip contains `mousedrive.exe`, README and LICENSE; `mousedrive.exe` is also

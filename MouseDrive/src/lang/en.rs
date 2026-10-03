@@ -175,7 +175,7 @@ const BASE: Strings = Strings {
     diag_mouse: "mouse ~{hz} Hz",
     footer_write_errors: "write errors: {n}",
     footer_reconnects: "reconnects: {n}",
-    diag_absolute: "{n} absolute-position events ignored (tablet or remote desktop?).",
+    diag_absolute: "Motion of {n} absolute-position events ignored (tablet or remote desktop?).",
     diag_stuck: "A stuck button was released {n} times.",
     diag_registration: "Raw Input registration was lost; re-registering.",
     btn_copy_diag: "Copy diagnostics",
