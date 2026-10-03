@@ -217,7 +217,7 @@ MouseDrive/
     ├── session.rs         # GUI editing session: epochs, undo history, save state
     ├── status.rs          # Status model and sound cue planning
     ├── setup.rs           # Setup/health check report
-    ├── telemetry.rs       # Lock-free ring buffer for the input monitor
+    ├── telemetry.rs       # Preallocated ring buffer for the input monitor
     ├── diagnostics.rs     # Loop timing, mouse rate, bug-report text
     ├── preview.rs         # Offline simulation for the brake timeline and throttle chart
     ├── bind.rs            # Axis bind helper
