@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Updating from 0.6.0
+
+0.6.0's updater installs this version, so the fixes below apply from the next
+update on. With 0.6.0, MouseDrive restarts as soon as the download finishes
+and does not ask about unsaved changes: save your profile and leave the game
+before you click *Update*.
+
 ### Added
 
 - **Linux support.** A native x86-64 build reads mice and keyboards through
@@ -297,7 +304,9 @@ The headline of this release is the **decoupled control architecture**: the
 - First public alpha.
 - See the [V0.1.0-alpha release](https://github.com/MouseDrive/MouseDrive/releases/tag/V0.1.0-alpha).
 
-[0.5.0]: https://github.com/MouseDrive/MouseDrive/compare/v0.4.0...main
+[Unreleased]: https://github.com/MouseDrive/MouseDrive/compare/v0.6.0...main
+[0.6.0]: https://github.com/MouseDrive/MouseDrive/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/MouseDrive/MouseDrive/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/MouseDrive/MouseDrive/compare/V0.3.0...v0.4.0
 [0.3.0]: https://github.com/MouseDrive/MouseDrive/compare/V0.1.0-alpha...V0.3.0
 [0.1.0-alpha]: https://github.com/MouseDrive/MouseDrive/releases/tag/V0.1.0-alpha
