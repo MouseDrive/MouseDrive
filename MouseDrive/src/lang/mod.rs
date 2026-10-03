@@ -192,6 +192,7 @@ pub struct Strings {
     pub err_profile_load: &'static str,
     pub err_profile_delete: &'static str,
     pub err_profile_list: &'static str,
+    pub err_profile_backup: &'static str,
     pub profile_corrected: &'static str,
     pub ab_start: &'static str,
     pub ab_end: &'static str,

@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use mousedrive::config::{self, Config, LoadNotice};
-use mousedrive::profiles::ProfileStore;
+use mousedrive::profiles::{ProfileError, ProfileStore};
 
 use super::notices::{Level, Notice};
 use crate::lang::{Lang, Strings, fill, strings};
@@ -151,6 +151,21 @@ fn activate_profile(store: &ProfileStore, config: Config, s: &Strings) -> (Confi
             next.active_profile = active;
             (next, notices)
         }
-        Err(e) => (config, vec![error_notice(s.err_profile_load, &e)]),
+        Err(e) => {
+            let load = error_notice(s.err_profile_load, &e);
+            let backup = backup_notice(store, &active, s);
+            (config, std::iter::once(load).chain(backup).collect())
+        }
+    }
+}
+
+fn backup_notice(store: &ProfileStore, name: &str, s: &Strings) -> Option<Notice> {
+    match store.backup(name) {
+        Ok(path) => {
+            let text = fill(s.notice_backup, &[("path", &path.display().to_string())]);
+            Some(Notice::new(Level::Info, text))
+        }
+        Err(ProfileError::NotFound(_)) => None,
+        Err(e) => Some(error_notice(s.err_profile_backup, &e)),
     }
 }

@@ -165,6 +165,7 @@ const BASE: Strings = Strings {
     err_profile_load: "Profil yüklenemedi: {error}",
     err_profile_delete: "Profil silinemedi: {error}",
     err_profile_list: "Profiller okunamadı: {error}",
+    err_profile_backup: "Okunamayan profilin yedeği alınamadı: {error}",
     profile_corrected: "“{name}” profilinde sınır dışı değerler düzeltildi: {fields}",
     ab_start: "A/B",
     ab_end: "Bitir",

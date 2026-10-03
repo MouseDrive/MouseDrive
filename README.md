@@ -189,7 +189,7 @@ Settings are stored as TOML in one folder:
 | `profiles\<name>.toml` | Driving settings of one profile — copy it to share a setup |
 | `mousedrive.log` | Connection and update events (small, never written from the control loop) |
 
-Changes are saved automatically for app settings; profiles are saved with **Save** (Ctrl+S). Files are written atomically. Out-of-range values are corrected on load and reported by name; a file that cannot be read is backed up as `<file>.<timestamp>.bak` and defaults are used. In-game recommendations: [In-game settings](#in-game-settings).
+Changes are saved automatically for app settings; profiles are saved with **Save** (Ctrl+S). Files are written atomically. Out-of-range values are corrected on load and reported by name; a file that cannot be read is backed up as `<file>.<timestamp>.bak`; for config.toml the defaults are used, for the active profile the last saved settings stay in use. In-game recommendations: [In-game settings](#in-game-settings).
 
 ## Project layout
 

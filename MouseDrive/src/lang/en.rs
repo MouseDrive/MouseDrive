@@ -165,6 +165,7 @@ const BASE: Strings = Strings {
     err_profile_load: "Could not load the profile: {error}",
     err_profile_delete: "Could not delete the profile: {error}",
     err_profile_list: "Could not read the profiles: {error}",
+    err_profile_backup: "Could not back up the unreadable profile: {error}",
     profile_corrected: "Out-of-range values in profile “{name}” were corrected: {fields}",
     ab_start: "A/B",
     ab_end: "Finish",

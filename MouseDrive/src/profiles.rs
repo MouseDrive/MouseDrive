@@ -228,6 +228,30 @@ impl ProfileStore {
         Ok(report)
     }
 
+    pub fn backup(&self, name: &str) -> Result<PathBuf, ProfileError> {
+        let stored = self
+            .find(name)
+            .ok_or_else(|| ProfileError::NotFound(name.to_string()))?;
+        let path = self.path_of(&stored);
+        let content = std::fs::read(&path)?;
+        if let Some(existing) = self.find_backup(&stored, &content) {
+            return Ok(existing);
+        }
+        Ok(crate::fsutil::backup_file(&path)?)
+    }
+
+    fn find_backup(&self, stored: &str, content: &[u8]) -> Option<PathBuf> {
+        let prefix = format!("{stored}.{EXTENSION}.");
+        std::fs::read_dir(&self.dir)
+            .ok()?
+            .filter_map(|entry| Some(entry.ok()?.path()))
+            .filter(|path| {
+                let name = path.file_name().and_then(|n| n.to_str());
+                name.is_some_and(|n| n.starts_with(&prefix) && n.ends_with(".bak"))
+            })
+            .find(|path| std::fs::read(path).is_ok_and(|bytes| bytes == content))
+    }
+
     pub fn resolve_active(&self, wanted: &str) -> Option<String> {
         self.find(wanted)
             .or_else(|| self.find(DEFAULT_PROFILE))

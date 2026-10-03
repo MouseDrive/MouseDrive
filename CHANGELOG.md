@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   help in practice. Profiles still on the old 2 % default are set to 0 once
   after the update, and a notice lists them; other values are kept.
 
+### Fixed
+
+- **Unreadable profiles are backed up.** If the active profile cannot be read
+  at startup, it is copied to `<name>.toml.<timestamp>.bak` before a later
+  Save can overwrite it (once per content, not on every start); a failed
+  backup is reported.
+
 ## [0.6.0] - 2026-09-25
 
 Input fidelity, a robust vJoy backend, profiles and a reworked interface.
