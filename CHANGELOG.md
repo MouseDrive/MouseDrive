@@ -72,6 +72,10 @@ before you click *Update*.
   at startup, it is copied to `<name>.toml.<timestamp>.bak` before a later
   Save can overwrite it (once per content, not on every start); a failed
   backup is reported.
+- **Profile and A/B switches wait until the pedals are really idle.** A
+  switch no longer slips through when a pedal is pressed in the same moment,
+  or while the throttle is still fading out after release; the new curve
+  takes over once the throttle reaches zero.
 
 ## [0.6.0] - 2026-09-25
 

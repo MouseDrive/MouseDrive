@@ -156,7 +156,7 @@ impl Engine {
         self.conn.poll(now_ms, io);
         self.publish_setup(shared);
         let input = self.read_input(dt_ms, io);
-        self.apply_pending(shared, io);
+        self.apply_pending(shared, io, &input);
         let frame = self.next_frame(input, dt_ms, io);
         self.conn.write(&frame, now_ms);
         self.update_health(dt_ms, io);
@@ -199,8 +199,8 @@ impl Engine {
             .set_target(device_id(c), buttons_required(c), now_ms);
     }
 
-    fn apply_pending(&mut self, shared: &Shared, io: &mut impl ControlIo) {
-        if self.capture && !self.state.pedals_idle() {
+    fn apply_pending(&mut self, shared: &Shared, io: &mut impl ControlIo, input: &TickInput) {
+        if self.capture && !self.state.pedals_idle(input) {
             return;
         }
         let Some(pending) = self.pending.take() else {

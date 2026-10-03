@@ -12,6 +12,8 @@ pub const MAX_TICK_DT_MS: f64 = 50.0;
 
 pub const THROTTLE_CUT_REFERENCE: f64 = 0.30;
 
+const THROTTLE_IDLE: f64 = 1e-5;
+
 pub const COUNT_ACCUM_LIMIT: i64 = 1 << 24;
 
 pub fn accumulate_counts(acc: i64, dx: i32) -> i64 {
@@ -238,10 +240,11 @@ impl MouseDriveState {
         }
     }
 
-    pub fn pedals_idle(&self) -> bool {
+    pub fn pedals_idle(&self, input: &TickInput) -> bool {
         self.brake_state == BrakeState::Idle
-            && !self.last_input.throttle_pressed
-            && !self.last_input.brake_pressed
+            && !input.throttle_pressed
+            && !input.brake_pressed
+            && self.throttle < THROTTLE_IDLE
     }
 
     pub fn steering_output(&self) -> f64 {
