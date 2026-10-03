@@ -157,13 +157,13 @@ fn holder(vk: i32) -> Option<&'static AtomicU8> {
 
 pub(crate) fn press(vk: i32) {
     if let Some(h) = holder(vk) {
-        let _ = h.fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_add(1));
+        let _ = h.try_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_add(1));
     }
 }
 
 pub(crate) fn release(vk: i32) {
     if let Some(h) = holder(vk) {
-        let _ = h.fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_sub(1));
+        let _ = h.try_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_sub(1));
     }
 }
 

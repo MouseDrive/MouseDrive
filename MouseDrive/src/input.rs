@@ -83,7 +83,7 @@ impl InputState {
         } else if moved {
             let _ = self
                 .counts_x
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |acc| {
+                .try_update(Ordering::Relaxed, Ordering::Relaxed, |acc| {
                     Some(accumulate_counts(acc, dx))
                 });
             self.move_events.fetch_add(1, Ordering::Relaxed);
