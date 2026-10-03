@@ -13,6 +13,7 @@ pub const CHECK_INTERVAL_S: i64 = 86_400;
 pub struct UpdaterUi {
     checker: UpdateChecker,
     restart_held: bool,
+    restart_asked: bool,
 }
 
 impl UpdaterUi {
@@ -20,6 +21,7 @@ impl UpdaterUi {
         let updater = Self {
             checker: UpdateChecker::new(),
             restart_held: false,
+            restart_asked: false,
         };
         let now = unix_now();
         if due(cfg.auto_check_updates, cfg.last_update_check, now) {
@@ -37,6 +39,10 @@ impl UpdaterUi {
         self.restart_held = true;
     }
 
+    pub fn take_restart_request(&mut self) -> bool {
+        std::mem::take(&mut self.restart_asked)
+    }
+
     pub fn busy(&self) -> bool {
         matches!(
             self.checker.status(),
@@ -52,8 +58,15 @@ impl UpdaterUi {
         match self.checker.status() {
             UpdateStatus::Available(info) if info.version != cfg.skipped_version => {
                 let label = format!("⬆ {} {}", cx.s.upd_update_btn, info.version);
-                if accent_button(ui, cx, &label).clicked() {
-                    if info.auto_installable() {
+                let auto = info.auto_installable();
+                let button = accent_button(ui, cx, &label);
+                let button = if auto {
+                    button.on_hover_text(cx.s.upd_update_tip)
+                } else {
+                    button
+                };
+                if button.clicked() {
+                    if auto {
                         self.checker.spawn_update(info.clone());
                     } else {
                         ui.ctx().open_url(OpenUrl::new_tab(info.html_url.clone()));
@@ -71,6 +84,7 @@ impl UpdaterUi {
                 let restart = accent_button(ui, cx, cx.s.upd_restart_now);
                 if restart.on_hover_text(cx.s.upd_installed).clicked() {
                     self.restart_held = false;
+                    self.restart_asked = true;
                 }
             }
             UpdateStatus::ReadyToRestart => {

@@ -460,6 +460,7 @@ const BASE: Strings = Strings {
     upd_skip: "Atla",
     upd_download: "İndir",
     upd_update_btn: "Güncelle",
+    upd_update_tip: "İndirir, doğrular ve kurar; ardından MouseDrive yeniden başlar. Kaydedilmemiş değişiklik varsa önce sorar. Başka bir pencere öndeyse kendiliğinden başlamaz; üst çubuktaki \"Şimdi yeniden başlat\" düğmesini bekler.",
     upd_updating: "Güncelleniyor…",
     upd_restarting: "Yeniden başlatılıyor…",
     upd_installed: "Güncelleme kuruldu; yeniden başlatınca geçerli olur",

@@ -70,7 +70,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 - **Decoupled control loop** — A dedicated high-priority 250 Hz thread owns the virtual device and writes all axes in **one report per tick** (no torn frames); the window can be minimised or stall without affecting the output.
 - **Safe config** — Atomic writes (`.tmp` then rename), out-of-range values corrected and reported by name, unreadable files backed up instead of overwritten.
 - **Accessibility** — Colour-blind palette (Okabe-Ito), brake always dashed in charts, screen-reader labels on custom widgets, rebindable hotkeys (including mouse side buttons), interface scale 75–200 %.
-- **Auto-update** — Background check against GitHub releases with one-click self-update (download → SHA-256 verify → replace → restart).
+- **Auto-update** — Background check against GitHub releases with one-click self-update (download → SHA-256 verify → replace → restart). The restart asks first about unsaved profile changes and never happens while another window, such as the game, is in front.
 - **Languages** — Turkish and English.
 
 ## Input / Output mapping

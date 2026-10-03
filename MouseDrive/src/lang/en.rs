@@ -454,6 +454,7 @@ const BASE: Strings = Strings {
     upd_skip: "Skip",
     upd_download: "Download",
     upd_update_btn: "Update",
+    upd_update_tip: "Downloads, verifies and installs the update, then restarts MouseDrive. It asks first if there are unsaved changes. If another window is in front, it does not restart by itself; it waits for \"Restart now\" in the top bar.",
     upd_updating: "Updating…",
     upd_restarting: "Restarting…",
     upd_installed: "Update installed; restart to apply",

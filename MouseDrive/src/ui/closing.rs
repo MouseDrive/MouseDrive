@@ -33,14 +33,16 @@ enum RestartDecision {
     Wait,
     Restart,
     Confirm,
+    Hold,
 }
 
 #[cfg(feature = "updater")]
-fn restart_decision(due: bool, closing: bool, dirty: bool) -> RestartDecision {
-    match (due && !closing, dirty) {
-        (false, _) => RestartDecision::Wait,
-        (true, true) => RestartDecision::Confirm,
-        (true, false) => RestartDecision::Restart,
+fn restart_decision(due: bool, closing: bool, dirty: bool, focused: bool) -> RestartDecision {
+    match (due && !closing, focused, dirty) {
+        (false, _, _) => RestartDecision::Wait,
+        (true, false, _) => RestartDecision::Hold,
+        (true, true, true) => RestartDecision::Confirm,
+        (true, true, false) => RestartDecision::Restart,
     }
 }
 
@@ -215,12 +217,18 @@ impl App {
             || self.close.after_install.is_some()
             || ctx.input(|i| i.viewport().close_requested());
         let dirty = self.session.is_dirty();
-        match restart_decision(self.updater.restart_due(), closing, dirty) {
+        let asked = self.updater.take_restart_request();
+        let focused = asked || ctx.input(|i| i.viewport().focused).unwrap_or(true);
+        match restart_decision(self.updater.restart_due(), closing, dirty, focused) {
             RestartDecision::Wait => {}
             RestartDecision::Restart => self.quit(ctx, CloseReason::Restart),
             RestartDecision::Confirm => {
                 self.updater.hold_restart();
                 self.close.confirm = Some(CloseReason::Restart);
+            }
+            RestartDecision::Hold => {
+                self.updater.hold_restart();
+                ctx.request_repaint();
             }
         }
     }

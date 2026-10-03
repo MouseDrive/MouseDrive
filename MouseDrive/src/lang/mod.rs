@@ -462,6 +462,7 @@ pub struct Strings {
     pub upd_skip: &'static str,
     pub upd_download: &'static str,
     pub upd_update_btn: &'static str,
+    pub upd_update_tip: &'static str,
     pub upd_updating: &'static str,
     pub upd_restarting: &'static str,
     pub upd_installed: &'static str,

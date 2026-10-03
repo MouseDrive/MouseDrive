@@ -57,6 +57,11 @@ before you click *Update*.
   MouseDrive stays intact even if the update does not finish. *Keep open*
   cancels the close. The new version is written to a fresh, owner-only
   temporary file.
+- **Updates no longer restart MouseDrive while you drive.** If another window,
+  such as the game, is in front when an update finishes installing,
+  MouseDrive neither restarts nor asks; *Restart now* in the top bar finishes
+  the update, otherwise it applies on the next start. Hovering *Update*
+  explains what happens.
 - **Unreadable profiles are backed up.** If the active profile cannot be read
   at startup, it is copied to `<name>.toml.<timestamp>.bak` before a later
   Save can overwrite it (once per content, not on every start); a failed
