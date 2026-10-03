@@ -18,10 +18,10 @@ before you click *Update*.
 
 - **Linux support.** A native x86-64 build reads mice and keyboards through
   evdev (hotplug through inotify) and writes to a uinput virtual joystick,
-  *MouseDrive Virtual Wheel* (X, Y, Rz, 8 buttons, vJoy's axis range). The
-  status overlay uses X11 (XWayland on Wayland), sounds use ALSA and settings
-  live in `~/.config/mousedrive/`. The Setup window checks uinput, its
-  permission and mouse access, and copies the one-time udev commands.
+  *MouseDrive Virtual Wheel* (X, Y, Rz, 8 buttons, vJoy's axis range). Sounds
+  use ALSA and settings live in `~/.config/mousedrive/`. The Setup window
+  checks uinput, its permission and mouse access, and copies the one-time udev
+  commands.
 - Releases include `MouseDrive-vX.Y.Z-linux-x64.zip`; auto-update installs the
   build for the running platform.
 - **MouseDrive says when it was updated.** After the restart, a notice names
@@ -42,13 +42,22 @@ before you click *Update*.
 - New dark theme (carbon black, cream and red); colorblind mode keeps the
   Okabe-Ito colours. The top bar shows the MouseDrive logo: the wheel and
   cursor mark next to a two-tone *MouseDrive* wordmark, in the theme colours.
-  The status overlay has slightly rounded corners and a square dot. The window opens at 1180×680, so it fits 1366×768 screens.
+  The window opens at 1180×680, so it fits 1366×768 screens.
 - **Steering deadzone is off by default** and marked experimental; it did not
   help in practice. Profiles still on the old 2 % default are set to 0 once
   after the update, and a notice lists them; other values are kept.
 - **The control loop no longer waits for the input monitor.** While the
   monitor copies its history, the control thread skips that tick's sample
   instead of waiting; *Copy diagnostics* shows how many were skipped.
+
+### Removed
+
+- **Status overlay.** The optional status label over the game was a topmost,
+  click-through window, the kind anti-cheat software may flag as a cheat
+  overlay. It is removed so MouseDrive cannot trigger anti-cheat that way.
+  Status sounds and the top bar remain. The `overlay_enabled` and
+  `overlay_corner` keys in `config.toml` are ignored and dropped on the next
+  save.
 
 ### Fixed
 

@@ -56,7 +56,6 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 
 - **One clear status** — ACTIVE, PAUSED, SETUP REQUIRED, DEVICE BUSY, CONNECTION LOST, MOUSE NOT READ, DEGRADED or BINDING, each with a sentence and a one-click action. Derived on the control thread, so it is correct even while minimised.
 - **Status sounds** — Distinct tones for capture on/off, warnings, connection lost/restored, profile change. Work in exclusive fullscreen and VR.
-- **Status overlay** — Optional click-through status label in a screen corner (windowed/borderless games).
 - **Input monitor** — Scrolling 5/10/30 s chart of mouse input against the values sent to the game, with capture and profile markers and a freeze button.
 - **Setup and health check** — ✔/⚠/✖ list (Windows: DLL, driver, version match, device, axes, buttons; Linux: uinput, permissions, virtual wheel, mouse access) with a "how to fix" for every failure, a live axis test and next steps.
 - **Axis bind helper** — Countdown, then only the chosen axis or button moves, so the game binds the right one.
@@ -116,7 +115,7 @@ sudo udevadm trigger --subsystem-match=misc --subsystem-match=input
 
 - The `uaccess` tag grants access only to the user at the local seat (systemd-logind) and applies at once, without logging out. Reading input devices lets a program see every key press, which is why access is limited to the local session. Steam uses the same rule for `/dev/uinput`.
 - Without systemd-logind, use `KERNEL=="uinput", GROUP="input", MODE="0660"` for the first rule, add yourself to the `input` group (`sudo usermod -aG input "$USER"`) and log in again.
-- **Status overlay** uses X11; on Wayland desktops it runs through XWayland. Reading the mouse and the virtual wheel work on X11 and Wayland alike.
+- **Wayland:** reading the mouse and the virtual wheel work on X11 and Wayland alike.
 - **Sounds** use ALSA (`libasound.so.2`, also routed through PipeWire or PulseAudio). Without it MouseDrive runs silently.
 - **Check what the game receives:** `evtest` (pick *MouseDrive Virtual Wheel*) or `jstest-gtk` shows the raw axes.
 
@@ -141,7 +140,7 @@ MouseDrive already shapes the input (steering mode, smoothing, throttle cut, bra
 ## How it works
 
 - **Input thread** — On Windows a hidden window receives `WM_INPUT` for mouse counts and buttons (also while the game has focus); on Linux one thread polls every evdev mouse and keyboard node and follows hotplug through inotify. Counts are accumulated losslessly; scaling happens later in floating point.
-- **Control thread** — A dedicated high-priority loop (250 Hz by default) owns the virtual device. Each tick runs the pure driving logic on a logical clock and writes one complete report. Status, sounds, overlay, telemetry and the stuck-button guard live here too.
+- **Control thread** — A dedicated high-priority loop (250 Hz by default) owns the virtual device. Each tick runs the pure driving logic on a logical clock and writes one complete report. Status, sounds, telemetry and the stuck-button guard live here too.
 - **GUI thread** — eframe/egui reads a snapshot at the start of each frame and publishes config changes with an epoch counter at the end; it never waits for the control thread. Repaint is lazy (~60 Hz focused, ~4 Hz backgrounded).
 - **Output backend** — The logic produces a normalised frame; the backend (vJoy on Windows, uinput on Linux) maps it to its axis range. This keeps a future own driver or USB dongle a drop-in replacement.
 
@@ -158,7 +157,7 @@ MouseDrive already shapes the input (steering mode, smoothing, throttle cut, bra
 
 - x86-64 with glibc 2.35 or newer (Ubuntu 22.04, Debian 12, Fedora 36 and later)
 - The `uinput` module and the one-time [Linux setup](#linux)
-- X11 or XWayland for the window and the overlay
+- An X11 or Wayland desktop session for the window
 
 ## Build
 
@@ -185,7 +184,7 @@ Settings are stored as TOML in one folder:
 
 | File | Contents |
 |------|----------|
-| `config.toml` | App settings: language, vJoy device (Windows), keys, mouse, sounds, overlay, view, active profile |
+| `config.toml` | App settings: language, vJoy device (Windows), keys, mouse, sounds, view, active profile |
 | `profiles\<name>.toml` | Driving settings of one profile — copy it to share a setup |
 | `mousedrive.log` | Connection and update events (small, never written from the control loop) |
 
@@ -223,7 +222,6 @@ MouseDrive/
     ├── bind.rs            # Axis bind helper
     ├── ergonomics.rs      # cm per full lock
     ├── sound.rs, sound/   # Status tones (PlaySound / ALSA)
-    ├── overlay.rs, overlay/ # Click-through status overlay (layered window / X11)
     ├── platform.rs, platform/ # Process/thread priority, timer resolution or slack
     ├── fsutil.rs          # Atomic writes, timestamped backups
     └── log.rs             # Event log (mousedrive.log, rotated at 1 MB)
