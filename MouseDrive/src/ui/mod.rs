@@ -3,12 +3,15 @@
 mod bind_helper;
 mod brake_tab;
 mod calibration;
+mod closing;
 mod dashboard;
 mod diag;
 mod general_tab;
 mod keybind;
+mod logo;
 mod monitor;
 mod notices;
+mod overview;
 mod profiles;
 mod setup;
 mod startup;
@@ -22,13 +25,12 @@ mod widgets;
 
 use std::path::PathBuf;
 use std::sync::Arc;
-#[cfg(feature = "updater")]
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
-    CentralPanel, Context, Id, Key, Modal, Modifiers, RichText, ScrollArea, SidePanel,
-    TopBottomPanel, Ui, ViewportCommand,
+    Align, CentralPanel, Context, Frame, Key, Layout, Margin, Modifiers, RichText, ScrollArea,
+    SidePanel, TopBottomPanel, Ui,
 };
 use mousedrive::control::{Command, KEYBOARD_BINDING, KEYBOARD_TEXT, Shared, Snapshot};
 use mousedrive::input::{self, MouseInfo};
@@ -39,6 +41,7 @@ use mousedrive::{log, overlay};
 
 use self::brake_tab::BrakeTab;
 use self::calibration::Calibration;
+use self::closing::CloseState;
 use self::diag::DiagUi;
 use self::keybind::{KeyBinder, Outcome};
 use self::monitor::Monitor;
@@ -55,9 +58,10 @@ pub use self::startup::Startup;
 
 const FAST_REPAINT: Duration = Duration::from_millis(16);
 const SLOW_REPAINT: Duration = Duration::from_millis(250);
-const SIDE_PANEL_WIDTH: f32 = 440.0;
-const SIDE_PANEL_MIN_WIDTH: f32 = 360.0;
-const CLOSE_DIALOG_WIDTH: f32 = 360.0;
+const NAV_WIDTH: f32 = 176.0;
+const WIDE_LAYOUT: f32 = 980.0;
+const LIVE_PANEL_WIDTH: f32 = 260.0;
+const LIVE_PANEL_ROOM: f32 = 800.0;
 
 pub fn status_labels(lang: Lang) -> [String; AppStatus::ALL.len()] {
     strings(lang).status_labels.map(String::from)
@@ -71,38 +75,12 @@ pub fn keyboard_flags(text: bool, binding: bool) -> u8 {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
+    Overview,
     Steering,
     Throttle,
     Brake,
     General,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CloseDecision {
-    Quit,
-    Minimize,
-    Confirm,
-}
-
-pub fn close_decision(exit_on_close: bool, dirty: bool) -> CloseDecision {
-    match (exit_on_close, dirty) {
-        (false, _) => CloseDecision::Minimize,
-        (true, true) => CloseDecision::Confirm,
-        (true, false) => CloseDecision::Quit,
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum CloseChoice {
-    SaveAndQuit,
-    Quit,
-    Cancel,
-}
-
-#[derive(Default)]
-struct CloseState {
-    allowed: bool,
-    confirm: bool,
+    Monitor,
 }
 
 pub struct App {
@@ -115,7 +93,6 @@ pub struct App {
     setup: SetupUi,
     diag: DiagUi,
     monitor: Monitor,
-    monitor_open: bool,
     bind_helper_open: bool,
     keybind: KeyBinder,
     calibration: Calibration,
@@ -127,17 +104,12 @@ pub struct App {
     start: Instant,
     #[cfg(feature = "updater")]
     updater: UpdaterUi,
-    #[cfg(feature = "updater")]
     restart: Arc<AtomicBool>,
 }
 
 impl App {
-    #[cfg_attr(not(feature = "updater"), allow(unused_variables, unused_mut))]
-    pub fn new(
-        startup: Startup,
-        shared: Arc<Shared>,
-        restart: Arc<std::sync::atomic::AtomicBool>,
-    ) -> Self {
+    #[cfg_attr(not(feature = "updater"), allow(unused_mut))]
+    pub fn new(startup: Startup, shared: Arc<Shared>, restart: Arc<AtomicBool>) -> Self {
         let Startup {
             config,
             disk,
@@ -162,19 +134,17 @@ impl App {
             setup: SetupUi::default(),
             diag: DiagUi::default(),
             monitor: Monitor::default(),
-            monitor_open: false,
             bind_helper_open: false,
             keybind: KeyBinder::default(),
             calibration: Calibration::default(),
             brake: BrakeTab::default(),
-            tab: Tab::Steering,
+            tab: Tab::Overview,
             view: None,
             close: CloseState::default(),
             mice: input::list_mice(),
             start: Instant::now(),
             #[cfg(feature = "updater")]
             updater,
-            #[cfg(feature = "updater")]
             restart,
         }
     }
@@ -206,8 +176,10 @@ impl App {
         self.setup.pull(&self.shared);
         self.session.sync_in(&*self.shared);
         self.brake.tick(&self.snap, now_ms);
-        if self.monitor_open {
+        if self.tab == Tab::Monitor {
             self.monitor.pull(&self.shared);
+        } else {
+            self.monitor.release();
         }
     }
 
@@ -259,27 +231,32 @@ impl App {
     }
 
     fn top_panel(&mut self, ctx: &Context, cx: &Cx) {
-        TopBottomPanel::top("top").show(ctx, |ui| {
-            ui.add_space(4.0);
-            let action =
-                status_bar::show(ui, cx, &self.snap, &self.setup.info, self.session.config());
-            if let Some(action) = action {
-                self.run_status_action(action);
-            }
-            ui.horizontal_wrapped(|ui| {
-                let mut env = profiles::Env {
-                    session: &mut self.session,
-                    shared: &self.shared,
-                    snap: &self.snap,
-                    notices: &mut self.notices,
-                };
-                self.profiles.bar(ui, cx, &mut env);
-                #[cfg(feature = "updater")]
-                self.updater.button(ui, cx, self.session.config_mut());
+        TopBottomPanel::top("top")
+            .frame(
+                Frame::new()
+                    .fill(theme::SURFACE)
+                    .inner_margin(Margin::symmetric(22, 10)),
+            )
+            .show(ctx, |ui| {
+                let action =
+                    status_bar::show(ui, cx, &self.snap, &self.setup.info, self.session.config());
+                if let Some(action) = action {
+                    self.run_status_action(action);
+                }
+                ui.add_space(2.0);
+                ui.horizontal_wrapped(|ui| {
+                    let mut env = profiles::Env {
+                        session: &mut self.session,
+                        shared: &self.shared,
+                        snap: &self.snap,
+                        notices: &mut self.notices,
+                    };
+                    self.profiles.bar(ui, cx, &mut env);
+                    #[cfg(feature = "updater")]
+                    self.updater.button(ui, cx, self.session.config_mut());
+                });
+                self.notices.show(ui, cx);
             });
-            self.notices.show(ui, cx);
-            ui.add_space(2.0);
-        });
     }
 
     fn run_status_action(&mut self, action: status_bar::Action) {
@@ -302,34 +279,88 @@ impl App {
         });
     }
 
-    fn side_panel(&mut self, ctx: &Context, cx: &Cx, now_ms: f64) {
-        SidePanel::right("settings")
-            .default_width(SIDE_PANEL_WIDTH)
-            .min_width(SIDE_PANEL_MIN_WIDTH)
-            .resizable(true)
+    fn navigation(&mut self, ui: &mut Ui, cx: &Cx, horizontal: bool) {
+        let items = [
+            (Tab::Overview, cx.s.nav_home),
+            (Tab::Steering, cx.s.tab_steering),
+            (Tab::Throttle, cx.s.tab_throttle),
+            (Tab::Brake, cx.s.tab_brake),
+            (Tab::Monitor, cx.s.nav_monitor),
+            (Tab::General, cx.s.nav_settings),
+        ];
+        let mut buttons = |ui: &mut Ui| {
+            for (tab, label) in items {
+                let width = if horizontal {
+                    0.0
+                } else {
+                    ui.available_width()
+                };
+                if theme::nav_button(ui, label, self.tab == tab, width).clicked() {
+                    self.tab = tab;
+                }
+            }
+        };
+        if horizontal {
+            ui.horizontal_wrapped(buttons);
+        } else {
+            buttons(ui);
+        }
+    }
+
+    fn side_panel(&mut self, ctx: &Context, cx: &Cx) {
+        if ctx.available_rect().width() < WIDE_LAYOUT {
+            return;
+        }
+        SidePanel::left("navigation")
+            .exact_width(NAV_WIDTH)
+            .resizable(false)
+            .frame(
+                Frame::new()
+                    .fill(theme::SURFACE)
+                    .inner_margin(Margin::same(14)),
+            )
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    let s = cx.s;
-                    let tabs = [
-                        (Tab::Steering, s.tab_steering),
-                        (Tab::Throttle, s.tab_throttle),
-                        (Tab::Brake, s.tab_brake),
-                        (Tab::General, s.tab_general),
-                    ];
-                    for (tab, label) in tabs {
-                        ui.selectable_value(&mut self.tab, tab, label);
+                ui.label(RichText::new(cx.s.nav_hint).small().color(theme::MUTED));
+                ui.add_space(8.0);
+                self.navigation(ui, cx, false);
+                ui.add_space(20.0);
+                ui.separator();
+                ui.add_space(8.0);
+                theme::hint(ui, cx.s.save_short);
+                ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
+                    if ui.button(cx.s.btn_setup).clicked() {
+                        self.setup.open = true;
                     }
                 });
-                ui.separator();
-                ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| self.tab_content(ui, cx, now_ms));
             });
+        if !matches!(self.tab, Tab::Overview | Tab::Monitor)
+            && ctx.available_rect().width() >= LIVE_PANEL_ROOM
+        {
+            SidePanel::right("live_output")
+                .exact_width(LIVE_PANEL_WIDTH)
+                .resizable(false)
+                .frame(
+                    Frame::new()
+                        .fill(theme::BACKGROUND)
+                        .inner_margin(Margin::same(16)),
+                )
+                .show(ctx, |ui| {
+                    ScrollArea::vertical()
+                        .id_salt("live_scroll")
+                        .show(ui, |ui| {
+                            dashboard::compact(ui, cx, &self.snap, self.session.config());
+                        });
+                });
+        }
     }
 
     fn tab_content(&mut self, ui: &mut Ui, cx: &Cx, now_ms: f64) {
         let steer_abs = self.snap.frame.steering.abs();
         match self.tab {
+            Tab::Overview => self.overview(ui, cx),
+            Tab::Monitor => {
+                theme::card(ui, |ui| self.monitor.show(ui, cx));
+            }
             Tab::Steering => steering_tab::show(ui, cx, self.session.config_mut()),
             Tab::Throttle => {
                 throttle_tab::show(ui, cx, &mut self.session.config_mut().tuning, steer_abs)
@@ -353,34 +384,52 @@ impl App {
         }
     }
 
-    fn central_panel(&mut self, ctx: &Context, cx: &Cx) {
-        CentralPanel::default().show(ctx, |ui| {
-            ScrollArea::vertical().show(ui, |ui| {
-                let action =
-                    dashboard::show(ui, cx, &self.snap, self.session.config(), self.monitor_open);
-                if let Some(action) = action {
-                    self.run_dashboard_action(action);
+    fn central_panel(&mut self, ctx: &Context, cx: &Cx, now_ms: f64) {
+        CentralPanel::default()
+            .frame(
+                Frame::new()
+                    .fill(theme::BACKGROUND)
+                    .inner_margin(Margin::same(24)),
+            )
+            .show(ctx, |ui| {
+                if ctx.screen_rect().width() < WIDE_LAYOUT {
+                    self.navigation(ui, cx, true);
+                    ui.add_space(14.0);
                 }
-                if self.monitor_open {
-                    ui.separator();
-                    self.monitor.show(ui, cx);
-                }
+                ScrollArea::vertical()
+                    .id_salt(format!("workspace_scroll_{:?}", self.tab))
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        let (title, description) = match self.tab {
+                            Tab::Overview => (cx.s.home_title, cx.s.home_desc),
+                            Tab::Steering => (cx.s.tab_steering, cx.s.steering_intro),
+                            Tab::Throttle => (cx.s.tab_throttle, cx.s.throttle_intro),
+                            Tab::Brake => (cx.s.tab_brake, cx.s.brake_intro),
+                            Tab::General => (cx.s.nav_settings, cx.s.general_intro),
+                            Tab::Monitor => (cx.s.nav_monitor, cx.s.monitor_intro),
+                        };
+                        theme::heading(ui, title);
+                        theme::hint(ui, description);
+                        ui.add_space(12.0);
+                        ui.push_id(format!("page_{:?}", self.tab), |ui| {
+                            self.tab_content(ui, cx, now_ms)
+                        });
+                    });
             });
-        });
+    }
+
+    fn render_panels(&mut self, ctx: &Context, cx: &Cx, now_ms: f64) {
+        self.top_panel(ctx, cx);
+        self.bottom_panel(ctx, cx, now_ms);
+        self.side_panel(ctx, cx);
+        self.central_panel(ctx, cx, now_ms);
     }
 
     fn run_dashboard_action(&mut self, action: dashboard::Action) {
         use dashboard::Action;
         match action {
             Action::ResetSteering => self.shared.send(Command::ResetSteering),
-            Action::OpenBindHelper => self.bind_helper_open = true,
-            Action::OpenSetup => self.setup.open = true,
-            Action::ToggleMonitor => {
-                self.monitor_open = !self.monitor_open;
-                if !self.monitor_open {
-                    self.monitor.clear();
-                }
-            }
+            Action::OpenMonitor => self.tab = Tab::Monitor,
         }
     }
 
@@ -443,81 +492,6 @@ impl App {
         }
     }
 
-    fn handle_close(&mut self, ctx: &Context, cx: &Cx) {
-        let requested = ctx.input(|i| i.viewport().close_requested());
-        if requested && !self.close.allowed {
-            let cfg = self.session.config();
-            match close_decision(cfg.exit_on_close, self.session.is_dirty()) {
-                CloseDecision::Quit => {}
-                CloseDecision::Minimize => {
-                    ctx.send_viewport_cmd(ViewportCommand::CancelClose);
-                    ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
-                }
-                CloseDecision::Confirm => {
-                    ctx.send_viewport_cmd(ViewportCommand::CancelClose);
-                    self.close.confirm = true;
-                }
-            }
-        }
-        if self.close.confirm {
-            self.close_dialog(ctx, cx);
-        }
-    }
-
-    fn close_dialog(&mut self, ctx: &Context, cx: &Cx) {
-        let s = cx.s;
-        let name = self.session.config().active_profile.clone();
-        let mut choice = None;
-        let response = Modal::new(Id::new("close_dialog")).show(ctx, |ui| {
-            ui.set_width(CLOSE_DIALOG_WIDTH);
-            ui.label(RichText::new(s.close_title).strong());
-            ui.label(fill(s.close_body, &[("name", &name)]));
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                if ui.button(s.btn_save_quit).clicked() {
-                    choice = Some(CloseChoice::SaveAndQuit);
-                }
-                if ui.button(s.btn_quit_nosave).clicked() {
-                    choice = Some(CloseChoice::Quit);
-                }
-                if ui.button(s.btn_cancel).clicked() {
-                    choice = Some(CloseChoice::Cancel);
-                }
-            });
-        });
-        match choice.or(response.should_close().then_some(CloseChoice::Cancel)) {
-            None => {}
-            Some(CloseChoice::SaveAndQuit) => {
-                if self
-                    .profiles
-                    .save_active(s, &mut self.session, &mut self.notices)
-                {
-                    self.quit(ctx);
-                } else {
-                    self.close.confirm = false;
-                }
-            }
-            Some(CloseChoice::Quit) => self.quit(ctx),
-            Some(CloseChoice::Cancel) => self.close.confirm = false,
-        }
-    }
-
-    fn quit(&mut self, ctx: &Context) {
-        self.close = CloseState {
-            allowed: true,
-            confirm: false,
-        };
-        ctx.send_viewport_cmd(ViewportCommand::Close);
-    }
-
-    #[cfg(feature = "updater")]
-    fn handle_restart(&mut self, ctx: &Context) {
-        if self.updater.ready_to_restart() && !self.close.allowed {
-            self.restart.store(true, Ordering::Release);
-            self.quit(ctx);
-        }
-    }
-
     fn busy(&self) -> bool {
         #[cfg(feature = "updater")]
         let updating = self.updater.busy();
@@ -547,10 +521,7 @@ impl eframe::App for App {
         let cx = self.cx();
         self.poll_keybind();
         self.shortcuts(ctx, &cx);
-        self.top_panel(ctx, &cx);
-        self.bottom_panel(ctx, &cx, now_ms);
-        self.side_panel(ctx, &cx, now_ms);
-        self.central_panel(ctx, &cx);
+        self.render_panels(ctx, &cx, now_ms);
         self.windows(ctx, &cx);
         self.push(ctx, &cx, now_ms);
         self.handle_close(ctx, &cx);

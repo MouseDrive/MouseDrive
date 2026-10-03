@@ -20,12 +20,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Redesigned main window.** A navigation bar on the left replaces the tabs:
+  *Overview*, *Steering*, *Throttle*, *Brake*, *Input monitor* and *App
+  settings* (formerly *General*). The top bar shows the state, the one action
+  that fixes it and short explanations; settings pages keep a *Live output*
+  panel on the right. The bottom line shows the output, loop rate and p99
+  latency and lists problems only when they happen; *Connection details*
+  opens the full diagnostics and *Copy diagnostics*. *Overview* combines the
+  live gauges with three getting-started steps and tips. In narrow windows the
+  navigation moves above the page.
+- New dark theme (carbon black, cream and red); colorblind mode keeps the
+  Okabe-Ito colours. The top bar shows the MouseDrive logo: the wheel and
+  cursor mark next to a two-tone *MouseDrive* wordmark, in the theme colours.
+  The status overlay has slightly rounded corners and a square dot. The window opens at 1180×680, so it fits 1366×768 screens.
 - **Steering deadzone is off by default** and marked experimental; it did not
   help in practice. Profiles still on the old 2 % default are set to 0 once
   after the update, and a notice lists them; other values are kept.
 
 ### Fixed
 
+- **Updates no longer drop unsaved profile changes.** If the active profile
+  has unsaved changes when an update finishes installing, MouseDrive asks
+  first (*Save and restart*, *Restart without saving*, *Later*) instead of
+  restarting at once. After *Later*, *Restart now* in the top bar finishes the
+  update; otherwise it applies on the next start.
+- **Closing during an update install no longer breaks the installation.**
+  MouseDrive stays open with an *Installing update* notice and closes by
+  itself when the installation ends. *Quit now* leaves without waiting;
+  MouseDrive stays intact even if the update does not finish. *Keep open*
+  cancels the close. The new version is written to a fresh, owner-only
+  temporary file.
 - **Unreadable profiles are backed up.** If the active profile cannot be read
   at startup, it is copied to `<name>.toml.<timestamp>.bak` before a later
   Save can overwrite it (once per content, not on every start); a failed

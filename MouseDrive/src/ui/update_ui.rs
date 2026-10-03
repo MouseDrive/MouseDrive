@@ -1,6 +1,6 @@
 #![deny(unsafe_code)]
 
-use eframe::egui::{Button, OpenUrl, RichText, Ui};
+use eframe::egui::{Button, OpenUrl, Response, RichText, Ui};
 use mousedrive::config::Config;
 
 use super::theme::text_on;
@@ -12,12 +12,14 @@ pub const CHECK_INTERVAL_S: i64 = 86_400;
 
 pub struct UpdaterUi {
     checker: UpdateChecker,
+    restart_held: bool,
 }
 
 impl UpdaterUi {
     pub fn new(cfg: &mut Config) -> Self {
         let updater = Self {
             checker: UpdateChecker::new(),
+            restart_held: false,
         };
         let now = unix_now();
         if due(cfg.auto_check_updates, cfg.last_update_check, now) {
@@ -27,8 +29,12 @@ impl UpdaterUi {
         updater
     }
 
-    pub fn ready_to_restart(&self) -> bool {
-        self.checker.status() == UpdateStatus::ReadyToRestart
+    pub fn restart_due(&self) -> bool {
+        !self.restart_held && self.checker.status() == UpdateStatus::ReadyToRestart
+    }
+
+    pub fn hold_restart(&mut self) {
+        self.restart_held = true;
     }
 
     pub fn busy(&self) -> bool {
@@ -38,14 +44,15 @@ impl UpdaterUi {
         )
     }
 
-    pub fn button(&self, ui: &mut Ui, cx: &Cx, cfg: &mut Config) {
+    pub fn installing(&self) -> bool {
+        self.checker.status() == UpdateStatus::Updating
+    }
+
+    pub fn button(&mut self, ui: &mut Ui, cx: &Cx, cfg: &mut Config) {
         match self.checker.status() {
             UpdateStatus::Available(info) if info.version != cfg.skipped_version => {
-                let bg = cx.pal.update;
-                let text = RichText::new(format!("⬆ {} {}", cx.s.upd_update_btn, info.version))
-                    .color(text_on(bg))
-                    .strong();
-                if ui.add(Button::new(text).fill(bg)).clicked() {
+                let label = format!("⬆ {} {}", cx.s.upd_update_btn, info.version);
+                if accent_button(ui, cx, &label).clicked() {
                     if info.auto_installable() {
                         self.checker.spawn_update(info.clone());
                     } else {
@@ -59,6 +66,12 @@ impl UpdaterUi {
             UpdateStatus::Updating => {
                 ui.spinner();
                 ui.label(cx.s.upd_updating);
+            }
+            UpdateStatus::ReadyToRestart if self.restart_held => {
+                let restart = accent_button(ui, cx, cx.s.upd_restart_now);
+                if restart.on_hover_text(cx.s.upd_installed).clicked() {
+                    self.restart_held = false;
+                }
             }
             UpdateStatus::ReadyToRestart => {
                 ui.label(cx.s.upd_restarting);
@@ -74,19 +87,27 @@ impl UpdaterUi {
     pub fn section(&self, ui: &mut Ui, cx: &Cx, cfg: &mut Config) {
         ui.add_space(4.0);
         ui.checkbox(&mut cfg.auto_check_updates, cx.s.upd_auto_check);
+        let status = self.checker.status();
+        let can_check = !self.busy() && status != UpdateStatus::ReadyToRestart;
         ui.horizontal(|ui| {
             if ui
-                .add_enabled(!self.busy(), Button::new(cx.s.upd_check_now))
+                .add_enabled(can_check, Button::new(cx.s.upd_check_now))
                 .clicked()
             {
                 cfg.last_update_check = unix_now();
                 self.checker.spawn_check();
             }
-            if let Some(text) = status_text(&self.checker.status(), cx.s) {
+            if let Some(text) = status_text(&status, cx.s) {
                 ui.label(RichText::new(text).weak());
             }
         });
     }
+}
+
+fn accent_button(ui: &mut Ui, cx: &Cx, label: &str) -> Response {
+    let bg = cx.pal.update;
+    let text = RichText::new(label).color(text_on(bg)).strong();
+    ui.add(Button::new(text).fill(bg))
 }
 
 pub fn due(enabled: bool, last: i64, now: i64) -> bool {
@@ -103,7 +124,7 @@ pub fn status_text(status: &UpdateStatus, s: &Strings) -> Option<String> {
             return Some(format!("{} {}", s.upd_available, info.version));
         }
         UpdateStatus::Updating => s.upd_updating,
-        UpdateStatus::ReadyToRestart => s.upd_restarting,
+        UpdateStatus::ReadyToRestart => s.upd_installed,
         UpdateStatus::UpdateFailed(_) => s.upd_update_failed,
     };
     Some(text.to_string())

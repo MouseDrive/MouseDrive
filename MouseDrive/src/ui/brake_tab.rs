@@ -8,6 +8,7 @@ use mousedrive::curve::Curve;
 use mousedrive::logic::BrakePhase;
 use mousedrive::preview::{BrakeTimeline, PhaseSpan, brake_timeline, full_press_ms};
 
+use super::theme;
 use super::widgets::{Cx, Fmt, Param, check_row, grid, param_row, param_row_i32, section};
 use crate::curve_editor::{CurveDisplay, curve_editor};
 
@@ -27,14 +28,15 @@ pub fn phase_index(p: BrakePhase) -> usize {
 }
 
 fn phase_tint(p: BrakePhase) -> Color32 {
-    let [r, g, b] = match p {
-        BrakePhase::Idle => [128, 128, 128],
-        BrakePhase::Fill => [0xE6, 0x9F, 0x00],
-        BrakePhase::Full => [0xD5, 0x5E, 0x00],
-        BrakePhase::Decay => [0xCC, 0x79, 0xA7],
-        BrakePhase::ShortHold => [0x56, 0xB4, 0xE9],
-        BrakePhase::Release => [0x00, 0x9E, 0x73],
+    let color = match p {
+        BrakePhase::Idle => theme::BORDER,
+        BrakePhase::Fill => theme::ACCENT,
+        BrakePhase::Full => theme::WARN,
+        BrakePhase::Decay => theme::PRIMARY,
+        BrakePhase::ShortHold => theme::MUTED,
+        BrakePhase::Release => theme::TEXT,
     };
+    let [r, g, b, _] = color.to_array();
     Color32::from_rgba_unmultiplied(r, g, b, SPAN_ALPHA)
 }
 
@@ -87,20 +89,24 @@ impl BrakeTab {
 
     pub fn show(&mut self, ui: &mut Ui, cx: &Cx, t: &mut Tuning, snap: &Snapshot, now_ms: f64) {
         let (s, d) = (cx.s, Tuning::default());
-        grid(ui, "brake_ceiling", |ui| {
-            let p = Param::new(
-                s.brake_ceiling,
-                s.tip_brake_ceiling,
-                d.brake_max_output,
-                0.1..=1.0,
-                Fmt::PCT0,
-            );
-            param_row(ui, cx, &p, &mut t.brake_max_output);
+        theme::card(ui, |ui| response(ui, cx, t, &d));
+        ui.add_space(12.0);
+        theme::card(ui, |ui| {
+            CollapsingHeader::new(s.brake_preview)
+                .id_salt("brake_preview")
+                .show(ui, |ui| self.plot(ui, cx, t, snap, now_ms));
         });
-        self.plot(ui, cx, t, snap, now_ms);
-        fill_and_full(ui, cx, t, &d);
-        decay(ui, cx, t, &d);
-        after_release(ui, cx, t, &d);
+        ui.add_space(12.0);
+        theme::card(ui, |ui| {
+            CollapsingHeader::new(s.advanced_controls)
+                .id_salt("brake_advanced")
+                .show(ui, |ui| {
+                    theme::hint(ui, s.advanced_hint);
+                    fill_and_full(ui, cx, t, &d);
+                    decay(ui, cx, t, &d);
+                    after_release(ui, cx, t, &d);
+                });
+        });
         ui.add_space(8.0);
         if ui.button(s.btn_tab_defaults).clicked() {
             *t = brake_defaults(t);
@@ -164,6 +170,38 @@ fn span_polygon<'a>(span: &PhaseSpan, cx: &Cx) -> Polygon<'a> {
         .name(cx.s.phase_names[phase_index(span.phase)])
 }
 
+fn response(ui: &mut Ui, cx: &Cx, t: &mut Tuning, d: &Tuning) {
+    let s = cx.s;
+    theme::hint(ui, s.brake_help);
+    ui.label(RichText::new(s.brake_response).strong());
+    grid(ui, "brake_response", |ui| {
+        let ceiling = Param::new(
+            s.brake_ceiling,
+            s.tip_brake_ceiling,
+            d.brake_max_output,
+            0.1..=1.0,
+            Fmt::PCT0,
+        );
+        param_row(ui, cx, &ceiling, &mut t.brake_max_output);
+        let fill = Param::new(
+            s.fill_ms,
+            s.tip_fill_ms,
+            f64::from(d.brake_fast_apply_ms),
+            1.0..=200.0,
+            Fmt::Num(0),
+        );
+        param_row_i32(ui, cx, &fill, &mut t.brake_fast_apply_ms);
+        let release = Param::new(
+            s.release_ms,
+            s.tip_release_ms,
+            f64::from(d.brake_fast_release_ms),
+            10.0..=500.0,
+            Fmt::Num(0),
+        );
+        param_row_i32(ui, cx, &release, &mut t.brake_fast_release_ms);
+    });
+}
+
 fn advanced_curve(
     ui: &mut Ui,
     cx: &Cx,
@@ -181,16 +219,6 @@ fn advanced_curve(
 fn fill_and_full(ui: &mut Ui, cx: &Cx, t: &mut Tuning, d: &Tuning) {
     let s = cx.s;
     section(ui, s.phase_heads[0]);
-    grid(ui, "brake_fill", |ui| {
-        let p = Param::new(
-            s.fill_ms,
-            s.tip_fill_ms,
-            f64::from(d.brake_fast_apply_ms),
-            1.0..=200.0,
-            Fmt::Num(0),
-        );
-        param_row_i32(ui, cx, &p, &mut t.brake_fast_apply_ms);
-    });
     advanced_curve(
         ui,
         cx,
@@ -308,17 +336,6 @@ fn after_release(ui: &mut Ui, cx: &Cx, t: &mut Tuning, d: &Tuning) {
             Fmt::Num(0),
         );
         param_row_i32(ui, cx, &tap, &mut t.brake_tap_ms);
-    });
-    section(ui, s.phase_heads[4]);
-    grid(ui, "brake_release", |ui| {
-        let p = Param::new(
-            s.release_ms,
-            s.tip_release_ms,
-            f64::from(d.brake_fast_release_ms),
-            10.0..=500.0,
-            Fmt::Num(0),
-        );
-        param_row_i32(ui, cx, &p, &mut t.brake_fast_release_ms);
     });
 }
 

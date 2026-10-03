@@ -277,6 +277,7 @@ impl SetupUi {
         Window::new(cx.s.setup_title)
             .open(&mut open)
             .collapsible(false)
+            .vscroll(true)
             .default_width(560.0)
             .show(ctx, |ui| {
                 ui.label(cx.s.setup_intro);

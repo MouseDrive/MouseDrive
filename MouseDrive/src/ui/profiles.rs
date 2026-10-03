@@ -83,26 +83,51 @@ impl ProfilesUi {
         }
         self.combo(ui, cx, env);
         let dirty = env.session.is_dirty();
-        let save = if dirty {
-            format!("{} •", cx.s.btn_save)
-        } else {
-            cx.s.btn_save.to_string()
-        };
-        let tip = if dirty {
-            cx.s.tip_unsaved
-        } else {
-            cx.s.btn_save
-        };
         if ui
-            .add_enabled(dirty, Button::new(save))
-            .on_hover_text(tip)
+            .add_enabled(
+                dirty,
+                Button::new(
+                    RichText::new(cx.s.btn_save)
+                        .strong()
+                        .color(super::theme::TEXT),
+                )
+                .fill(if dirty {
+                    super::theme::PRIMARY
+                } else {
+                    super::theme::ELEVATED
+                }),
+            )
+            .on_hover_text(cx.s.save_hint)
             .clicked()
         {
             self.save_active(cx.s, env.session, env.notices);
         }
+        ui.label(
+            RichText::new(if dirty {
+                cx.s.profile_unsaved
+            } else {
+                cx.s.profile_saved
+            })
+            .small()
+            .color(if dirty {
+                ui.visuals().warn_fg_color
+            } else {
+                super::theme::MUTED
+            }),
+        )
+        .on_hover_text(if dirty {
+            cx.s.tip_unsaved
+        } else {
+            cx.s.profile_saved
+        });
         self.menu(ui, cx, env);
         history_buttons(ui, cx, env.session);
-        ab_controls(ui, cx, env);
+        let compare_label = match env.snap.ab_side {
+            Some(AbSide::A) => "A/B: A",
+            Some(AbSide::B) => "A/B: B",
+            None => "A/B",
+        };
+        ui.menu_button(compare_label, |ui| ab_controls(ui, cx, env));
         if env.snap.pending_apply {
             ui.spinner();
             ui.label(RichText::new(cx.s.pending_apply).weak());
@@ -134,7 +159,7 @@ impl ProfilesUi {
     fn menu(&mut self, ui: &mut Ui, cx: &Cx, env: &mut Env) {
         let s = cx.s;
         let active = env.session.config().active_profile.clone();
-        ui.menu_button("…", |ui| {
+        ui.menu_button(cx.s.profile_actions, |ui| {
             let actions = [
                 (s.btn_save_as, NameAction::SaveAs),
                 (s.btn_duplicate, NameAction::Duplicate),

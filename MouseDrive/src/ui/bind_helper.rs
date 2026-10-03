@@ -36,6 +36,7 @@ pub fn show(ctx: &Context, cx: &Cx, open: &mut bool, snap: &Snapshot, shared: &S
     Window::new(cx.s.bind_title)
         .open(open)
         .collapsible(false)
+        .vscroll(true)
         .default_width(420.0)
         .show(ctx, |ui| {
             ui.label(cx.s.bind_intro);

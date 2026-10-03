@@ -18,8 +18,8 @@ use x11rb::rust_connection::RustConnection;
 use x11rb::wrapper::ConnectionExt as _;
 
 use super::{
-    ALPHA, Area, BACKGROUND, BASE_HEIGHT, BASE_MARGIN, BASE_WIDTH, Notice, STATE, TEXT,
-    TOPMOST_REFRESH_MS, current_label, current_status, place, scaled,
+    ALPHA, Area, BACKGROUND, BASE_HEIGHT, BASE_MARGIN, BASE_WIDTH, DOT_CORNER, Notice, PILL_CORNER,
+    STATE, TEXT, TOPMOST_REFRESH_MS, current_label, current_status, place, scaled,
 };
 use crate::platform::{self, Wake, pollfd};
 use crate::status::status_rgb;
@@ -478,14 +478,15 @@ fn intersect(a: Area, b: Area) -> Option<Area> {
     (area.right > area.left && area.bottom > area.top).then_some(area)
 }
 
-fn capsule_coverage(px: f32, py: f32, w: f32, h: f32) -> f32 {
-    let r = h / 2.0;
-    let cx = px.clamp(r, (w - r).max(r));
-    circle_coverage(px, py, cx, r, r)
+fn pill_coverage(px: f32, py: f32, w: f32, h: f32) -> f32 {
+    rounded_rect_coverage(px, py, [0.0, 0.0, w, h], PILL_CORNER as f32 / 2.0)
 }
 
-fn circle_coverage(px: f32, py: f32, cx: f32, cy: f32, r: f32) -> f32 {
-    let d = (px - cx).hypot(py - cy) - r;
+fn rounded_rect_coverage(px: f32, py: f32, rect: [f32; 4], r: f32) -> f32 {
+    let [left, top, right, bottom] = rect;
+    let qx = (px - (left + right) / 2.0).abs() - ((right - left) / 2.0 - r);
+    let qy = (py - (top + bottom) / 2.0).abs() - ((bottom - top) / 2.0 - r);
+    let d = qx.max(0.0).hypot(qy.max(0.0)) + qx.max(qy).min(0.0) - r;
     (0.5 - d).clamp(0.0, 1.0)
 }
 
@@ -495,7 +496,7 @@ fn pill_spans(w: u16, h: u16) -> Vec<Rectangle> {
     for y in 0..h {
         let py = f32::from(y) + 0.5;
         let Some(left) =
-            (0..w.div_ceil(2)).find(|&x| capsule_coverage(f32::from(x) + 0.5, py, wf, hf) >= 0.5)
+            (0..w.div_ceil(2)).find(|&x| pill_coverage(f32::from(x) + 0.5, py, wf, hf) >= 0.5)
         else {
             continue;
         };
@@ -533,16 +534,17 @@ fn render(
     let text_left = pad * 2.0 + d;
     let text_right = wf - pad;
     let glyphs = text_coverage(w, h, text, font, text_left, text_right);
-    let (dot_cx, dot_cy, dot_r) = (pad + d / 2.0, pad + d / 2.0, d / 2.0);
+    let dot_rect = [pad, pad, pad + d, pad + d];
+    let dot_r = DOT_CORNER as f32 / 2.0;
     let opacity = f32::from(ALPHA) / 255.0;
 
     let mut out = Vec::with_capacity(w * h);
     for y in 0..h {
         for x in 0..w {
             let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-            let pill = capsule_coverage(px, py, wf, hf);
+            let pill = pill_coverage(px, py, wf, hf);
             let mut color = BACKGROUND.map(f32::from);
-            color = mix(color, dot, circle_coverage(px, py, dot_cx, dot_cy, dot_r));
+            color = mix(color, dot, rounded_rect_coverage(px, py, dot_rect, dot_r));
             color = mix(color, TEXT, glyphs[y * w + x]);
             out.push(pack(color, if argb { pill * opacity } else { 1.0 }));
         }

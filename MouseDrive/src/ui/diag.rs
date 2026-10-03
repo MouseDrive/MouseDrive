@@ -1,12 +1,13 @@
 #![deny(unsafe_code)]
 
-use eframe::egui::{Align, Layout, RichText, ScrollArea, Ui};
+use eframe::egui::{RichText, ScrollArea, Ui};
 use mousedrive::config::Config;
 use mousedrive::control::{SetupInfo, Snapshot};
 use mousedrive::diagnostics::{DiagnosticsInfo, format_report};
 use mousedrive::setup::format_version;
 
-use super::widgets::Cx;
+use super::theme;
+use super::widgets::{Cx, output_name};
 use crate::lang::{Lang, Strings, fill, strings};
 
 const COPIED_VISIBLE_MS: f64 = 2000.0;
@@ -27,6 +28,26 @@ pub fn summary_line(snap: &Snapshot, s: &Strings, lang: Lang) -> String {
     );
     let mouse = fill(s.diag_mouse, &[("hz", &lang.num(snap.mouse_hz, 0))]);
     format!("{line} · {mouse}")
+}
+
+pub fn footer_line(snap: &Snapshot, cfg: &Config, s: &Strings, lang: Lang) -> String {
+    let l = &snap.loop_summary;
+    format!(
+        "{} · {} Hz · p99 {} ms",
+        output_name(s, cfg),
+        lang.num(l.hz, 0),
+        lang.num(l.p99_ms, 1)
+    )
+}
+
+pub fn footer_issues(snap: &Snapshot, s: &Strings) -> Option<String> {
+    let count = |text: &str, n: u64| (n > 0).then(|| fill(text, &[("n", &n.to_string())]));
+    let parts = [
+        count(s.footer_write_errors, snap.writes.failed_writes),
+        count(s.footer_reconnects, u64::from(snap.reconnects)),
+    ];
+    let text = parts.into_iter().flatten().collect::<Vec<_>>().join(" · ");
+    (!text.is_empty()).then_some(text)
 }
 
 pub fn warnings(snap: &Snapshot, s: &Strings) -> Vec<String> {
@@ -79,32 +100,34 @@ impl DiagUi {
         (snap, setup, cfg): (&Snapshot, &SetupInfo, &Config),
         now_ms: f64,
     ) {
-        ui.horizontal(|ui| {
-            ui.label(
-                RichText::new(summary_line(snap, cx.s, cx.lang))
-                    .small()
-                    .weak(),
-            );
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.toggle_value(&mut self.open, cx.s.act_details);
-                if ui.small_button(cx.s.btn_copy_diag).clicked() {
-                    ui.ctx()
-                        .copy_text(format_report(&report_info(snap, setup, cfg)));
-                    self.copied_at = Some(now_ms);
-                }
-                if self
-                    .copied_at
-                    .is_some_and(|t| now_ms - t < COPIED_VISIBLE_MS)
-                {
-                    ui.label(RichText::new(cx.s.copied).small());
-                }
-            });
-        });
         let warn = ui.visuals().warn_fg_color;
+        ui.horizontal_wrapped(|ui| {
+            ui.label(
+                RichText::new(footer_line(snap, cfg, cx.s, cx.lang))
+                    .small()
+                    .color(theme::MUTED),
+            );
+            if let Some(issues) = footer_issues(snap, cx.s) {
+                ui.label(RichText::new(issues).small().color(warn));
+            }
+            ui.toggle_value(&mut self.open, cx.s.system_details);
+            if self.open && ui.small_button(cx.s.btn_copy_diag).clicked() {
+                ui.ctx()
+                    .copy_text(format_report(&report_info(snap, setup, cfg)));
+                self.copied_at = Some(now_ms);
+            }
+            if self
+                .copied_at
+                .is_some_and(|t| now_ms - t < COPIED_VISIBLE_MS)
+            {
+                ui.label(RichText::new(cx.s.copied).small());
+            }
+        });
         for w in warnings(snap, cx.s) {
             ui.label(RichText::new(format!("⚠ {w}")).small().color(warn));
         }
         if self.open {
+            ui.label(RichText::new(summary_line(snap, cx.s, cx.lang)).small());
             let report = format_report(&report_info(snap, setup, cfg));
             ScrollArea::vertical()
                 .max_height(DETAILS_MAX_HEIGHT)

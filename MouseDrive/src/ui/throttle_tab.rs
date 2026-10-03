@@ -6,6 +6,7 @@ use mousedrive::config::Tuning;
 use mousedrive::logic::throttle_cut_factor;
 use mousedrive::preview::{cut_curve, cut_summary};
 
+use super::theme;
 use super::widgets::{Cx, Fmt, Param, check_row, grid, param_row, param_row_i32};
 use crate::curve_editor::{CurveDisplay, curve_editor};
 use crate::lang::fill;
@@ -19,46 +20,57 @@ const PLOT_STEPS: usize = 80;
 
 pub fn show(ui: &mut Ui, cx: &Cx, t: &mut Tuning, steer_abs: f64) {
     let (s, d) = (cx.s, Tuning::default());
-    grid(ui, "thr_cut_toggle", |ui| {
-        let label = (s.cut_enabled, s.tip_cut_enabled);
-        check_row(
-            ui,
-            cx,
-            label,
-            &mut t.throttle_cut_enabled,
-            d.throttle_cut_enabled,
-        );
+    theme::card(ui, |ui| {
+        theme::hint(ui, s.throttle_help);
+        grid(ui, "thr_ramp", |ui| ramp_rows(ui, cx, t, &d));
     });
-    ui.label(RichText::new(summary(cx, t)).weak());
-    if t.throttle_cut_enabled {
-        cut_plot(ui, cx, t, steer_abs);
-    }
-    grid(ui, "thr_ramp", |ui| ramp_rows(ui, cx, t, &d));
-    let enabled = t.throttle_cut_enabled;
-    ui.add_enabled_ui(enabled, |ui| {
-        grid(ui, "thr_cut", |ui| cut_rows(ui, cx, t, &d))
-    });
-    CollapsingHeader::new(s.advanced)
-        .id_salt("thr_advanced")
-        .show(ui, |ui| {
-            curve_editor(
+    ui.add_space(12.0);
+    theme::card(ui, |ui| {
+        grid(ui, "thr_cut_toggle", |ui| {
+            let label = (s.cut_enabled, s.tip_cut_enabled);
+            check_row(
                 ui,
-                s.curve_rise,
-                &mut t.throttle_rise_curve,
-                CurveDisplay::Normal,
-                s,
-                cx.lang,
-            );
-            ui.add_space(8.0);
-            curve_editor(
-                ui,
-                s.curve_fall,
-                &mut t.throttle_fall_curve,
-                CurveDisplay::MirrorX,
-                s,
-                cx.lang,
+                cx,
+                label,
+                &mut t.throttle_cut_enabled,
+                d.throttle_cut_enabled,
             );
         });
+        ui.label(RichText::new(summary(cx, t)).color(theme::MUTED));
+        if t.throttle_cut_enabled {
+            cut_plot(ui, cx, t, steer_abs);
+        }
+    });
+    ui.add_space(12.0);
+    theme::card(ui, |ui| {
+        let enabled = t.throttle_cut_enabled;
+        CollapsingHeader::new(s.advanced_controls)
+            .id_salt("thr_advanced")
+            .show(ui, |ui| {
+                theme::hint(ui, s.advanced_hint);
+                ui.add_enabled_ui(enabled, |ui| {
+                    grid(ui, "thr_cut", |ui| cut_rows(ui, cx, t, &d))
+                });
+                ui.label(RichText::new(s.curves_title).strong());
+                curve_editor(
+                    ui,
+                    s.curve_rise,
+                    &mut t.throttle_rise_curve,
+                    CurveDisplay::Normal,
+                    s,
+                    cx.lang,
+                );
+                ui.add_space(8.0);
+                curve_editor(
+                    ui,
+                    s.curve_fall,
+                    &mut t.throttle_fall_curve,
+                    CurveDisplay::MirrorX,
+                    s,
+                    cx.lang,
+                );
+            });
+    });
     ui.add_space(8.0);
     if ui.button(s.btn_tab_defaults).clicked() {
         *t = throttle_defaults(t);

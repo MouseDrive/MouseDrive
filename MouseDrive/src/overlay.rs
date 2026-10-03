@@ -20,8 +20,10 @@ const BASE_MARGIN: i32 = 12;
 const ALPHA: u8 = 230;
 const TOPMOST_REFRESH_MS: u32 = 2000;
 
-const BACKGROUND: [u8; 3] = [28, 28, 32];
-const TEXT: [u8; 3] = [240, 240, 240];
+const BACKGROUND: [u8; 3] = [12, 13, 13];
+const TEXT: [u8; 3] = [244, 237, 225];
+const PILL_CORNER: i32 = 4;
+const DOT_CORNER: i32 = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Notice {

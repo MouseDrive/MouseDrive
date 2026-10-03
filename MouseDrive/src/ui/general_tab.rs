@@ -8,6 +8,7 @@ use mousedrive::status::Cue;
 
 use super::calibration::Calibration;
 use super::keybind::{KeyBinder, KeyField, key_row};
+use super::theme;
 #[cfg(feature = "updater")]
 use super::update_ui::UpdaterUi;
 use super::widgets::{
@@ -31,17 +32,34 @@ pub struct Env<'a> {
 }
 
 pub fn show(ui: &mut Ui, cx: &Cx, cfg: &mut Config, env: Env) {
-    output(ui, cx, cfg, env.snap);
-    mouse(ui, cx, cfg, env.mice, env.calibration);
-    if env.snap.device_filter == DeviceFilter::SelectedMissing {
-        ui.label(RichText::new(cx.s.filter_missing).color(ui.visuals().warn_fg_color));
-    }
-    keys(ui, cx, cfg, env.keybind);
-    feedback(ui, cx, cfg, env.shared);
-    view(ui, cx, cfg);
+    theme::card(ui, |ui| view(ui, cx, cfg));
+    ui.add_space(12.0);
+    theme::card(ui, |ui| {
+        ui.label(RichText::new(cx.s.connection_tools).strong());
+        mouse(ui, cx, cfg, env.mice, env.calibration);
+        if env.snap.device_filter == DeviceFilter::SelectedMissing {
+            ui.label(RichText::new(cx.s.filter_missing).color(ui.visuals().warn_fg_color));
+        }
+        eframe::egui::CollapsingHeader::new(cx.s.sec_output)
+            .id_salt("output_details")
+            .show(ui, |ui| output(ui, cx, cfg, env.snap));
+    });
+    ui.add_space(12.0);
+    theme::card(ui, |ui| keys(ui, cx, cfg, env.keybind));
+    ui.add_space(12.0);
+    theme::card(ui, |ui| {
+        eframe::egui::CollapsingHeader::new(cx.s.feedback_title)
+            .id_salt("feedback_details")
+            .show(ui, |ui| feedback(ui, cx, cfg, env.shared));
+        eframe::egui::CollapsingHeader::new(cx.s.sec_game)
+            .id_salt("game_details")
+            .show(ui, |ui| game(ui, cx));
+    });
     #[cfg(feature = "updater")]
-    env.updater.section(ui, cx, cfg);
-    game(ui, cx);
+    {
+        ui.add_space(12.0);
+        theme::card(ui, |ui| env.updater.section(ui, cx, cfg));
+    }
 }
 
 pub fn loop_label(ms: i32) -> String {
@@ -152,8 +170,9 @@ fn mouse_picker(ui: &mut Ui, cx: &Cx, device: &mut String, mice: &mut Vec<MouseI
     ui.horizontal_wrapped(|ui| {
         let label = ui.label(s.mouse_device);
         ComboBox::from_id_salt("mouse_device")
-            .selected_text(selected)
+            .selected_text(&selected)
             .width(MOUSE_COMBO_WIDTH)
+            .truncate()
             .show_ui(ui, |ui| {
                 ui.selectable_value(device, String::new(), s.all_mice);
                 for m in mice.iter() {
@@ -161,7 +180,8 @@ fn mouse_picker(ui: &mut Ui, cx: &Cx, device: &mut String, mice: &mut Vec<MouseI
                 }
             })
             .response
-            .labelled_by(label.id);
+            .labelled_by(label.id)
+            .on_hover_text(&selected);
         if ui.button(s.btn_refresh).clicked() {
             *mice = input::list_mice();
         }

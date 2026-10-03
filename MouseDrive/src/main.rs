@@ -19,8 +19,8 @@ use crate::lang::Lang;
 use crate::ui::{App, Startup, status_labels};
 
 const TITLE: &str = concat!("MouseDrive v", env!("CARGO_PKG_VERSION"));
-const WINDOW_SIZE: [f32; 2] = [1000.0, 640.0];
-const WINDOW_MIN_SIZE: [f32; 2] = [760.0, 500.0];
+const WINDOW_SIZE: [f32; 2] = [1180.0, 680.0];
+const WINDOW_MIN_SIZE: [f32; 2] = [760.0, 560.0];
 const APP_ICON_PNG: &[u8] = include_bytes!("../image/icon.png");
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

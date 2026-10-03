@@ -62,7 +62,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 - **Axis bind helper** — Countdown, then only the chosen axis or button moves, so the game binds the right one.
 - **Automatic reconnect** — Retries when the virtual device is fixed or re-plugged; a vJoy removal notice or repeated write failures switch to CONNECTION LOST and it recovers on its own.
 - **Stuck-button guard** — If Windows swallows a button release (UAC prompt, Ctrl+Alt+Del), the pedal is released automatically.
-- **Diagnostics line** — Write success/failure, measured loop rate and p99, clipped events, reconnects, mouse rate; *Copy diagnostics* puts a bug-report summary on the clipboard.
+- **Diagnostics line** — The output, measured loop rate and p99 at a glance; write failures and reconnects appear only when they happen. *Connection details* adds write counts, clipped events and mouse rate, and *Copy diagnostics* puts a bug-report summary on the clipboard.
 - **Mouse selection** — Read all mice or only one device ("pick the last moved mouse").
 
 **App**
@@ -86,7 +86,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 | Capture key (default F8) | — | Toggle input capture |
 | A/B key (unset by default) | — | Switch between A and B settings |
 
-All keys can be reassigned in **General → Keys**.
+All keys can be reassigned in **App settings → Keys**.
 
 ## Quick start
 
@@ -134,7 +134,7 @@ MouseDrive already shapes the input (steering mode, smoothing, throttle cut, bra
 | Axis mapping | **separate axes** | Throttle = vJoy **Y**, brake = vJoy **Rz**; do not use a "combined pedals" axis. |
 | Axis direction | **0 = released** | If a pedal reads inverted, toggle the game's *invert* option for that axis. |
 
-- **Binding:** use the **Axis bind helper** (under the live gauges, or in the *Setup* window). Pick the axis, switch to the game during the 5 s countdown and click the binding row; for the next 4 s only that axis (or gear button) moves.
+- **Binding:** use the **Axis bind helper** (*Overview → Bind your game controls*, or the *Setup* window). Pick the axis, switch to the game during the 5 s countdown and click the binding row; for the next 4 s only that axis (or gear button) moves.
 - **Check what the game receives:** *Set up USB game controllers* (`joy.cpl`) → vJoy Device → *Properties* shows the raw axes (Linux: `evtest` or `jstest-gtk`). If they are right but the car is not, the problem is a game setting.
 - Prefer the game's *wheel* input mode over *gamepad* mode: gamepad modes often add their own steering assist and filtering.
 
@@ -199,7 +199,7 @@ MouseDrive/
 ├── image/                 # Logo, app icon (.svg / .png / .ico), screenshot
 └── src/
     ├── main.rs            # App binary: startup/shutdown order, CLI flags, eframe window
-    ├── ui/                # egui screens: status bar, dashboard, tabs, profiles, monitor, setup, ...
+    ├── ui/                # egui screens: status bar, navigation, overview, settings pages, profiles, monitor, setup, ...
     ├── curve_editor.rs    # Drag-point curve editor widget
     ├── lang/              # TR / EN strings
     ├── update.rs          # Auto-update: release check, SHA-256 verify, self-replace ("updater" feature)
@@ -233,16 +233,16 @@ Release history in [CHANGELOG.md](CHANGELOG.md).
 
 ## Troubleshooting
 
-Start with the **Setup** window: it checks every requirement and says how to fix each failure. **Copy diagnostics** (bottom line) gives a summary to paste into a bug report.
+Start with the **Setup** window: it checks every requirement and says how to fix each failure. **Copy diagnostics** (bottom line → *Connection details*) gives a summary to paste into a bug report.
 
 | Problem | Solution |
 |---------|----------|
 | "vJoyInterface.dll not found" | Install vJoy, or place the DLL next to the exe or in `Program Files\vJoy\x64` |
 | DLL and driver versions differ | Remove old `vJoyInterface.dll` copies next to the exe, or reinstall vJoy |
 | "vJoy not enabled" | Check that the vJoy driver is installed and enabled (vJoyConf) |
-| DEVICE BUSY | Another feeder (Joystick Gremlin, SimHub, UCR…) owns the device — close it or choose another vJoy device in **General → Output** |
+| DEVICE BUSY | Another feeder (Joystick Gremlin, SimHub, UCR…) owns the device — close it or choose another vJoy device in **App settings → Output** |
 | CONNECTION LOST | MouseDrive retries every second on its own; after 15 s the status becomes SETUP REQUIRED and it keeps retrying every 2 s. **Reconnect** forces a retry |
-| MOUSE NOT READ | Turn on **Read mouse while the game has focus** in **General → Mouse**. On Linux, check **Mouse access** in the Setup window |
+| MOUSE NOT READ | Turn on **Read mouse while the game has focus** in **App settings → Mouse**. On Linux, check **Mouse access** in the Setup window |
 | Linux: uinput, permission or mouse access row fails | Run the commands from **Setup → Copy setup commands** ([Linux setup](#linux)); they apply within seconds |
 | PAUSED | Press the capture key (default **F8**) |
 | The game binds the wrong axis | Use the **Axis bind helper** |

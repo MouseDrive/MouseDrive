@@ -5,6 +5,7 @@ use mousedrive::config::{Config, Tuning};
 use mousedrive::ergonomics::{cm_for_full_lock, counts_for_full_lock, sens_for_cm};
 use mousedrive::logic::SteeringMode;
 
+use super::theme;
 use super::widgets::{Cx, Fmt, Param, combo_row, grid, param_row};
 use crate::lang::{fill, parse_num};
 
@@ -14,30 +15,41 @@ const CM_RANGE: std::ops::RangeInclusive<f64> = 1.0..=100.0;
 pub fn show(ui: &mut Ui, cx: &Cx, cfg: &mut Config) {
     let d = Tuning::default();
     let s = cx.s;
-    grid(ui, "steer_sens", |ui| {
-        let p = Param::new(s.sens, s.tip_sens, d.mouse_sens, SENS_RANGE, Fmt::Num(2));
-        param_row(ui, cx, &p, &mut cfg.tuning.mouse_sens);
+    theme::card(ui, |ui| {
+        theme::hint(ui, s.steering_help);
+        grid(ui, "steer_sens", |ui| {
+            let p = Param::new(s.sens, s.tip_sens, d.mouse_sens, SENS_RANGE, Fmt::Num(2));
+            param_row(ui, cx, &p, &mut cfg.tuning.mouse_sens);
+        });
+        ergonomics(ui, cx, cfg);
+        ui.add_space(6.0);
+        let t = &mut cfg.tuning;
+        grid(ui, "steer_mode", |ui| {
+            combo_row(
+                ui,
+                cx,
+                (s.mode, ""),
+                &mut t.steering_mode,
+                &s.mode_names,
+                d.steering_mode,
+            );
+        });
+        let mode = SteeringMode::from_i32(t.steering_mode);
+        ui.label(RichText::new(s.mode_desc[mode.to_i32() as usize]).color(theme::MUTED));
+        grid(ui, "steer_mode_rows", |ui| mode_rows(ui, cx, t, &d, mode));
     });
-    ergonomics(ui, cx, cfg);
-    ui.add_space(6.0);
-    let t = &mut cfg.tuning;
-    grid(ui, "steer_mode", |ui| {
-        combo_row(
-            ui,
-            cx,
-            (s.mode, ""),
-            &mut t.steering_mode,
-            &s.mode_names,
-            d.steering_mode,
-        );
+    ui.add_space(12.0);
+    theme::card(ui, |ui| {
+        CollapsingHeader::new(s.advanced_controls)
+            .id_salt("steer_advanced")
+            .show(ui, |ui| {
+                theme::hint(ui, s.advanced_hint);
+                grid(ui, "steer_shape", |ui| {
+                    shape_rows(ui, cx, &mut cfg.tuning, &d)
+                });
+                advanced(ui, cx, cfg);
+            });
     });
-    let mode = SteeringMode::from_i32(t.steering_mode);
-    ui.label(RichText::new(s.mode_desc[mode.to_i32() as usize]).weak());
-    grid(ui, "steer_mode_rows", |ui| mode_rows(ui, cx, t, &d, mode));
-    grid(ui, "steer_shape", |ui| shape_rows(ui, cx, t, &d));
-    CollapsingHeader::new(s.advanced)
-        .id_salt("steer_advanced")
-        .show(ui, |ui| advanced(ui, cx, cfg));
     ui.add_space(8.0);
     if ui.button(s.btn_tab_defaults).clicked() {
         cfg.tuning = steering_defaults(&cfg.tuning);
@@ -54,7 +66,7 @@ fn ergonomics(ui: &mut Ui, cx: &Cx, cfg: &mut Config) {
     let Some(cm) = cm_for_full_lock(cfg.tuning.mouse_sens, scale, sat, dpi) else {
         if let Some(counts) = counts_for_full_lock(cfg.tuning.mouse_sens, scale, sat) {
             let text = fill(s.counts_per_lock, &[("counts", &lang.num(counts, 0))]);
-            ui.label(RichText::new(text).weak());
+            ui.label(RichText::new(text).color(theme::MUTED));
         }
         return;
     };
@@ -62,7 +74,7 @@ fn ergonomics(ui: &mut Ui, cx: &Cx, cfg: &mut Config) {
         s.cm_per_lock,
         &[("cm", &lang.num(cm, 1)), ("dpi", &dpi.to_string())],
     );
-    ui.label(RichText::new(text).weak());
+    ui.label(RichText::new(text).color(theme::MUTED));
     ui.horizontal(|ui| {
         let label = ui.label(s.cm_input).on_hover_text(s.tip_cm_input);
         let mut value = cm;
@@ -154,7 +166,7 @@ fn shape_rows(ui: &mut Ui, cx: &Cx, t: &mut Tuning, d: &Tuning) {
 
 fn advanced(ui: &mut Ui, cx: &Cx, cfg: &mut Config) {
     let (s, d) = (cx.s, Config::default());
-    ui.label(RichText::new(s.shared_note).weak());
+    ui.label(RichText::new(s.shared_note).color(theme::MUTED));
     grid(ui, "steer_advanced_rows", |ui| {
         let rate = Param::new(
             s.max_rate,

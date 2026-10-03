@@ -3,12 +3,13 @@
 use std::ops::RangeInclusive;
 
 use eframe::egui::{
-    Color32, ComboBox, Frame, Grid, Margin, Rect, Response, RichText, Sense, Slider, Stroke, Ui,
-    WidgetInfo, WidgetType, pos2, vec2,
+    Color32, ComboBox, Frame, Grid, Margin, Rect, Response, RichText, Sense, Slider, Stroke,
+    StrokeKind, Ui, WidgetInfo, WidgetType, pos2, vec2,
 };
+use mousedrive::config::Config;
 use mousedrive::keys::{KeyLabel, key_label};
 
-use super::theme::{Palette, text_on};
+use super::theme::{self, Palette, text_on};
 use crate::lang::{Lang, Strings, fill, parse_num};
 
 #[derive(Clone, Copy)]
@@ -196,9 +197,10 @@ fn reset_cell(ui: &mut Ui, cx: &Cx, differs: bool, default_text: &str) -> bool {
 }
 
 pub fn grid(ui: &mut Ui, id: &str, add: impl FnOnce(&mut Ui)) {
-    ui.spacing_mut().slider_width = 150.0;
+    ui.spacing_mut().slider_width = (ui.available_width() * 0.32).clamp(100.0, 200.0);
     Grid::new(id)
         .num_columns(3)
+        .max_col_width((ui.available_width() * 0.44).clamp(120.0, 260.0))
         .spacing([10.0, 6.0])
         .show(ui, add);
 }
@@ -211,16 +213,22 @@ pub fn section(ui: &mut Ui, title: &str) {
 
 pub fn chip(ui: &mut Ui, text: &str, dot: Option<Color32>) -> Response {
     Frame::NONE
-        .fill(ui.visuals().faint_bg_color)
-        .corner_radius(8.0)
+        .fill(theme::BACKGROUND)
+        .stroke(Stroke::new(1.0_f32, theme::BORDER))
+        .corner_radius(2.0)
         .inner_margin(Margin::symmetric(8, 3))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 if let Some(c) = dot {
                     let (r, p) = ui.allocate_painter(vec2(9.0, 9.0), Sense::hover());
-                    p.circle_filled(r.rect.center(), 3.5, c);
+                    p.rect_filled(r.rect.shrink(2.0), 0.0, c);
                 }
-                ui.label(text);
+                ui.label(
+                    RichText::new(text)
+                        .monospace()
+                        .size(12.0)
+                        .color(theme::TEXT),
+                );
             });
         })
         .response
@@ -229,10 +237,17 @@ pub fn chip(ui: &mut Ui, text: &str, dot: Option<Color32>) -> Response {
 pub fn pill(ui: &mut Ui, text: &str, bg: Color32) -> Response {
     Frame::NONE
         .fill(bg)
-        .corner_radius(10.0)
+        .stroke(Stroke::new(1.0_f32, theme::BORDER))
+        .corner_radius(2.0)
         .inner_margin(Margin::symmetric(10, 3))
         .show(ui, |ui| {
-            ui.label(RichText::new(text).strong().color(text_on(bg)));
+            ui.label(
+                RichText::new(text)
+                    .strong()
+                    .monospace()
+                    .size(12.0)
+                    .color(text_on(bg)),
+            );
         })
         .response
 }
@@ -243,22 +258,48 @@ fn progress_info(label: &str, value: f64) -> WidgetInfo {
     info
 }
 
-const BAR_MIN_WIDTH: f32 = 240.0;
+const BAR_MIN_WIDTH: f32 = 40.0;
+
+fn segmented_track(p: &eframe::egui::Painter, rect: Rect, start: f64, end: f64, color: Color32) {
+    p.rect_filled(rect, 0.0, theme::BACKGROUND);
+    p.rect_stroke(
+        rect,
+        0.0,
+        Stroke::new(1.0_f32, theme::BORDER),
+        StrokeKind::Inside,
+    );
+    let r = rect.shrink(3.0);
+    let count = ((r.width() / 10.0) as usize).clamp(4, 24);
+    let gap = 2.0;
+    let width = (r.width() - (count - 1) as f32 * gap) / count as f32;
+    let a = r.left() + r.width() * start.clamp(0.0, 1.0) as f32;
+    let b = r.left() + r.width() * end.clamp(0.0, 1.0) as f32;
+    for i in 0..count {
+        let left = r.left() + i as f32 * (width + gap);
+        let cell = Rect::from_min_size(pos2(left, r.top()), vec2(width, r.height()));
+        p.rect_filled(cell, 0.0, theme::ELEVATED);
+        let lo = left.max(a);
+        let hi = cell.right().min(b);
+        if hi > lo {
+            p.rect_filled(Rect::from_x_y_ranges(lo..=hi, r.y_range()), 0.0, color);
+        }
+    }
+}
 
 pub fn bar(ui: &mut Ui, label: &str, value: f64, marker: Option<f64>, color: Color32) -> Response {
     let (resp, p) = ui.allocate_painter(
-        vec2(ui.available_width().max(BAR_MIN_WIDTH), 16.0),
+        vec2(ui.available_width().max(BAR_MIN_WIDTH), 20.0),
         Sense::hover(),
     );
     let r = resp.rect;
-    let visuals = ui.visuals();
-    p.rect_filled(r, 4.0, visuals.extreme_bg_color);
-    let w = r.width() * value.clamp(0.0, 1.0) as f32;
-    p.rect_filled(Rect::from_min_size(r.min, vec2(w, r.height())), 4.0, color);
+    segmented_track(&p, r, 0.0, value, color);
     if let Some(m) = marker {
-        let x = r.left() + r.width() * m.clamp(0.0, 1.0) as f32;
-        let stroke = Stroke::new(2.0_f32, visuals.strong_text_color());
-        p.line_segment([pos2(x, r.top() - 2.0), pos2(x, r.bottom() + 2.0)], stroke);
+        let inner = r.shrink(3.0);
+        let x = inner.left() + inner.width() * m.clamp(0.0, 1.0) as f32;
+        p.line_segment(
+            [pos2(x, r.top() - 2.0), pos2(x, r.bottom() + 2.0)],
+            Stroke::new(2.0_f32, theme::TEXT),
+        );
     }
     resp.widget_info(|| progress_info(label, value));
     resp
@@ -272,28 +313,33 @@ pub fn steering_bar(
     color: Color32,
 ) -> Response {
     let (resp, p) = ui.allocate_painter(
-        vec2(ui.available_width().max(BAR_MIN_WIDTH), 18.0),
+        vec2(ui.available_width().max(BAR_MIN_WIDTH), 20.0),
         Sense::hover(),
     );
     let r = resp.rect;
-    let visuals = ui.visuals();
-    let (cx, half) = (r.center().x, r.width() * 0.5);
+    let inner = r.shrink(3.0);
+    let cx = inner.center().x;
+    let half = inner.width() * 0.5;
     let x_at = |v: f64| cx + half * v.clamp(-1.0, 1.0) as f32;
-    p.rect_filled(r, 4.0, visuals.extreme_bg_color);
+    let end = (out.clamp(-1.0, 1.0) + 1.0) * 0.5;
+    segmented_track(&p, r, end.min(0.5), end.max(0.5), color);
     if deadzone > 0.0 {
-        let band = Rect::from_x_y_ranges(x_at(-deadzone)..=x_at(deadzone), r.y_range());
-        p.rect_filled(band, 0.0, visuals.widgets.inactive.bg_fill);
+        let band = Rect::from_x_y_ranges(x_at(-deadzone)..=x_at(deadzone), inner.y_range());
+        p.rect_stroke(
+            band,
+            0.0,
+            Stroke::new(1.0_f32, theme::MUTED),
+            StrokeKind::Inside,
+        );
     }
-    let x = x_at(out);
-    let fill = Rect::from_x_y_ranges(cx.min(x)..=cx.max(x), (r.top() + 3.0)..=(r.bottom() - 3.0));
-    p.rect_filled(fill, 3.0, color);
-    let center = Stroke::new(1.0_f32, visuals.weak_text_color());
-    p.line_segment([pos2(cx, r.top()), pos2(cx, r.bottom())], center);
+    p.line_segment(
+        [pos2(cx, r.top()), pos2(cx, r.bottom())],
+        Stroke::new(1.0_f32, theme::TEXT),
+    );
     let rx = x_at(raw);
-    let raw_stroke = Stroke::new(1.5_f32, visuals.strong_text_color());
     p.line_segment(
         [pos2(rx, r.top() - 2.0), pos2(rx, r.bottom() + 2.0)],
-        raw_stroke,
+        Stroke::new(1.5_f32, theme::TEXT),
     );
     resp.widget_info(|| progress_info(label, out));
     resp
@@ -305,4 +351,8 @@ pub fn key_text(s: &Strings, vk: i32) -> String {
         KeyLabel::Mouse(n) => fill(s.mouse_button, &[("n", &n.to_string())]),
         KeyLabel::Key(name) => name,
     }
+}
+
+pub fn output_name(s: &Strings, cfg: &Config) -> String {
+    fill(s.chip_vjoy, &[("id", &cfg.vjoy_device_id.to_string())])
 }

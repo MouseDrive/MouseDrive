@@ -1,6 +1,6 @@
 #![deny(unsafe_code)]
 
-use eframe::egui::{Color32, RichText, Ui};
+use eframe::egui::{Color32, Ui};
 use egui_plot::{Legend, Line, LineStyle, Plot, PlotPoints, VLine};
 use mousedrive::control::Shared;
 use mousedrive::telemetry::{Marker, Sample, decimate_min_max};
@@ -10,7 +10,7 @@ use super::widgets::Cx;
 const KEEP_MS: f64 = 30_000.0;
 pub const WINDOWS_S: [u32; 3] = [5, 10, 30];
 const DEFAULT_WINDOW_S: u32 = 10;
-const PLOT_HEIGHT: f32 = 260.0;
+const PLOT_HEIGHT: f32 = 320.0;
 const COLUMNS: usize = 400;
 const LMB_Y: (f64, f64) = (-1.35, -1.15);
 const RMB_Y: (f64, f64) = (-1.65, -1.45);
@@ -52,7 +52,10 @@ impl Monitor {
         self.samples.drain(..cut);
     }
 
-    pub fn clear(&mut self) {
+    pub fn release(&mut self) {
+        if self.frozen {
+            return;
+        }
         self.samples = Vec::new();
         self.last_seq = None;
     }
@@ -60,7 +63,7 @@ impl Monitor {
     pub fn show(&mut self, ui: &mut Ui, cx: &Cx) {
         self.controls(ui, cx);
         let Some(latest) = self.samples.last().map(|s| s.t_ms) else {
-            ui.label(RichText::new("…").weak());
+            super::theme::hint(ui, cx.s.monitor_empty);
             return;
         };
         let t0 = latest - f64::from(self.window_s) * 1000.0;
@@ -91,7 +94,7 @@ impl Monitor {
     }
 
     fn controls(&mut self, ui: &mut Ui, cx: &Cx) {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let label = if self.frozen {
                 cx.s.resume
             } else {

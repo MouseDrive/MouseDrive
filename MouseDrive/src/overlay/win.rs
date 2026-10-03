@@ -5,9 +5,9 @@ use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, CreateFontW, CreateSolidBrush,
     DEFAULT_CHARSET, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER,
-    DeleteObject, DrawTextW, Ellipse, EndPaint, FW_SEMIBOLD, FillRect, GetDC, GetDeviceCaps,
-    GetStockObject, HDC, InvalidateRect, LOGPIXELSX, NULL_PEN, OUT_DEFAULT_PRECIS, PAINTSTRUCT,
-    ReleaseDC, RoundRect, SelectObject, SetBkMode, SetTextColor, TRANSPARENT,
+    DeleteObject, DrawTextW, EndPaint, FW_SEMIBOLD, FillRect, GetDC, GetDeviceCaps, GetStockObject,
+    HDC, InvalidateRect, LOGPIXELSX, NULL_PEN, OUT_DEFAULT_PRECIS, PAINTSTRUCT, ReleaseDC,
+    RoundRect, SelectObject, SetBkMode, SetTextColor, TRANSPARENT,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
@@ -24,8 +24,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::{PCWSTR, w};
 
 use super::{
-    ALPHA, Area, BASE_HEIGHT, BASE_MARGIN, BASE_WIDTH, Notice, STATE, TOPMOST_REFRESH_MS,
-    current_label, current_status, place, scaled,
+    ALPHA, Area, BASE_HEIGHT, BASE_MARGIN, BASE_WIDTH, DOT_CORNER, Notice, PILL_CORNER, STATE,
+    TOPMOST_REFRESH_MS, current_label, current_status, place, scaled,
 };
 use crate::status::{AppStatus, status_rgb};
 
@@ -304,7 +304,6 @@ unsafe fn draw(hdc: HDC, rc: RECT, status: AppStatus) {
 /// # Safety
 /// `hdc` geçerli bir boyama DC'si olmalı.
 unsafe fn draw_pill(hdc: HDC, rc: RECT, status: AppStatus, pad: i32, d: i32) {
-    let h = rc.bottom - rc.top;
     // SAFETY: çağıran geçerli bir DC verir; her nesne seçimden çıkarıldıktan
     // sonra silinir.
     unsafe {
@@ -315,16 +314,26 @@ unsafe fn draw_pill(hdc: HDC, rc: RECT, status: AppStatus, pad: i32, d: i32) {
         let bg = CreateSolidBrush(BACKGROUND);
         let old_brush = SelectObject(hdc, bg.into());
         let old_pen = SelectObject(hdc, GetStockObject(NULL_PEN));
-        let _ = RoundRect(hdc, rc.left, rc.top, rc.right + 1, rc.bottom + 1, h, h);
+        let _ = RoundRect(
+            hdc,
+            rc.left,
+            rc.top,
+            rc.right + 1,
+            rc.bottom + 1,
+            PILL_CORNER,
+            PILL_CORNER,
+        );
 
         let dot = CreateSolidBrush(rgb(status_rgb(status)));
         SelectObject(hdc, dot.into());
-        let _ = Ellipse(
+        let _ = RoundRect(
             hdc,
             rc.left + pad,
             rc.top + pad,
             rc.left + pad + d,
             rc.top + pad + d,
+            DOT_CORNER,
+            DOT_CORNER,
         );
         SelectObject(hdc, old_brush);
         SelectObject(hdc, old_pen);

@@ -55,11 +55,10 @@ impl AppStatus {
 
 pub fn status_rgb(s: AppStatus) -> [u8; 3] {
     match s {
-        AppStatus::Active => [0x56, 0xB4, 0xE9],
-        AppStatus::Paused => [0x9E, 0x9E, 0x9E],
+        AppStatus::Active => [244, 237, 225],
+        AppStatus::Paused | AppStatus::Binding => [138, 132, 123],
         AppStatus::NotReading | AppStatus::Degraded | AppStatus::DeviceBusy => [0xE6, 0x9F, 0x00],
-        AppStatus::Lost | AppStatus::SetupRequired => [0xD5, 0x5E, 0x00],
-        AppStatus::Binding => [0xCC, 0x79, 0xA7],
+        AppStatus::Lost | AppStatus::SetupRequired => [197, 30, 22],
     }
 }
 

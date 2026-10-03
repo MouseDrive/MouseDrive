@@ -1,13 +1,14 @@
 #![deny(unsafe_code)]
 
-use eframe::egui::{Align, Layout, Ui};
+use eframe::egui::{RichText, Ui};
 use mousedrive::config::Config;
 use mousedrive::control::{SetupInfo, Snapshot};
 use mousedrive::status::{AppStatus, Connection, Health};
 
+use super::logo;
 use super::setup::owner_label;
-use super::theme::status_color;
-use super::widgets::{Cx, chip, key_text, pill};
+use super::theme::{self, status_color};
+use super::widgets::{Cx, chip, key_text, output_name, pill};
 use crate::lang::{Lang, Strings, fill};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -95,16 +96,30 @@ pub fn show(
     let action = action_for(status);
     let key = key_text(cx.s, cfg.capture_toggle_key);
     let mut clicked = None;
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
+        logo::lockup(ui, theme::SURFACE);
+        ui.label(
+            RichText::new(concat!("v", env!("CARGO_PKG_VERSION")))
+                .small()
+                .color(theme::MUTED),
+        );
+        ui.add_space(10.0);
         pill(ui, cx.s.status_labels[status.index()], status_color(status));
-        if ui.button(action_label(action, cx.s, &key)).clicked() {
+        let label = action_label(action, cx.s, &key);
+        let response = if action == Action::Start
+            || action == Action::OpenSetup
+            || action == Action::Reconnect
+        {
+            theme::primary_button(ui, label)
+        } else {
+            ui.button(RichText::new(label).strong())
+        };
+        if response.clicked() {
             clicked = Some(action);
         }
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            chips(ui, cx, snap, cfg);
-        });
+        chips(ui, cx, snap, cfg);
     });
-    ui.label(detail(snap, setup, cfg, cx.s, cx.lang));
+    theme::hint(ui, &detail(snap, setup, cfg, cx.s, cx.lang));
     clicked
 }
 
@@ -117,6 +132,5 @@ fn chips(ui: &mut Ui, cx: &Cx, snap: &Snapshot, cfg: &Config) {
         Connection::Connected => cx.pal.ok,
         _ => status_color(snap.status),
     };
-    let id = cfg.vjoy_device_id.to_string();
-    chip(ui, &fill(cx.s.chip_vjoy, &[("id", &id)]), Some(dot));
+    chip(ui, &output_name(cx.s, cfg), Some(dot));
 }

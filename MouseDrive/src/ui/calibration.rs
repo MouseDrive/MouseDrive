@@ -82,6 +82,7 @@ impl Calibration {
         Window::new(cx.s.calib_title)
             .open(&mut open)
             .collapsible(false)
+            .vscroll(true)
             .default_width(380.0)
             .show(ctx, |ui| {
                 let steps = fill(
