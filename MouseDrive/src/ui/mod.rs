@@ -268,6 +268,7 @@ impl App {
             Action::Start => self.shared.send(Command::SetCapture(true)),
             Action::Pause => self.shared.send(Command::SetCapture(false)),
             Action::EnableSink => self.session.config_mut().input_sink_enabled = true,
+            Action::UseAllMice => self.session.config_mut().mouse_device.clear(),
             Action::Details => self.diag.open = !self.diag.open,
         }
     }

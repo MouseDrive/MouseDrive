@@ -76,6 +76,13 @@ before you click *Update*.
   switch no longer slips through when a pedal is pressed in the same moment,
   or while the throttle is still fading out after release; the new curve
   takes over once the throttle reaches zero.
+- **An unplugged selected mouse no longer hands steering to other mice.** If
+  the mouse chosen in *App settings → Mouse* is not connected, MouseDrive
+  reads no mouse and shows *MOUSE NOT READ* with *Use all mice*, instead of
+  quietly reading every mouse (a touchpad could steer). Buttons held at that
+  moment are released. *Use all mice* clears the saved selection. MouseDrive
+  keeps looking for the selected mouse while it is missing, and *Pick the last
+  moved mouse* now works in that state too.
 
 ## [0.6.0] - 2026-09-25
 

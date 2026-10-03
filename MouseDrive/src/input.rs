@@ -1,5 +1,5 @@
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicIsize, AtomicU64, Ordering};
+use std::sync::{Mutex, PoisonError};
 use std::thread::JoinHandle;
 
 use crate::logic::{COUNT_ACCUM_LIMIT, accumulate_counts};
@@ -23,6 +23,8 @@ const RI_MOUSE_RIGHT_BUTTON_DOWN: u16 = 0x0004;
 const RI_MOUSE_RIGHT_BUTTON_UP: u16 = 0x0008;
 const RI_MOUSE_MIDDLE_BUTTON_DOWN: u16 = 0x0010;
 
+const NO_MOUSE: isize = isize::MIN;
+
 pub struct InputState {
     counts_x: AtomicI64,
     left: AtomicBool,
@@ -33,7 +35,6 @@ pub struct InputState {
     ignored_events: AtomicU64,
     last_device: AtomicIsize,
     accepted_device: AtomicIsize,
-    filter_missing: AtomicBool,
     allow_injected: AtomicBool,
     input_sink: AtomicBool,
     filter_path: Mutex<String>,
@@ -51,7 +52,6 @@ impl InputState {
             ignored_events: AtomicU64::new(0),
             last_device: AtomicIsize::new(0),
             accepted_device: AtomicIsize::new(0),
-            filter_missing: AtomicBool::new(false),
             allow_injected: AtomicBool::new(false),
             input_sink: AtomicBool::new(true),
             filter_path: Mutex::new(String::new()),
@@ -70,20 +70,23 @@ impl InputState {
     }
 
     fn process(&self, device: isize, absolute: bool, dx: i32, dy: i32, button_flags: u16) {
+        let moved = !absolute && (dx != 0 || dy != 0);
+        if moved && device != 0 {
+            self.last_device.store(device, Ordering::Relaxed);
+        }
         if !self.accepts(device) {
             self.ignored_events.fetch_add(1, Ordering::Relaxed);
             return;
         }
         if absolute {
             self.absolute_events.fetch_add(1, Ordering::Relaxed);
-        } else if dx != 0 || dy != 0 {
+        } else if moved {
             let _ = self
                 .counts_x
                 .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |acc| {
                     Some(accumulate_counts(acc, dx))
                 });
             self.move_events.fetch_add(1, Ordering::Relaxed);
-            self.last_device.store(device, Ordering::Relaxed);
         }
         self.apply_buttons(button_flags);
     }
@@ -109,21 +112,25 @@ impl InputState {
         let path = self
             .filter_path
             .lock()
-            .map(|p| p.clone())
-            .unwrap_or_default();
-        let (accepted, missing) = if path.is_empty() {
-            (0, false)
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        let accepted = if path.is_empty() {
+            0
         } else {
-            match find(&path) {
-                Some(h) => (h, false),
-                None => (0, true),
-            }
+            find(&path).unwrap_or(NO_MOUSE)
         };
         let previous = self.accepted_device.swap(accepted, Ordering::AcqRel);
-        self.filter_missing.store(missing, Ordering::Release);
         if previous != accepted {
             self.left.store(false, Ordering::Release);
             self.right.store(false, Ordering::Release);
+        }
+    }
+
+    fn filter(&self) -> DeviceFilter {
+        match self.accepted_device.load(Ordering::Acquire) {
+            0 => DeviceFilter::AllMice,
+            NO_MOUSE => DeviceFilter::SelectedMissing,
+            _ => DeviceFilter::Selected,
         }
     }
 }
@@ -236,13 +243,11 @@ pub fn set_device_filter(path: &str) {
 }
 
 pub fn device_filter() -> DeviceFilter {
-    if STATE.filter_missing.load(Ordering::Acquire) {
-        DeviceFilter::SelectedMissing
-    } else if STATE.accepted_device.load(Ordering::Acquire) != 0 {
-        DeviceFilter::Selected
-    } else {
-        DeviceFilter::AllMice
-    }
+    STATE.filter()
+}
+
+pub fn refresh_filter() {
+    sys::refresh_filter();
 }
 
 pub fn request_register() {
@@ -263,9 +268,10 @@ pub fn list_mice() -> Vec<MouseInfo> {
 }
 
 fn store_filter_path(path: &str) -> bool {
-    let Ok(mut current) = STATE.filter_path.lock() else {
-        return false;
-    };
+    let mut current = STATE
+        .filter_path
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     if current.as_str() == path {
         return false;
     }

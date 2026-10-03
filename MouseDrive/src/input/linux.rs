@@ -73,6 +73,10 @@ pub(super) fn filter_changed() {
     WAKE.post(REQ_FILTER);
 }
 
+pub(super) fn refresh_filter() {
+    WAKE.post(REQ_RESCAN);
+}
+
 pub(super) fn registration_ok() -> bool {
     POINTER_OPEN.load(Ordering::Acquire)
 }

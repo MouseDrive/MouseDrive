@@ -38,7 +38,13 @@ pub fn show(ui: &mut Ui, cx: &Cx, cfg: &mut Config, env: Env) {
         ui.label(RichText::new(cx.s.connection_tools).strong());
         mouse(ui, cx, cfg, env.mice, env.calibration);
         if env.snap.device_filter == DeviceFilter::SelectedMissing {
-            ui.label(RichText::new(cx.s.filter_missing).color(ui.visuals().warn_fg_color));
+            ui.horizontal_wrapped(|ui| {
+                let warn = ui.visuals().warn_fg_color;
+                ui.label(RichText::new(cx.s.det_mouse_missing).color(warn));
+                if ui.button(cx.s.act_use_all_mice).clicked() {
+                    cfg.mouse_device.clear();
+                }
+            });
         }
         eframe::egui::CollapsingHeader::new(cx.s.sec_output)
             .id_salt("output_details")
@@ -184,6 +190,7 @@ fn mouse_picker(ui: &mut Ui, cx: &Cx, device: &mut String, mice: &mut Vec<MouseI
             .on_hover_text(&selected);
         if ui.button(s.btn_refresh).clicked() {
             *mice = input::list_mice();
+            input::refresh_filter();
         }
         if ui.button(s.btn_use_last_mouse).clicked()
             && let Some(path) = input::last_moved_device()
@@ -200,7 +207,7 @@ pub fn mouse_label(device: &str, mice: &[MouseInfo], all: &str) -> String {
     }
     mice.iter()
         .find(|m| m.path.eq_ignore_ascii_case(device))
-        .map_or_else(|| device.to_string(), |m| m.label.clone())
+        .map_or_else(|| input::label_for(device, None), |m| m.label.clone())
 }
 
 fn keys(ui: &mut Ui, cx: &Cx, cfg: &mut Config, binder: &mut KeyBinder) {

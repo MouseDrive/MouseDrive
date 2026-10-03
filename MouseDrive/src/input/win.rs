@@ -59,6 +59,10 @@ pub(super) fn filter_changed() {
     post_to_window(WM_APP_FILTER);
 }
 
+pub(super) fn refresh_filter() {
+    post_to_window(WM_APP_FILTER);
+}
+
 pub(super) fn registration_ok() -> bool {
     let hwnd = HWND_VALUE.load(Ordering::Acquire);
     if hwnd == 0 {

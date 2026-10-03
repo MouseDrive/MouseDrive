@@ -20,6 +20,7 @@ pub(crate) trait ControlIo {
     fn device_filter(&self) -> DeviceFilter;
     fn registration_ok(&self) -> bool;
     fn request_register(&mut self);
+    fn refresh_filter(&mut self);
     fn apply_input_settings(&mut self, input_sink: bool, device_path: &str);
 
     fn key_down(&self, vk: i32) -> bool;
@@ -86,6 +87,10 @@ impl ControlIo for SystemIo {
 
     fn request_register(&mut self) {
         input::request_register();
+    }
+
+    fn refresh_filter(&mut self) {
+        input::refresh_filter();
     }
 
     fn apply_input_settings(&mut self, input_sink: bool, device_path: &str) {

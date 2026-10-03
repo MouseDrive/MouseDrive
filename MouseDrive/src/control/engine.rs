@@ -440,14 +440,17 @@ impl Engine {
         };
         self.last_failed_writes = writes.failed_writes;
         self.last_clipped = clipped;
-        self.device_filter = io.device_filter();
         self.registration_ok = io.registration_ok();
         if !self.registration_ok {
             io.request_register();
         }
+        if self.device_filter == DeviceFilter::SelectedMissing {
+            io.refresh_filter();
+        }
     }
 
     fn update_status(&mut self, now_ms: f64, io: &mut impl ControlIo) {
+        self.device_filter = io.device_filter();
         let sink = self.config.input_sink_enabled;
         let inputs = StatusInputs {
             connection: self.conn.connection(),
@@ -456,6 +459,7 @@ impl Engine {
             binding: self.bind.is_some(),
             input_sink_enabled: sink,
             app_foreground: !sink && io.app_foreground(),
+            mouse_missing: self.device_filter == DeviceFilter::SelectedMissing,
             health: self.health,
         };
         self.status = derive_status(&inputs);

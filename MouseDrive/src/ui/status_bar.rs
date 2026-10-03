@@ -3,6 +3,7 @@
 use eframe::egui::{RichText, Ui};
 use mousedrive::config::Config;
 use mousedrive::control::{SetupInfo, Snapshot};
+use mousedrive::input::DeviceFilter;
 use mousedrive::status::{AppStatus, Connection, Health};
 
 use super::logo;
@@ -19,6 +20,7 @@ pub enum Action {
     Start,
     Pause,
     EnableSink,
+    UseAllMice,
     Details,
 }
 
@@ -34,6 +36,18 @@ pub fn action_for(status: AppStatus) -> Action {
     }
 }
 
+pub fn action_for_snapshot(snap: &Snapshot) -> Action {
+    if mouse_missing(snap) {
+        Action::UseAllMice
+    } else {
+        action_for(snap.status)
+    }
+}
+
+fn mouse_missing(snap: &Snapshot) -> bool {
+    snap.status == AppStatus::NotReading && snap.device_filter == DeviceFilter::SelectedMissing
+}
+
 fn action_label(action: Action, s: &Strings, key: &str) -> String {
     match action {
         Action::OpenSetup => s.act_open_setup.into(),
@@ -42,6 +56,7 @@ fn action_label(action: Action, s: &Strings, key: &str) -> String {
         Action::Start => fill(s.act_start, &[("key", key)]),
         Action::Pause => fill(s.act_pause, &[("key", key)]),
         Action::EnableSink => s.act_enable_sink.into(),
+        Action::UseAllMice => s.act_use_all_mice.into(),
         Action::Details => s.act_details.into(),
     }
 }
@@ -76,6 +91,7 @@ pub fn detail(snap: &Snapshot, setup: &SetupInfo, cfg: &Config, s: &Strings, lan
         }
         AppStatus::Binding => s.det_binding.into(),
         AppStatus::Paused => fill(s.det_paused, &[("key", &key)]),
+        AppStatus::NotReading if mouse_missing(snap) => s.det_mouse_missing.into(),
         AppStatus::NotReading => s.det_not_reading.into(),
         AppStatus::Degraded => {
             let reasons = degraded_reasons(&snap.health, s, lang);
@@ -93,7 +109,7 @@ pub fn show(
     cfg: &Config,
 ) -> Option<Action> {
     let status = snap.status;
-    let action = action_for(status);
+    let action = action_for_snapshot(snap);
     let key = key_text(cx.s, cfg.capture_toggle_key);
     let mut clicked = None;
     ui.horizontal_wrapped(|ui| {

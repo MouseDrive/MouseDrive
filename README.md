@@ -63,7 +63,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 - **Automatic reconnect** — Retries when the virtual device is fixed or re-plugged; a vJoy removal notice or repeated write failures switch to CONNECTION LOST and it recovers on its own.
 - **Stuck-button guard** — If Windows swallows a button release (UAC prompt, Ctrl+Alt+Del), the pedal is released automatically.
 - **Diagnostics line** — The output, measured loop rate and p99 at a glance; write failures and reconnects appear only when they happen. *Connection details* adds write counts, clipped events and mouse rate, and *Copy diagnostics* puts a bug-report summary on the clipboard.
-- **Mouse selection** — Read all mice or only one device ("pick the last moved mouse").
+- **Mouse selection** — Read all mice or only one device ("pick the last moved mouse"). If the selected mouse is not found, no mouse is read until it is back, you pick it again or you choose *Use all mice* (this clears the selection).
 
 **App**
 
@@ -242,7 +242,7 @@ Start with the **Setup** window: it checks every requirement and says how to fix
 | "vJoy not enabled" | Check that the vJoy driver is installed and enabled (vJoyConf) |
 | DEVICE BUSY | Another feeder (Joystick Gremlin, SimHub, UCR…) owns the device — close it or choose another vJoy device in **App settings → Output** |
 | CONNECTION LOST | MouseDrive retries every second on its own; after 15 s the status becomes SETUP REQUIRED and it keeps retrying every 2 s. **Reconnect** forces a retry |
-| MOUSE NOT READ | Turn on **Read mouse while the game has focus** in **App settings → Mouse**. On Linux, check **Mouse access** in the Setup window |
+| MOUSE NOT READ | Turn on **Read mouse while the game has focus** in **App settings → Mouse**. If the selected mouse is not found, plug it back in, pick it again or click **Use all mice**. On Linux, check **Mouse access** in the Setup window |
 | Linux: uinput, permission or mouse access row fails | Run the commands from **Setup → Copy setup commands** ([Linux setup](#linux)); they apply within seconds |
 | PAUSED | Press the capture key (default **F8**) |
 | The game binds the wrong axis | Use the **Axis bind helper** |
