@@ -1,6 +1,7 @@
 #![deny(unsafe_code)]
 
-use std::sync::{Arc, Mutex};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const RELEASES_API: &str = "https://api.github.com/repos/MouseDrive/MouseDrive/releases/latest";
@@ -44,6 +45,7 @@ pub enum UpdateStatus {
 
 pub struct UpdateChecker {
     status: Arc<Mutex<UpdateStatus>>,
+    gate: ReplaceGate,
 }
 
 impl Default for UpdateChecker {
@@ -52,10 +54,17 @@ impl Default for UpdateChecker {
     }
 }
 
+impl Drop for UpdateChecker {
+    fn drop(&mut self) {
+        self.gate.close();
+    }
+}
+
 impl UpdateChecker {
     pub fn new() -> Self {
         Self {
             status: Arc::new(Mutex::new(UpdateStatus::Idle)),
+            gate: ReplaceGate::default(),
         }
     }
 
@@ -68,7 +77,10 @@ impl UpdateChecker {
 
     pub fn spawn_check(&self) {
         if let Ok(mut s) = self.status.lock() {
-            if matches!(*s, UpdateStatus::Checking | UpdateStatus::Updating) {
+            if matches!(
+                *s,
+                UpdateStatus::Checking | UpdateStatus::Updating | UpdateStatus::ReadyToRestart
+            ) {
                 return;
             }
             *s = UpdateStatus::Checking;
@@ -96,8 +108,9 @@ impl UpdateChecker {
         }
 
         let status = Arc::clone(&self.status);
+        let gate = self.gate.clone();
         std::thread::spawn(move || {
-            let result = match run_update(&info) {
+            let result = match run_update(&info, &gate) {
                 Ok(()) => UpdateStatus::ReadyToRestart,
                 Err(()) => UpdateStatus::UpdateFailed(info),
             };
@@ -105,6 +118,23 @@ impl UpdateChecker {
                 *s = result;
             }
         });
+    }
+}
+
+#[derive(Clone, Default)]
+struct ReplaceGate(Arc<Mutex<bool>>);
+
+impl ReplaceGate {
+    fn run(&self, replace: impl FnOnce() -> Result<(), ()>) -> Result<(), ()> {
+        let closed = self.0.lock().map_err(|_| ())?;
+        if *closed {
+            return Err(());
+        }
+        replace()
+    }
+
+    fn close(&self) {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = true;
     }
 }
 
@@ -163,7 +193,7 @@ fn parse_release_json(body: &str) -> Option<ReleaseInfo> {
     })
 }
 
-fn run_update(info: &ReleaseInfo) -> Result<(), ()> {
+fn run_update(info: &ReleaseInfo, gate: &ReplaceGate) -> Result<(), ()> {
     let zip_url = info.zip_url.as_ref().ok_or(())?;
     let sums_url = info.sums_url.as_ref().ok_or(())?;
 
@@ -177,11 +207,38 @@ fn run_update(info: &ReleaseInfo) -> Result<(), ()> {
 
     let exe_bytes = extract_exe(&zip_bytes)?;
 
-    let tmp = std::env::temp_dir().join(format!("mousedrive-update{EXE_SUFFIX}"));
-    std::fs::write(&tmp, exe_bytes).map_err(|_| ())?;
-    let replaced = self_replace::self_replace(&tmp);
-    let _ = std::fs::remove_file(&tmp);
-    replaced.map_err(|_| ())
+    gate.run(|| {
+        let tmp = update_temp_path();
+        write_new(&tmp, &exe_bytes).map_err(|_| ())?;
+        let replaced = self_replace::self_replace(&tmp);
+        let _ = std::fs::remove_file(&tmp);
+        replaced.map_err(|_| ())
+    })
+}
+
+fn update_temp_path() -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.subsec_nanos());
+    let name = format!(
+        "mousedrive-update-{}-{nanos}{EXE_SUFFIX}",
+        std::process::id()
+    );
+    std::env::temp_dir().join(name)
+}
+
+fn write_new(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let written = options.open(path)?.write_all(bytes);
+    if written.is_err() {
+        let _ = std::fs::remove_file(path);
+    }
+    written
 }
 
 fn download(url: &str, limit: u64) -> Result<Vec<u8>, ()> {
