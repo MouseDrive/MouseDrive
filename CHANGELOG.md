@@ -62,6 +62,12 @@ before you click *Update*.
   MouseDrive neither restarts nor asks; *Restart now* in the top bar finishes
   the update, otherwise it applies on the next start. Hovering *Update*
   explains what happens.
+- **A failed restart after an update is reported.** If MouseDrive cannot
+  start the new version, a message asks you to start it yourself instead of
+  MouseDrive silently staying closed (on Linux the message is printed to the
+  terminal). The restart uses the path MouseDrive was launched with, which
+  also works on Linux, where the running file is gone once the update is
+  installed.
 - **Unreadable profiles are backed up.** If the active profile cannot be read
   at startup, it is copied to `<name>.toml.<timestamp>.bak` before a later
   Save can overwrite it (once per content, not on every start); a failed

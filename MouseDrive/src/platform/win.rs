@@ -8,6 +8,10 @@ use windows::Win32::System::Threading::{
     ProcessPowerThrottling, SetPriorityClass, SetProcessInformation, SetThreadPriority,
     THREAD_PRIORITY_HIGHEST,
 };
+use windows::Win32::UI::WindowsAndMessaging::{
+    MB_ICONWARNING, MB_OK, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
+};
+use windows::core::PCWSTR;
 
 const TIMERR_NOERROR: u32 = 0;
 
@@ -63,6 +67,20 @@ pub fn raise_process_priority() -> bool {
 pub fn raise_current_thread_priority() -> bool {
     // SAFETY: yalnız çağıran thread'in önceliği.
     unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST) }.is_ok()
+}
+
+pub fn alert(title: &str, body: &str) {
+    let wide = |s: &str| -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() };
+    let (title, body) = (wide(title), wide(body));
+    // SAFETY: iki metin de sıfır sonlu ve çağrı boyunca yaşar; sahip pencere yok.
+    unsafe {
+        MessageBoxW(
+            None,
+            PCWSTR(body.as_ptr()),
+            PCWSTR(title.as_ptr()),
+            MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST,
+        );
+    }
 }
 
 pub fn setup_process() -> TimerResolution {

@@ -96,6 +96,11 @@ pub fn raise_current_thread_priority() -> bool {
     unsafe { libc::setpriority(libc::PRIO_PROCESS, tid, RAISED_NICE) == 0 }
 }
 
+pub fn alert(title: &str, body: &str) {
+    use std::io::Write as _;
+    let _ = writeln!(io::stderr(), "{title}: {body}");
+}
+
 pub fn setup_process() -> ProcessGuard {
     // SAFETY: yalnız çağıran thread'in (ve ondan açılacakların) ayarı değişir.
     let ok = unsafe { libc::prctl(libc::PR_SET_TIMERSLACK, TIMER_SLACK_NS) } == 0;

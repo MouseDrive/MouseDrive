@@ -7,6 +7,7 @@ mod ui;
 #[cfg(feature = "updater")]
 mod update;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
@@ -15,7 +16,7 @@ use eframe::egui::{IconData, ViewportBuilder};
 use mousedrive::control::{self, Options, Shared};
 use mousedrive::{input, log, overlay, platform};
 
-use crate::lang::Lang;
+use crate::lang::{Lang, Strings, strings};
 use crate::ui::{App, Startup, status_labels};
 
 const TITLE: &str = concat!("MouseDrive v", env!("CARGO_PKG_VERSION"));
@@ -65,11 +66,13 @@ fn started(
 
 fn main() -> eframe::Result<()> {
     let args = parse_args(std::env::args().skip(1));
+    let exe = std::env::current_exe();
     let _timer = platform::setup_process();
     log::line(&format!("{TITLE} başlatıldı"));
 
     let startup = Startup::load();
     let cfg = &startup.config;
+    let lang = Lang::from_i32(cfg.language);
     let mut errors = Vec::new();
     let input_thread = input::start(
         cfg.input_sink_enabled,
@@ -79,7 +82,7 @@ fn main() -> eframe::Result<()> {
     let input_thread = started("input", input_thread, &mut errors);
     let overlay_thread = started("overlay", overlay::start(), &mut errors);
     overlay::configure(cfg.overlay_enabled, cfg.overlay_corner);
-    overlay::set_labels(status_labels(Lang::from_i32(cfg.language)));
+    overlay::set_labels(status_labels(lang));
 
     let (shared, commands) = Shared::new(startup.config.clone());
     let options = Options {
@@ -96,7 +99,8 @@ fn main() -> eframe::Result<()> {
     let result = run_window(startup, Arc::clone(&shared), Arc::clone(&restart), errors);
     shutdown(&shared, threads);
     if restart.load(Ordering::Acquire) {
-        relaunch();
+        let lang = Lang::from_i32(shared.config().1.language);
+        relaunch(exe, strings(lang));
     }
     result
 }
@@ -153,9 +157,10 @@ fn join(name: &str, handle: Option<JoinHandle<()>>) {
     }
 }
 
-fn relaunch() {
-    let result = std::env::current_exe().and_then(|exe| std::process::Command::new(exe).spawn());
+fn relaunch(exe: std::io::Result<PathBuf>, s: &Strings) {
+    let result = exe.and_then(|exe| std::process::Command::new(exe).spawn());
     if let Err(e) = result {
         log::line(&format!("yeniden başlatılamadı: {e}"));
+        platform::alert(s.relaunch_failed_title, s.relaunch_failed_body);
     }
 }

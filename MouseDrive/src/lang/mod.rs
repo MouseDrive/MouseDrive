@@ -452,6 +452,8 @@ pub struct Strings {
     pub install_wait_body: &'static str,
     pub btn_keep_open: &'static str,
     pub btn_quit_now: &'static str,
+    pub relaunch_failed_title: &'static str,
+    pub relaunch_failed_body: &'static str,
 
     pub upd_auto_check: &'static str,
     pub upd_check_now: &'static str,

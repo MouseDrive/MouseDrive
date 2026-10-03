@@ -450,6 +450,8 @@ const BASE: Strings = Strings {
     install_wait_body: "MouseDrive, kurulum bitince kendiliğinden kapanacak. Şimdi çıkarsan güncelleme tamamlanmayabilir, ama MouseDrive bozulmaz.",
     btn_keep_open: "Açık kalsın",
     btn_quit_now: "Şimdi çık",
+    relaunch_failed_title: "MouseDrive yeniden başlatılamadı",
+    relaunch_failed_body: "Güncelleme kuruldu ama MouseDrive yeniden başlatılamadı. Lütfen elle başlatın.",
 
     upd_auto_check: "Güncellemeleri otomatik denetle",
     upd_check_now: "Şimdi denetle",

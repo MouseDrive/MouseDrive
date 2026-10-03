@@ -444,6 +444,8 @@ const BASE: Strings = Strings {
     install_wait_body: "MouseDrive will close by itself when the installation finishes. If you quit now, the update may not finish, but MouseDrive will not be damaged.",
     btn_keep_open: "Keep open",
     btn_quit_now: "Quit now",
+    relaunch_failed_title: "MouseDrive could not restart",
+    relaunch_failed_body: "The update is installed, but MouseDrive could not restart. Please start it yourself.",
 
     upd_auto_check: "Check for updates automatically",
     upd_check_now: "Check now",
