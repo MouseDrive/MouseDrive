@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-# MouseDrive (Rust) — v0.6.0
+# MouseDrive (Rust) — v0.7.0
 
 [![CI](https://github.com/MouseDrive/MouseDrive/actions/workflows/ci.yml/badge.svg?branch=linux)](https://github.com/MouseDrive/MouseDrive/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/MouseDrive/MouseDrive)](https://github.com/MouseDrive/MouseDrive/releases/latest)
