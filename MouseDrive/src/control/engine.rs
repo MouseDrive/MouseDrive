@@ -511,7 +511,7 @@ impl Engine {
     ) {
         let s = &self.state;
         let brake_scale = self.config.tuning.brake_max_output;
-        let marker = std::mem::take(&mut self.marker);
+        let marker = self.marker;
         let pushed = shared.push_telemetry(Sample {
             seq: 0,
             t_ms: now_ms,
@@ -530,8 +530,9 @@ impl Engine {
             capture: self.capture,
             marker,
         });
-        if !pushed {
-            self.marker = marker;
+        if pushed {
+            self.marker = Marker::None;
+        } else {
             self.telemetry_dropped += 1;
         }
     }
