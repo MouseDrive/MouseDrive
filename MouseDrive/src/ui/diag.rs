@@ -79,6 +79,7 @@ pub fn report_info(snap: &Snapshot, setup: &SetupInfo, cfg: &Config) -> Diagnost
         failed_writes: snap.writes.failed_writes,
         reconnects: snap.reconnects,
         clipped_ticks: snap.clipped_ticks,
+        telemetry_dropped: snap.telemetry_dropped,
         mouse_rate_hz: snap.mouse_hz,
         absolute_events: snap.absolute_events,
         mouse_filter: format!("{:?}", snap.device_filter),

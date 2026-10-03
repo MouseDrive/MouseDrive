@@ -105,6 +105,7 @@ pub struct DiagnosticsInfo {
     pub failed_writes: u64,
     pub reconnects: u32,
     pub clipped_ticks: u64,
+    pub telemetry_dropped: u64,
     pub mouse_rate_hz: f64,
     pub absolute_events: u64,
     pub mouse_filter: String,
@@ -136,8 +137,8 @@ pub fn format_report(i: &DiagnosticsInfo) -> String {
     }
     let _ = writeln!(
         s,
-        "loop: target {:.0} Hz, measured {:.1} Hz, p50 {:.2} ms, p99 {:.2} ms, max {:.2} ms (n={})",
-        i.target_hz, l.hz, l.p50_ms, l.p99_ms, l.max_ms, l.samples
+        "loop: target {:.0} Hz, measured {:.1} Hz, p50 {:.2} ms, p99 {:.2} ms, max {:.2} ms (n={}), skipped telemetry {}",
+        i.target_hz, l.hz, l.p50_ms, l.p99_ms, l.max_ms, l.samples, i.telemetry_dropped
     );
     let _ = writeln!(
         s,

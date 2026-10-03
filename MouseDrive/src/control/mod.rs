@@ -5,7 +5,7 @@ mod io;
 
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -72,6 +72,7 @@ pub struct Snapshot {
     pub device_filter: DeviceFilter,
     pub registration_ok: bool,
     pub stuck_releases: u64,
+    pub telemetry_dropped: u64,
     pub counts_total: i64,
     pub health: Health,
     pub test_counter: bool,
@@ -105,6 +106,7 @@ impl Default for Snapshot {
             device_filter: DeviceFilter::AllMice,
             registration_ok: false,
             stuck_releases: 0,
+            telemetry_dropped: 0,
             counts_total: 0,
             health: Health::default(),
             test_counter: false,
@@ -224,8 +226,13 @@ impl Shared {
         lock(&self.telemetry).copy_since(after, out);
     }
 
-    fn push_telemetry(&self, sample: Sample) {
-        lock(&self.telemetry).push(sample);
+    fn push_telemetry(&self, sample: Sample) -> bool {
+        match self.telemetry.try_lock() {
+            Ok(mut ring) => ring.push(sample),
+            Err(TryLockError::Poisoned(e)) => e.into_inner().push(sample),
+            Err(TryLockError::WouldBlock) => return false,
+        };
+        true
     }
 
     pub fn set_gui_keyboard(&self, flags: u8) {

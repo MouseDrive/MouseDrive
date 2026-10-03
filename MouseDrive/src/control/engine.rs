@@ -68,6 +68,7 @@ pub(crate) struct Engine {
     guard_elapsed_ms: f64,
     desktop: DesktopWatch,
     stuck_releases: u64,
+    telemetry_dropped: u64,
     conn: ConnectionManager,
     published_setup_seq: u64,
     loop_stats: LoopStats,
@@ -119,6 +120,7 @@ impl Engine {
             guard_elapsed_ms: 0.0,
             desktop: DesktopWatch::default(),
             stuck_releases: 0,
+            telemetry_dropped: 0,
             conn,
             published_setup_seq: 0,
             loop_stats: LoopStats::new(LOOP_STATS_WINDOW),
@@ -509,7 +511,8 @@ impl Engine {
     ) {
         let s = &self.state;
         let brake_scale = self.config.tuning.brake_max_output;
-        shared.push_telemetry(Sample {
+        let marker = std::mem::take(&mut self.marker);
+        let pushed = shared.push_telemetry(Sample {
             seq: 0,
             t_ms: now_ms,
             counts_x: input
@@ -525,8 +528,12 @@ impl Engine {
             brake_out: frame.brake as f32,
             brake_phase: s.brake_phase(),
             capture: self.capture,
-            marker: std::mem::take(&mut self.marker),
+            marker,
         });
+        if !pushed {
+            self.marker = marker;
+            self.telemetry_dropped += 1;
+        }
     }
 
     fn snapshot(&self, frame: &OutputFrame, input: TickInput, now_ms: f64) -> Snapshot {
@@ -557,6 +564,7 @@ impl Engine {
             device_filter: self.device_filter,
             registration_ok: self.registration_ok,
             stuck_releases: self.stuck_releases,
+            telemetry_dropped: self.telemetry_dropped,
             counts_total: self.counts_total,
             health: self.health,
             test_counter: self.options.test_counter,

@@ -43,6 +43,9 @@ before you click *Update*.
 - **Steering deadzone is off by default** and marked experimental; it did not
   help in practice. Profiles still on the old 2 % default are set to 0 once
   after the update, and a notice lists them; other values are kept.
+- **The control loop no longer waits for the input monitor.** While the
+  monitor copies its history, the control thread skips that tick's sample
+  instead of waiting; *Copy diagnostics* shows how many were skipped.
 
 ### Fixed
 
