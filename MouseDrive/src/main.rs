@@ -40,7 +40,11 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Args {
         match arg.as_str() {
             "--test-counter" => parsed.test_counter = true,
             "--allow-injected" => parsed.allow_injected = true,
-            UPDATED_FROM => parsed.updated_from = args.next_if(|v| is_version(v)),
+            UPDATED_FROM => {
+                if let Some(version) = args.next_if(|v| is_version(v)) {
+                    parsed.updated_from = Some(version);
+                }
+            }
             _ => {}
         }
     }
@@ -52,7 +56,7 @@ fn is_version(text: &str) -> bool {
         && text.starts_with(|c: char| c.is_ascii_digit())
         && text
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'))
 }
 
 struct Threads {
@@ -75,7 +79,11 @@ fn started(
 }
 
 fn main() -> eframe::Result<()> {
-    let args = parse_args(std::env::args().skip(1));
+    let args = parse_args(
+        std::env::args_os()
+            .skip(1)
+            .filter_map(|a| a.into_string().ok()),
+    );
     let exe = std::env::current_exe();
     let _timer = platform::setup_process();
     log::line(&format!("{TITLE} başlatıldı"));
