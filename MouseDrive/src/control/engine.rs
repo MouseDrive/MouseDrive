@@ -85,6 +85,8 @@ pub(crate) struct Engine {
     cues: CuePlanner,
     status: AppStatus,
     marker: Marker,
+    corrected_fields: Vec<&'static str>,
+    non_finite_logged: bool,
 }
 
 fn device_id(c: &Config) -> u32 {
@@ -99,8 +101,20 @@ fn buttons_required(c: &Config) -> i32 {
     }
 }
 
+fn validated(mut config: Config, last: &[&'static str]) -> (Config, Vec<&'static str>) {
+    let corrected = config.validate();
+    if !corrected.is_empty() && corrected != last {
+        crate::log::warn(&format!(
+            "geçersiz ayarlar düzeltildi: {}",
+            corrected.join(", ")
+        ));
+    }
+    (config, corrected)
+}
+
 impl Engine {
     pub(crate) fn new(config: Config, epoch: u64, options: Options) -> Self {
+        let (config, corrected_fields) = validated(config, &[]);
         let conn = ConnectionManager::new(device_id(&config), buttons_required(&config));
         Self {
             config,
@@ -137,6 +151,8 @@ impl Engine {
             cues: CuePlanner::default(),
             status: AppStatus::SetupRequired,
             marker: Marker::None,
+            corrected_fields,
+            non_finite_logged: false,
         }
     }
 
@@ -187,12 +203,23 @@ impl Engine {
         if shared.config_epoch() == self.seen_epoch {
             return;
         }
-        let (epoch, config) = shared.config();
+        let (epoch, published) = shared.config_arc();
         self.seen_epoch = epoch;
+        let (config, corrected) = validated(Config::clone(&published), &self.corrected_fields);
+        self.corrected_fields = corrected;
+        if config.thread_interval_ms != self.config.thread_interval_ms {
+            self.reset_loop_stats();
+        }
         self.state
             .reseed_after_config_change(&self.config.tuning, &config.tuning);
         self.config = config;
         self.apply_side_effects(io, now_ms);
+    }
+
+    fn reset_loop_stats(&mut self) {
+        self.loop_stats.clear();
+        self.health_elapsed_ms = 0.0;
+        self.loop_summary = LoopSummary::default();
     }
 
     fn apply_side_effects(&mut self, io: &mut impl ControlIo, now_ms: f64) {
@@ -241,7 +268,7 @@ impl Engine {
 
     fn handle_command(&mut self, command: Command, io: &mut impl ControlIo, now_ms: f64) {
         match command {
-            Command::Reconnect => self.conn.reconnect_now(now_ms),
+            Command::Reconnect => self.conn.recheck(now_ms),
             Command::ResetSteering => self.state.reset_steering(),
             Command::SetCapture(on) => self.set_capture(on, io),
             Command::ToggleCapture => self.toggle_capture(io),
@@ -337,13 +364,13 @@ impl Engine {
         let new_events = counters.move_events.wrapping_sub(self.counters.move_events);
         self.rate.update(new_events, dt_ms);
         self.counters = counters;
+        let (left, right) = io.take_buttons();
         if !self.capture {
             return TickInput {
                 dt_ms,
                 ..TickInput::default()
             };
         }
-        let (left, right) = io.buttons();
         TickInput {
             counts_x: counts,
             throttle_pressed: left,
@@ -394,6 +421,7 @@ impl Engine {
 
     fn next_frame(&mut self, input: TickInput, dt_ms: f64, io: &mut impl ControlIo) -> OutputFrame {
         self.state.tick(&self.config, input);
+        self.repair_state();
         if let Some(frame) = self.bind_frame(dt_ms, io) {
             return frame;
         }
@@ -405,6 +433,13 @@ impl Engine {
         }
         let buttons = self.gear_buttons(io);
         self.state.output_frame(&self.config.tuning, buttons)
+    }
+
+    fn repair_state(&mut self) {
+        if self.state.repair_non_finite() && !self.non_finite_logged {
+            self.non_finite_logged = true;
+            crate::log::warn("mantık durumunda sonlu olmayan değer bulundu; sıfırlandı");
+        }
     }
 
     fn gear_buttons(&self, io: &impl ControlIo) -> u32 {
@@ -478,6 +513,7 @@ impl Engine {
             input_sink_enabled: sink,
             app_foreground: !sink && io.app_foreground(),
             mouse_missing: self.device_filter == DeviceFilter::SelectedMissing,
+            pointer_readable: self.registration_ok,
             health: self.health,
         };
         self.status = derive_status(&inputs);
@@ -567,6 +603,7 @@ impl Engine {
             counts_total: self.counts_total,
             health: self.health,
             test_counter: self.options.test_counter,
+            tick: self.tick_count,
         }
     }
 }

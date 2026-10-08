@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicIsize, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicIsize, AtomicU8, AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::thread::JoinHandle;
 
@@ -25,10 +25,72 @@ const RI_MOUSE_MIDDLE_BUTTON_DOWN: u16 = 0x0010;
 
 const NO_MOUSE: isize = isize::MIN;
 
+const BUTTON_DOWN: u8 = 1;
+const BUTTON_PRESSED: u8 = 2;
+const BUTTON_RELEASED: u8 = 4;
+const BUTTON_REPORTED: u8 = 8;
+
+fn tick_value(bits: u8) -> bool {
+    let down = bits & BUTTON_DOWN != 0;
+    if bits & BUTTON_REPORTED != 0 {
+        down && bits & BUTTON_RELEASED == 0
+    } else {
+        down || bits & BUTTON_PRESSED != 0
+    }
+}
+
+fn after_take(bits: u8) -> u8 {
+    let reported = if tick_value(bits) { BUTTON_REPORTED } else { 0 };
+    (bits & BUTTON_DOWN) | reported
+}
+
+struct ButtonLatch(AtomicU8);
+
+impl ButtonLatch {
+    const fn new() -> Self {
+        Self(AtomicU8::new(0))
+    }
+
+    fn set(&self, down: bool) {
+        let edge = if down {
+            BUTTON_DOWN | BUTTON_PRESSED
+        } else {
+            BUTTON_RELEASED
+        };
+        self.0.update(Ordering::AcqRel, Ordering::Acquire, |bits| {
+            let level = if down { bits } else { bits & !BUTTON_DOWN };
+            level | edge
+        });
+    }
+
+    fn level(&self) -> bool {
+        self.0.load(Ordering::Acquire) & BUTTON_DOWN != 0
+    }
+
+    fn take(&self) -> bool {
+        let previous = self
+            .0
+            .update(Ordering::AcqRel, Ordering::Acquire, after_take);
+        tick_value(previous)
+    }
+
+    fn force_release(&self) -> bool {
+        self.0
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |bits| {
+                (bits & BUTTON_DOWN != 0).then_some(bits & !(BUTTON_DOWN | BUTTON_PRESSED))
+            })
+            .is_ok()
+    }
+
+    fn clear(&self) {
+        self.0.store(0, Ordering::Release);
+    }
+}
+
 pub struct InputState {
     counts_x: AtomicI64,
-    left: AtomicBool,
-    right: AtomicBool,
+    left: ButtonLatch,
+    right: ButtonLatch,
     middle_clicked: AtomicBool,
     move_events: AtomicU64,
     absolute_events: AtomicU64,
@@ -44,8 +106,8 @@ impl InputState {
     pub const fn new() -> Self {
         Self {
             counts_x: AtomicI64::new(0),
-            left: AtomicBool::new(false),
-            right: AtomicBool::new(false),
+            left: ButtonLatch::new(),
+            right: ButtonLatch::new(),
             middle_clicked: AtomicBool::new(false),
             move_events: AtomicU64::new(0),
             absolute_events: AtomicU64::new(0),
@@ -98,9 +160,9 @@ impl InputState {
             (RI_MOUSE_RIGHT_BUTTON_DOWN, &self.right, true),
             (RI_MOUSE_RIGHT_BUTTON_UP, &self.right, false),
         ];
-        for (mask, flag, value) in updates {
+        for (mask, latch, down) in updates {
             if bf & mask != 0 {
-                flag.store(value, Ordering::Release);
+                latch.set(down);
             }
         }
         if bf & RI_MOUSE_MIDDLE_BUTTON_DOWN != 0 {
@@ -121,9 +183,31 @@ impl InputState {
         };
         let previous = self.accepted_device.swap(accepted, Ordering::AcqRel);
         if previous != accepted {
-            self.left.store(false, Ordering::Release);
-            self.right.store(false, Ordering::Release);
+            self.left.clear();
+            self.right.clear();
         }
+    }
+
+    fn buttons(&self) -> (bool, bool) {
+        (self.left.level(), self.right.level())
+    }
+
+    fn take_buttons(&self) -> (bool, bool) {
+        (self.left.take(), self.right.take())
+    }
+
+    fn force_release(&self, button: MouseButton) -> bool {
+        match button {
+            MouseButton::Left => self.left.force_release(),
+            MouseButton::Right => self.right.force_release(),
+        }
+    }
+
+    fn clear(&self) {
+        self.counts_x.store(0, Ordering::Relaxed);
+        self.left.clear();
+        self.right.clear();
+        self.middle_clicked.store(false, Ordering::Release);
     }
 
     fn filter(&self) -> DeviceFilter {
@@ -195,10 +279,11 @@ pub fn take_counts() -> i64 {
 }
 
 pub fn buttons() -> (bool, bool) {
-    (
-        STATE.left.load(Ordering::Acquire),
-        STATE.right.load(Ordering::Acquire),
-    )
+    STATE.buttons()
+}
+
+pub fn take_buttons() -> (bool, bool) {
+    STATE.take_buttons()
 }
 
 pub fn take_middle_click() -> bool {
@@ -206,19 +291,11 @@ pub fn take_middle_click() -> bool {
 }
 
 pub fn force_release(button: MouseButton) -> bool {
-    let flag = match button {
-        MouseButton::Left => &STATE.left,
-        MouseButton::Right => &STATE.right,
-    };
-    flag.compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)
-        .is_ok()
+    STATE.force_release(button)
 }
 
 pub fn clear() {
-    STATE.counts_x.store(0, Ordering::Relaxed);
-    STATE.left.store(false, Ordering::Release);
-    STATE.right.store(false, Ordering::Release);
-    STATE.middle_clicked.store(false, Ordering::Release);
+    STATE.clear();
 }
 
 pub fn counters() -> InputCounters {

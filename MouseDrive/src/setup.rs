@@ -41,6 +41,31 @@ impl AxisCaps {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OpenErrorKind {
+    ModuleMissing,
+    Permission,
+    ReadOnly,
+    Other,
+}
+
+impl OpenErrorKind {
+    pub fn log_label(self) -> &'static str {
+        match self {
+            OpenErrorKind::ModuleMissing => "çekirdek modülü yok",
+            OpenErrorKind::Permission => "izin yok",
+            OpenErrorKind::ReadOnly => "salt okunur dosya sistemi",
+            OpenErrorKind::Other => "beklenmeyen hata",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OpenError {
+    pub kind: OpenErrorKind,
+    pub message: String,
+}
+
 pub const REQUIRED_BUTTONS: i32 = 2;
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -58,6 +83,7 @@ pub struct SetupReport {
     pub axes: Option<AxisCaps>,
     pub buttons: Option<i32>,
     pub acquired: bool,
+    pub open_error: Option<OpenError>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

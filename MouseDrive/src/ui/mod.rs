@@ -53,6 +53,7 @@ use self::notices::{Level, Notice, Notices};
 use self::pacing::FramePacer;
 use self::profiles::ProfilesUi;
 use self::setup::SetupUi;
+use self::status_bar::LoopWatch;
 use self::theme::Palette;
 #[cfg(feature = "updater")]
 use self::update_ui::UpdaterUi;
@@ -112,6 +113,8 @@ pub struct App {
     restart: Arc<AtomicBool>,
     exit_request: Arc<ExitRequest>,
     pacer: FramePacer,
+    loop_watch: LoopWatch,
+    loop_stalled: bool,
 }
 
 impl App {
@@ -160,6 +163,8 @@ impl App {
             restart,
             exit_request,
             pacer: FramePacer::default(),
+            loop_watch: LoopWatch::default(),
+            loop_stalled: false,
         }
     }
 
@@ -203,6 +208,8 @@ impl App {
 
     fn pull(&mut self, now_ms: f64) {
         self.snap = self.shared.snapshot();
+        let interval_ms = f64::from(self.session.config().thread_interval_ms.clamp(1, 20));
+        self.loop_stalled = self.loop_watch.stalled(self.snap.tick, interval_ms, now_ms);
         self.setup.pull(&self.shared);
         self.session.sync_in(&*self.shared);
         self.brake.tick(&self.snap, now_ms);
@@ -265,8 +272,14 @@ impl App {
                     .inner_margin(Margin::symmetric(22, 10)),
             )
             .show(ctx, |ui| {
-                let action =
-                    status_bar::show(ui, cx, &self.snap, &self.setup.info, self.session.config());
+                let action = status_bar::show(
+                    ui,
+                    cx,
+                    &self.snap,
+                    &self.setup.info,
+                    self.session.config(),
+                    self.loop_stalled,
+                );
                 if let Some(action) = action {
                     self.run_status_action(action);
                 }

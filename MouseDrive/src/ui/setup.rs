@@ -10,7 +10,7 @@ use mousedrive::control::{Command, SetupInfo, Shared, Snapshot};
 #[cfg(target_os = "linux")]
 use mousedrive::input;
 use mousedrive::setup::{
-    Check, CheckId, CheckState, DeviceState, Owner, SetupReport, format_version,
+    Check, CheckId, CheckState, DeviceState, OpenErrorKind, Owner, SetupReport, format_version,
 };
 
 use super::notices::Notices;
@@ -69,11 +69,7 @@ fn row(r: &SetupReport, c: Check, s: &Strings) -> Row {
     let failed = c.state == CheckState::Fail;
     let (title, detail, fix) = match c.id {
         CheckId::Dll => dll_parts(r, failed, s),
-        CheckId::Driver => (
-            s.chk_driver.into(),
-            r.driver_detail.clone().unwrap_or_default(),
-            failed.then(|| s.fix_driver.into()),
-        ),
+        CheckId::Driver => driver_parts(r, failed, s),
         CheckId::Versions => versions_parts(r, s),
         CheckId::Device => device_parts(r, failed, s),
         CheckId::Axes => axes_parts(r, failed, s),
@@ -111,6 +107,22 @@ fn dll_parts(r: &SetupReport, failed: bool, s: &Strings) -> Parts {
     (s.chk_dll.into(), detail, fix)
 }
 
+fn open_error_kind(r: &SetupReport) -> Option<OpenErrorKind> {
+    r.open_error.as_ref().map(|e| e.kind)
+}
+
+fn driver_parts(r: &SetupReport, failed: bool, s: &Strings) -> Parts {
+    let fix = match open_error_kind(r) {
+        Some(OpenErrorKind::ReadOnly) => s.fix_read_only,
+        _ => s.fix_driver,
+    };
+    (
+        s.chk_driver.into(),
+        r.driver_detail.clone().unwrap_or_default(),
+        failed.then(|| fix.into()),
+    )
+}
+
 fn versions_parts(r: &SetupReport, s: &Strings) -> Parts {
     let (detail, fix) = match r.versions {
         Some(v) if v.matched => (
@@ -142,7 +154,12 @@ fn device_parts(r: &SetupReport, failed: bool, s: &Strings) -> Parts {
             |o| fill(s.dev_busy, &[("owner", &owner_label(o))]),
         ),
         Some(DeviceState::Missing) => s.dev_missing.to_string(),
-        Some(_) => s.dev_not_acquired.to_string(),
+        Some(_) => match &r.open_error {
+            Some(e) if e.kind == OpenErrorKind::Other => {
+                fill(s.dev_create_failed, &[("error", &e.message)])
+            }
+            _ => s.dev_not_acquired.to_string(),
+        },
         None => String::new(),
     };
     let fix = match r.device_state {

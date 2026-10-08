@@ -105,6 +105,10 @@ pub trait OutputBackend {
     fn write(&mut self, frame: &OutputFrame) -> Result<(), WriteError>;
 
     fn describe(&self) -> String;
+
+    fn survives_reconnect(&self) -> bool {
+        false
+    }
 }
 
 pub const LOST_AFTER_FAILURES: u32 = 25;

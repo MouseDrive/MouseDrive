@@ -36,13 +36,21 @@ impl OneEuro {
         *self = Self::default();
     }
 
+    pub fn seed(&mut self, x: f64) {
+        *self = Self {
+            x_hat: x,
+            dx_hat: 0.0,
+            initialized: true,
+        };
+    }
+
+    pub fn is_finite(&self) -> bool {
+        self.x_hat.is_finite() && self.dx_hat.is_finite()
+    }
+
     pub fn filter(&mut self, x: f64, dt_s: f64, min_cutoff_hz: f64, beta: f64) -> f64 {
         if !self.initialized {
-            *self = Self {
-                x_hat: x,
-                dx_hat: 0.0,
-                initialized: true,
-            };
+            self.seed(x);
             return x;
         }
         if dt_s <= 0.0 {

@@ -2,7 +2,9 @@
 
 use crate::logic::BrakePhase;
 
-pub const DEFAULT_CAPACITY: usize = 250 * 30;
+const FASTEST_RATE_HZ: usize = 1000;
+const KEEP_S: usize = 30;
+pub const DEFAULT_CAPACITY: usize = FASTEST_RATE_HZ * KEEP_S;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Marker {
@@ -94,15 +96,20 @@ impl TelemetryRing {
         self.next_seq.checked_sub(1).filter(|_| self.len > 0)
     }
 
-    pub fn copy_since(&self, after: Option<u64>, out: &mut Vec<Sample>) {
+    pub fn copy_since(&self, after: Option<u64>, out: &mut Vec<Sample>) -> u64 {
         let cap = self.buf.len();
         let oldest_idx = (self.next + cap - self.len) % cap;
         let oldest_seq = self.next_seq - self.len as u64;
-        let skip = match after {
-            None => 0,
-            Some(seq) => (seq + 1).saturating_sub(oldest_seq).min(self.len as u64) as usize,
+        let (skip, lost) = match after {
+            None => (0, 0),
+            Some(seq) => {
+                let wanted = seq.saturating_add(1);
+                let skip = wanted.saturating_sub(oldest_seq).min(self.len as u64) as usize;
+                (skip, oldest_seq.saturating_sub(wanted))
+            }
         };
         out.extend((skip..self.len).map(|i| self.buf[(oldest_idx + i) % cap]));
+        lost
     }
 }
 

@@ -13,6 +13,7 @@ use crate::vjoy as backend;
 pub(crate) trait ControlIo {
     fn take_counts(&mut self) -> i64;
     fn buttons(&self) -> (bool, bool);
+    fn take_buttons(&mut self) -> (bool, bool);
     fn take_middle_click(&mut self) -> bool;
     fn force_release(&mut self, button: MouseButton) -> bool;
     fn clear_input(&mut self);
@@ -58,6 +59,10 @@ impl ControlIo for SystemIo {
 
     fn buttons(&self) -> (bool, bool) {
         input::buttons()
+    }
+
+    fn take_buttons(&mut self) -> (bool, bool) {
+        input::take_buttons()
     }
 
     fn take_middle_click(&mut self) -> bool {

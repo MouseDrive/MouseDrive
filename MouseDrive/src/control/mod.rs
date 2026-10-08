@@ -76,6 +76,7 @@ pub struct Snapshot {
     pub counts_total: i64,
     pub health: Health,
     pub test_counter: bool,
+    pub tick: u64,
 }
 
 impl Default for Snapshot {
@@ -110,6 +111,7 @@ impl Default for Snapshot {
             counts_total: 0,
             health: Health::default(),
             test_counter: false,
+            tick: 0,
         }
     }
 }
@@ -129,7 +131,7 @@ pub struct StaleConfig {
 
 struct ConfigSlot {
     epoch: u64,
-    config: Config,
+    config: Arc<Config>,
 }
 
 pub struct Shared {
@@ -152,7 +154,10 @@ impl Shared {
         let (tx, rx) = mpsc::channel();
         let shared = Self {
             running: AtomicBool::new(true),
-            config: Mutex::new(ConfigSlot { epoch: 0, config }),
+            config: Mutex::new(ConfigSlot {
+                epoch: 0,
+                config: Arc::new(config),
+            }),
             config_epoch: AtomicU64::new(0),
             commands: tx,
             snapshot: Mutex::new(Snapshot::default()),
@@ -168,8 +173,13 @@ impl Shared {
     }
 
     pub fn config(&self) -> (u64, Config) {
+        let (epoch, config) = self.config_arc();
+        (epoch, Config::clone(&config))
+    }
+
+    fn config_arc(&self) -> (u64, Arc<Config>) {
         let slot = lock(&self.config);
-        (slot.epoch, slot.config.clone())
+        (slot.epoch, Arc::clone(&slot.config))
     }
 
     pub fn publish_config(&self, config: &Config, base_epoch: u64) -> Result<u64, StaleConfig> {
@@ -183,12 +193,13 @@ impl Shared {
     }
 
     fn replace_config(&self, config: &Config, base_epoch: u64) -> Option<u64> {
+        let mut replaced = Arc::new(config.clone());
         let mut slot = lock(&self.config);
         if slot.epoch != base_epoch {
             return None;
         }
         slot.epoch += 1;
-        slot.config = config.clone();
+        std::mem::swap(&mut slot.config, &mut replaced);
         self.config_epoch.store(slot.epoch, Ordering::Release);
         Some(slot.epoch)
     }
@@ -204,7 +215,11 @@ impl Shared {
     }
 
     fn store_snapshot(&self, snapshot: Snapshot) {
-        *lock(&self.snapshot) = snapshot;
+        match self.snapshot.try_lock() {
+            Ok(mut slot) => *slot = snapshot,
+            Err(TryLockError::Poisoned(e)) => *e.into_inner() = snapshot,
+            Err(TryLockError::WouldBlock) => {}
+        }
     }
 
     pub fn setup_if_newer(&self, seen: u64) -> Option<SetupInfo> {
@@ -222,8 +237,8 @@ impl Shared {
         };
     }
 
-    pub fn copy_telemetry(&self, after: Option<u64>, out: &mut Vec<Sample>) {
-        lock(&self.telemetry).copy_since(after, out);
+    pub fn copy_telemetry(&self, after: Option<u64>, out: &mut Vec<Sample>) -> u64 {
+        lock(&self.telemetry).copy_since(after, out)
     }
 
     fn push_telemetry(&self, sample: Sample) -> bool {

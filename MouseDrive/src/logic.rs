@@ -126,6 +126,20 @@ pub fn brake_floor(t: &Tuning, steer_abs: f64) -> f64 {
 
 const DEADZONE_MAX_SHARE: f64 = 0.9;
 
+const MODE_BLEND_MS: f64 = 100.0;
+
+const SPRING_STRENGTH_MAX: f64 = 1.0;
+
+#[derive(Clone, Copy, Debug)]
+struct ModeBlend {
+    from: f64,
+    elapsed_ms: f64,
+}
+
+fn all_finite(values: &[f64]) -> bool {
+    values.iter().all(|v| v.is_finite())
+}
+
 fn decay_shape_changed(old: &Tuning, new: &Tuning) -> bool {
     old.brake_posthold_curve != new.brake_posthold_curve
         || old.brake_release_total_ms != new.brake_release_total_ms
@@ -146,7 +160,9 @@ fn apply_deadzone(steering: f64, deadzone: f64, sat_range: f64) -> f64 {
 pub struct MouseDriveState {
     pub steering: f64,
     pub steering_filtered: f64,
+    steering_backlog: f64,
     adaptive: OneEuro,
+    mode_blend: Option<ModeBlend>,
     pub clipped_ticks: u64,
 
     pub throttle: f64,
@@ -163,6 +179,7 @@ pub struct MouseDriveState {
     brake_post_hold_start_ms: f64,
     brake_post_hold_start_value: f64,
     brake_release_hold_start_ms: f64,
+    brake_release_hold_value: f64,
 
     clock_ms: f64,
     pub last_input: TickInput,
@@ -179,7 +196,9 @@ impl MouseDriveState {
         Self {
             steering: 0.0,
             steering_filtered: 0.0,
+            steering_backlog: 0.0,
             adaptive: OneEuro::default(),
+            mode_blend: None,
             clipped_ticks: 0,
             throttle: 0.0,
             throttle_target: 0.0,
@@ -194,6 +213,7 @@ impl MouseDriveState {
             brake_post_hold_start_ms: 0.0,
             brake_post_hold_start_value: 1.0,
             brake_release_hold_start_ms: 0.0,
+            brake_release_hold_value: 0.0,
             clock_ms: 0.0,
             last_input: TickInput::default(),
         }
@@ -222,10 +242,63 @@ impl MouseDriveState {
     pub fn reset_steering(&mut self) {
         self.steering = 0.0;
         self.steering_filtered = 0.0;
+        self.steering_backlog = 0.0;
         self.adaptive.reset();
+        self.mode_blend = None;
+    }
+
+    pub fn repair_non_finite(&mut self) -> bool {
+        let steering_ok =
+            all_finite(&[self.steering, self.steering_filtered, self.steering_backlog])
+                && self.adaptive.is_finite()
+                && self
+                    .mode_blend
+                    .is_none_or(|b| b.from.is_finite() && b.elapsed_ms.is_finite());
+        if !steering_ok {
+            self.reset_steering();
+        }
+        let throttle_ok = all_finite(&[self.throttle, self.throttle_target, self.throttle_phase]);
+        if !throttle_ok {
+            self.reset_throttle();
+        }
+        let brake_ok = all_finite(&[
+            self.brake,
+            self.brake_floor,
+            self.brake_apply_phase,
+            self.brake_posthold_phase,
+            self.brake_post_hold_start_value,
+            self.brake_release_hold_value,
+        ]);
+        if !brake_ok {
+            self.reset_brake();
+        }
+        !(steering_ok && throttle_ok && brake_ok)
+    }
+
+    fn reset_throttle(&mut self) {
+        let fresh = Self::new();
+        self.throttle = fresh.throttle;
+        self.throttle_target = fresh.throttle_target;
+        self.throttle_phase = fresh.throttle_phase;
+        self.throttle_dir = fresh.throttle_dir;
+    }
+
+    fn reset_brake(&mut self) {
+        let fresh = Self::new();
+        self.brake = fresh.brake;
+        self.brake_state = fresh.brake_state;
+        self.brake_floor = fresh.brake_floor;
+        self.brake_apply_phase = fresh.brake_apply_phase;
+        self.brake_posthold_phase = fresh.brake_posthold_phase;
+        self.brake_post_hold_start_value = fresh.brake_post_hold_start_value;
+        self.brake_release_hold_value = fresh.brake_release_hold_value;
     }
 
     pub fn reseed_after_config_change(&mut self, old: &Tuning, new: &Tuning) {
+        self.reseed_steering_mode(
+            SteeringMode::from_i32(old.steering_mode),
+            SteeringMode::from_i32(new.steering_mode),
+        );
         if old.throttle_rise_curve != new.throttle_rise_curve
             || old.throttle_fall_curve != new.throttle_fall_curve
         {
@@ -238,6 +311,19 @@ impl MouseDriveState {
             self.brake_post_hold_start_ms = self.clock_ms;
             self.brake_post_hold_start_value = self.brake;
         }
+    }
+
+    fn reseed_steering_mode(&mut self, from: SteeringMode, to: SteeringMode) {
+        if from == to {
+            return;
+        }
+        if to == SteeringMode::Adaptive {
+            self.adaptive.seed(self.steering_filtered / STEERING_RANGE);
+        }
+        self.mode_blend = (to != SteeringMode::Filtered).then_some(ModeBlend {
+            from: self.steering_filtered,
+            elapsed_ms: 0.0,
+        });
     }
 
     pub fn pedals_idle(&self, input: &TickInput) -> bool {
@@ -281,13 +367,14 @@ impl MouseDriveState {
 
     fn update_steering(&mut self, config: &Config, counts: i64, dt_ms: f64) {
         let t = &config.tuning;
+        let sat_range = STEERING_RANGE * t.steering_saturation.clamp(0.5, 1.0);
         let raw = counts as f64 * config.mouse_dpi_scale * t.mouse_sens;
-        let delta = self.limit_rate(raw, config.steering_max_rate_pct_s, dt_ms);
+        let delta = self.limit_rate(raw, config.steering_max_rate_pct_s, dt_ms, sat_range);
         self.steering = (self.steering + delta).clamp(-STEERING_RANGE, STEERING_RANGE);
 
         let mode = SteeringMode::from_i32(t.steering_mode);
         if mode == SteeringMode::SelfCenter {
-            let k = t.steering_spring_strength.clamp(0.0, 5.0);
+            let k = t.steering_spring_strength.clamp(0.0, SPRING_STRENGTH_MAX);
             let factor = (1.0 - (-k * (dt_ms / 1000.0)).exp()).clamp(0.0, 1.0);
             self.steering -= self.steering * factor;
         }
@@ -295,23 +382,41 @@ impl MouseDriveState {
             self.adaptive.reset();
         }
 
-        let sat_range = STEERING_RANGE * t.steering_saturation.clamp(0.5, 1.0);
         self.steering = self.steering.clamp(-sat_range, sat_range);
         let target = apply_deadzone(self.steering, t.steering_deadzone, sat_range);
         let shaped = self.shape_steering(mode, t, target, sat_range, dt_ms);
-        self.steering_filtered = shaped.clamp(-sat_range, sat_range);
+        let blended = self.blend_mode_switch(shaped, dt_ms);
+        self.steering_filtered = blended.clamp(-sat_range, sat_range);
     }
 
-    fn limit_rate(&mut self, delta: f64, max_rate_pct_s: f64, dt_ms: f64) -> f64 {
+    fn limit_rate(&mut self, delta: f64, max_rate_pct_s: f64, dt_ms: f64, sat_range: f64) -> f64 {
         if max_rate_pct_s <= 0.0 {
-            return delta;
+            return delta + std::mem::take(&mut self.steering_backlog);
         }
+        let goal = (self.steering + self.steering_backlog + delta).clamp(-sat_range, sat_range);
+        let wanted = goal - self.steering;
         let max_step = max_rate_pct_s / 100.0 * STEERING_RANGE * dt_ms.max(0.0) / 1000.0;
-        if delta.abs() <= max_step {
-            return delta;
+        if wanted.abs() <= max_step {
+            self.steering_backlog = 0.0;
+            return wanted;
         }
         self.clipped_ticks += 1;
-        delta.signum() * max_step
+        let step = wanted.signum() * max_step;
+        self.steering_backlog = wanted - step;
+        step
+    }
+
+    fn blend_mode_switch(&mut self, shaped: f64, dt_ms: f64) -> f64 {
+        let Some(blend) = self.mode_blend.as_mut() else {
+            return shaped;
+        };
+        blend.elapsed_ms += dt_ms;
+        let k = blend.elapsed_ms / MODE_BLEND_MS;
+        if k >= 1.0 {
+            self.mode_blend = None;
+            return shaped;
+        }
+        blend.from + (shaped - blend.from) * k
     }
 
     fn shape_steering(
@@ -444,7 +549,8 @@ impl MouseDriveState {
             } else {
                 self.brake_state = BrakeState::ReleaseHold;
                 self.brake_release_hold_start_ms = now;
-                self.brake = t.brake_after_release_hold_ratio;
+                self.brake_release_hold_value = self.brake.min(t.brake_after_release_hold_ratio);
+                self.brake = self.brake_release_hold_value;
             }
         }
 
@@ -452,7 +558,7 @@ impl MouseDriveState {
             if now - self.brake_release_hold_start_ms >= f64::from(t.brake_after_release_hold_ms) {
                 self.brake_state = BrakeState::Release;
             } else {
-                self.brake = t.brake_after_release_hold_ratio;
+                self.brake = self.brake_release_hold_value;
             }
         }
 

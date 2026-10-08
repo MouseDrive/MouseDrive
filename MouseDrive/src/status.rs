@@ -95,6 +95,7 @@ pub struct StatusInputs {
     pub input_sink_enabled: bool,
     pub app_foreground: bool,
     pub mouse_missing: bool,
+    pub pointer_readable: bool,
     pub health: Health,
 }
 
@@ -111,6 +112,8 @@ pub fn derive_status(i: &StatusInputs) -> AppStatus {
         AppStatus::Binding
     } else if !i.capture_enabled {
         AppStatus::Paused
+    } else if !i.pointer_readable {
+        AppStatus::SetupRequired
     } else if i.mouse_missing || (!i.input_sink_enabled && !i.app_foreground) {
         AppStatus::NotReading
     } else if i.health.degraded() {

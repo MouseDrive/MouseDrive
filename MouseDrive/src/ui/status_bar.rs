@@ -12,6 +12,10 @@ use super::theme::{self, status_color};
 use super::widgets::{Cx, chip, key_text, output_name, pill};
 use crate::lang::{Lang, Strings, fill};
 
+const STALL_INTERVALS: f64 = 5.0;
+const STALL_MIN_MS: f64 = 250.0;
+const STALL_STARTUP_MS: f64 = 3000.0;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     OpenSetup,
@@ -48,6 +52,37 @@ fn mouse_missing(snap: &Snapshot) -> bool {
     snap.status == AppStatus::NotReading && snap.device_filter == DeviceFilter::SelectedMissing
 }
 
+fn pointer_unreadable(snap: &Snapshot, setup: &SetupInfo) -> bool {
+    snap.status == AppStatus::SetupRequired
+        && snap.connection == Connection::Connected
+        && !snap.registration_ok
+        && !setup.report.has_failures()
+}
+
+fn stall_after_ms(tick: u64, interval_ms: f64) -> f64 {
+    if tick == 0 {
+        return STALL_STARTUP_MS;
+    }
+    (STALL_INTERVALS * interval_ms).max(STALL_MIN_MS)
+}
+
+#[derive(Default)]
+pub struct LoopWatch {
+    last_tick: Option<u64>,
+    changed_at_ms: f64,
+}
+
+impl LoopWatch {
+    pub fn stalled(&mut self, tick: u64, interval_ms: f64, now_ms: f64) -> bool {
+        if self.last_tick != Some(tick) {
+            self.last_tick = Some(tick);
+            self.changed_at_ms = now_ms;
+            return false;
+        }
+        now_ms - self.changed_at_ms > stall_after_ms(tick, interval_ms)
+    }
+}
+
 fn action_label(action: Action, s: &Strings, key: &str) -> String {
     match action {
         Action::OpenSetup => s.act_open_setup.into(),
@@ -75,6 +110,7 @@ pub fn degraded_reasons(h: &Health, s: &Strings, lang: Lang) -> String {
 pub fn detail(snap: &Snapshot, setup: &SetupInfo, cfg: &Config, s: &Strings, lang: Lang) -> String {
     let key = key_text(s, cfg.capture_toggle_key);
     match snap.status {
+        AppStatus::SetupRequired if pointer_unreadable(snap, setup) => s.det_no_pointer.into(),
         AppStatus::SetupRequired => s.det_setup_required.into(),
         AppStatus::DeviceBusy => {
             let owner = setup
@@ -107,6 +143,7 @@ pub fn show(
     snap: &Snapshot,
     setup: &SetupInfo,
     cfg: &Config,
+    stalled: bool,
 ) -> Option<Action> {
     let status = snap.status;
     let action = action_for_snapshot(snap);
@@ -135,7 +172,12 @@ pub fn show(
         }
         chips(ui, cx, snap, cfg);
     });
-    theme::hint(ui, &detail(snap, setup, cfg, cx.s, cx.lang));
+    if stalled {
+        let warn = ui.visuals().warn_fg_color;
+        ui.label(RichText::new(cx.s.det_loop_stalled).color(warn));
+    } else {
+        theme::hint(ui, &detail(snap, setup, cfg, cx.s, cx.lang));
+    }
     clicked
 }
 

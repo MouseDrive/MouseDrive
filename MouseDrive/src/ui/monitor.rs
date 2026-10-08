@@ -6,6 +6,7 @@ use mousedrive::control::Shared;
 use mousedrive::telemetry::{Marker, Sample, decimate_min_max};
 
 use super::widgets::Cx;
+use crate::lang::fill;
 
 const KEEP_MS: f64 = 30_000.0;
 pub const WINDOWS_S: [u32; 3] = [5, 10, 30];
@@ -18,6 +19,8 @@ const RMB_Y: (f64, f64) = (-1.65, -1.45);
 pub struct Monitor {
     samples: Vec<Sample>,
     last_seq: Option<u64>,
+    lost: u64,
+    gap_end_seq: Option<u64>,
     frozen: bool,
     window_s: u32,
 }
@@ -27,6 +30,8 @@ impl Default for Monitor {
         Self {
             samples: Vec::new(),
             last_seq: None,
+            lost: 0,
+            gap_end_seq: None,
             frozen: false,
             window_s: DEFAULT_WINDOW_S,
         }
@@ -38,8 +43,19 @@ impl Monitor {
         if self.frozen {
             return;
         }
-        shared.copy_telemetry(self.last_seq, &mut self.samples);
+        let lost = shared.copy_telemetry(self.last_seq, &mut self.samples);
+        self.record_loss(lost);
         self.settle();
+    }
+
+    fn record_loss(&mut self, lost: u64) {
+        if lost == 0 {
+            return;
+        }
+        self.lost = self.lost.saturating_add(lost);
+        self.gap_end_seq = self
+            .last_seq
+            .map(|seq| seq.saturating_add(lost).saturating_add(1));
     }
 
     fn settle(&mut self) {
@@ -50,6 +66,18 @@ impl Monitor {
         let oldest = last.t_ms - KEEP_MS;
         let cut = self.samples.partition_point(|s| s.t_ms < oldest);
         self.samples.drain(..cut);
+        self.forget_gap_out_of_view();
+    }
+
+    fn forget_gap_out_of_view(&mut self) {
+        let first = self.samples.first().map(|s| s.seq);
+        if self
+            .gap_end_seq
+            .is_some_and(|end| first.is_some_and(|seq| seq >= end))
+        {
+            self.lost = 0;
+            self.gap_end_seq = None;
+        }
     }
 
     pub fn release(&mut self) {
@@ -58,6 +86,8 @@ impl Monitor {
         }
         self.samples = Vec::new();
         self.last_seq = None;
+        self.lost = 0;
+        self.gap_end_seq = None;
     }
 
     pub fn show(&mut self, ui: &mut Ui, cx: &Cx) {
@@ -108,6 +138,10 @@ impl Monitor {
                 ui.selectable_value(&mut self.window_s, w, format!("{w} {}", cx.s.axis_seconds));
             }
         });
+        if self.lost > 0 {
+            let text = fill(cx.s.monitor_lost, &[("n", &self.lost.to_string())]);
+            super::theme::hint(ui, &text);
+        }
     }
 }
 

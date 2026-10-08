@@ -1,5 +1,5 @@
 use crate::output::{OutputBackend, OutputFrame, WriteHealth};
-use crate::setup::SetupReport;
+use crate::setup::{OpenError, OpenErrorKind, SetupReport};
 use crate::status::Connection;
 
 use super::io::ControlIo;
@@ -94,6 +94,23 @@ impl ConnectionManager {
         }
     }
 
+    pub(crate) fn recheck(&mut self, now_ms: f64) {
+        if self.keeps_device() {
+            self.report_seq += 1;
+            return;
+        }
+        self.reconnect_now(now_ms);
+    }
+
+    fn keeps_device(&self) -> bool {
+        self.connection == Connection::Connected
+            && self.writes.consecutive_failures == 0
+            && self
+                .backend
+                .as_ref()
+                .is_some_and(|backend| backend.survives_reconnect())
+    }
+
     pub(crate) fn reconnect_now(&mut self, now_ms: f64) {
         self.drop_backend();
         self.connection = Connection::SetupRequired;
@@ -180,10 +197,29 @@ impl ConnectionManager {
     }
 
     fn set_report(&mut self, report: SetupReport) {
-        if report != self.report {
-            self.setup_failures = report.has_failures();
-            self.report = report;
-            self.report_seq += 1;
+        if report == self.report {
+            return;
         }
+        if report.open_error != self.report.open_error
+            && let Some(error) = &report.open_error
+        {
+            log_open_error(error);
+        }
+        self.setup_failures = report.has_failures();
+        self.report = report;
+        self.report_seq += 1;
+    }
+}
+
+fn log_open_error(error: &OpenError) {
+    let line = format!(
+        "sanal direksiyon oluşturulamadı ({}): {}",
+        error.kind.log_label(),
+        error.message
+    );
+    if error.kind == OpenErrorKind::Other {
+        crate::log::error(&line);
+    } else {
+        crate::log::warn(&line);
     }
 }

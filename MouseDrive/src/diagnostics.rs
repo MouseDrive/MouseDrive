@@ -29,6 +29,11 @@ impl LoopStats {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.idx = 0;
+        self.filled = 0;
+    }
+
     pub fn record(&mut self, period_ms: f64) {
         if !period_ms.is_finite() || period_ms < 0.0 {
             return;
