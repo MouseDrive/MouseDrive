@@ -1845,6 +1845,7 @@ dependencies = [
  "flate2",
  "libc",
  "libloading",
+ "log",
  "self-replace",
  "serde",
  "serde_json",
@@ -1852,6 +1853,7 @@ dependencies = [
  "toml 0.8.23",
  "ureq",
  "windows 0.61.3",
+ "winit",
  "winresource",
  "zip",
 ]

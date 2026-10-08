@@ -135,7 +135,7 @@ fn thread_main(wake: RawFd) {
         fds.extend(reader.devices.iter().map(|d| pollfd(d.dev.as_raw_fd())));
         let timeout = reader.poll_timeout(Instant::now());
         if let Err(e) = platform::poll(&mut fds, timeout) {
-            crate::log::line(&format!("evdev poll başarısız: {e}"));
+            crate::log::error(&format!("evdev poll başarısız: {e}"));
             break;
         }
         if fds[0].revents != 0 {

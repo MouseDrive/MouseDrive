@@ -7,6 +7,7 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 libloading = "0.8"
+log = "0.4"
 eframe = "0.31"
 egui = "0.31"
 egui_plot = "0.31"
@@ -41,6 +42,7 @@ windows = { version = "0.61", features = [
 [target.'cfg(target_os = "linux")'.dependencies]
 evdev = "0.13"
 libc = "0.2"
+winit = { version = "0.30", default-features = false, features = ["wayland", "x11"] }
 
 [features]
 default = ["updater"]
@@ -50,7 +52,7 @@ updater = ["dep:flate2", "dep:self-replace", "dep:serde_json", "dep:sha2", "dep:
 opt-level = 3
 lto = true
 codegen-units = 1
-strip = true
+strip = "debuginfo"
 panic = "abort"
 
 [build-dependencies]

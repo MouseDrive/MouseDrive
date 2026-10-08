@@ -99,6 +99,11 @@ pub fn updated_notice(s: &Strings, from: &str) -> Option<Notice> {
     })
 }
 
+pub fn crashed_notice(s: &Strings, report: &Path) -> Notice {
+    let text = fill(s.notice_crashed, &[("path", &report.display().to_string())]);
+    Notice::new(Level::Warn, text)
+}
+
 fn error_notice(template: &str, error: &dyn std::fmt::Display) -> Notice {
     Notice::new(
         Level::Error,

@@ -388,7 +388,7 @@ impl Engine {
     fn release_stuck(&mut self, button: MouseButton, reason: &str, io: &mut impl ControlIo) {
         if io.force_release(button) {
             self.stuck_releases += 1;
-            crate::log::line(&format!("takılı buton bırakıldı ({reason}): {button:?}"));
+            crate::log::warn(&format!("takılı buton bırakıldı ({reason}): {button:?}"));
         }
     }
 

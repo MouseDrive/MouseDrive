@@ -434,6 +434,7 @@ pub struct Strings {
     pub notice_backup: &'static str,
     pub notice_updated: &'static str,
     pub link_changelog: &'static str,
+    pub notice_crashed: &'static str,
     pub notice_deadzone_reset: &'static str,
     pub err_deadzone_reset: &'static str,
     pub err_config_save: &'static str,
@@ -454,6 +455,8 @@ pub struct Strings {
     pub btn_quit_now: &'static str,
     pub relaunch_failed_title: &'static str,
     pub relaunch_failed_body: &'static str,
+    pub cli_help: &'static str,
+    pub cli_unknown_arg: &'static str,
 
     pub upd_auto_check: &'static str,
     pub upd_check_now: &'static str,

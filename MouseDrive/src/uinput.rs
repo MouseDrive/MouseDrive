@@ -70,7 +70,7 @@ fn apply_error(report: &mut SetupReport, e: &io::Error) {
         report.driver_detail = Some(e.to_string());
         return;
     }
-    crate::log::line(&format!("sanal direksiyon oluşturulamadı: {e}"));
+    crate::log::error(&format!("sanal direksiyon oluşturulamadı: {e}"));
     report.driver_enabled = Some(true);
     report.device_state = Some(DeviceState::Unknown);
 }

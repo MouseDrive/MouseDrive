@@ -432,6 +432,7 @@ const BASE: Strings = Strings {
     notice_backup: "Bozuk dosyanın yedeği: {path}",
     notice_updated: "MouseDrive v{from} sürümünden v{to} sürümüne güncellendi.",
     link_changelog: "Yenilikler",
+    notice_crashed: "Önceki oturum beklenmedik şekilde kapandı. Ayrıntılar {path} dosyasına kaydedildi; hata bildirirken bu dosyayı ekleyin.",
     notice_deadzone_reset: "Direksiyon ölü bölgesi artık varsayılan olarak kapalı. Eski %2 varsayılanında kalan profillerde 0'a çekildi: {names}",
     err_deadzone_reset: "“{name}” profilinde ölü bölge kapatılamadı: {error}. Direksiyon sayfasında 0'a çekin.",
     err_config_save: "Ayarlar kaydedilemedi: {error}",
@@ -452,6 +453,19 @@ const BASE: Strings = Strings {
     btn_quit_now: "Şimdi çık",
     relaunch_failed_title: "MouseDrive yeniden başlatılamadı",
     relaunch_failed_body: "Güncelleme kuruldu ama MouseDrive yeniden başlatılamadı. Lütfen elle başlatın.",
+    cli_help:
+        "MouseDrive {version}: fare ve klavye girdisini yarış oyunları için sanal bir direksiyona dönüştürür.
+
+Kullanım: mousedrive [seçenekler]
+
+Seçenekler:
+  -h, --help            Bu yardımı gösterir ve çıkar
+  -V, --version         Sürümü gösterir ve çıkar
+      --x11             Linux: pencereyi X11 üzerinden açar (Wayland'de XWayland)
+      --wayland         Linux: pencereyi Wayland üzerinden açar
+      --test-counter    Eksenlere fare girdisi yerine test deseni yazar
+      --allow-injected  Bir fare seçiliyken yazılımın ürettiği girdiyi de kabul eder",
+    cli_unknown_arg: "mousedrive: bilinmeyen seçenek yok sayıldı: {arg} (bkz. --help)",
 
     upd_auto_check: "Güncellemeleri otomatik denetle",
     upd_check_now: "Şimdi denetle",

@@ -23,7 +23,7 @@ mod throttle_tab;
 mod update_ui;
 mod widgets;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
@@ -54,7 +54,7 @@ use self::widgets::Cx;
 use crate::lang::{Lang, fill, strings};
 
 pub use self::startup::Startup;
-use self::startup::updated_notice;
+use self::startup::{crashed_notice, updated_notice};
 
 const FAST_REPAINT: Duration = Duration::from_millis(16);
 const SLOW_REPAINT: Duration = Duration::from_millis(250);
@@ -158,6 +158,11 @@ impl App {
         if let Some(notice) = updated_notice(s, from) {
             self.notices.push(notice);
         }
+    }
+
+    pub fn report_crash(&mut self, report: &Path) {
+        let s = self.cx().s;
+        self.notices.push(crashed_notice(s, report));
     }
 
     fn cx(&self) -> Cx {
@@ -537,7 +542,7 @@ impl eframe::App for App {
             return;
         };
         if let Err(e) = config.save_to_file(path) {
-            log::line(&format!("çıkışta config yazılamadı: {e}"));
+            log::error(&format!("çıkışta config yazılamadı: {e}"));
         }
     }
 }

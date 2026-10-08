@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 #![deny(unsafe_code)]
 
+mod cli;
 mod curve_editor;
 mod lang;
 mod ui;
@@ -14,8 +15,9 @@ use std::thread::JoinHandle;
 
 use eframe::egui::{IconData, ViewportBuilder};
 use mousedrive::control::{self, Options, Shared};
-use mousedrive::{input, log, platform};
+use mousedrive::{crash, input, log, platform};
 
+use crate::cli::{Action, Backend, UPDATED_FROM};
 use crate::lang::{Lang, Strings, strings};
 use crate::ui::{App, Startup};
 
@@ -23,45 +25,17 @@ const TITLE: &str = concat!("MouseDrive v", env!("CARGO_PKG_VERSION"));
 const WINDOW_SIZE: [f32; 2] = [1180.0, 680.0];
 const WINDOW_MIN_SIZE: [f32; 2] = [760.0, 560.0];
 const APP_ICON_PNG: &[u8] = include_bytes!("../image/icon.png");
-const UPDATED_FROM: &str = "--updated-from";
-const MAX_VERSION_LEN: usize = 32;
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct Args {
-    test_counter: bool,
-    allow_injected: bool,
-    updated_from: Option<String>,
-}
-
-fn parse_args(args: impl IntoIterator<Item = String>) -> Args {
-    let mut args = args.into_iter().peekable();
-    let mut parsed = Args::default();
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--test-counter" => parsed.test_counter = true,
-            "--allow-injected" => parsed.allow_injected = true,
-            UPDATED_FROM => {
-                if let Some(version) = args.next_if(|v| is_version(v)) {
-                    parsed.updated_from = Some(version);
-                }
-            }
-            _ => {}
-        }
-    }
-    parsed
-}
-
-fn is_version(text: &str) -> bool {
-    text.len() <= MAX_VERSION_LEN
-        && text.starts_with(|c: char| c.is_ascii_digit())
-        && text
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'))
-}
 
 struct Threads {
     control: Option<JoinHandle<()>>,
     input: Option<JoinHandle<()>>,
+}
+
+struct Launch {
+    errors: Vec<String>,
+    updated_from: Option<String>,
+    previous_crash: Option<PathBuf>,
+    backend: Option<Backend>,
 }
 
 fn started(
@@ -71,21 +45,27 @@ fn started(
 ) -> Option<JoinHandle<()>> {
     result
         .map_err(|e| {
-            log::line(&format!("{name} thread'i başlatılamadı: {e}"));
+            log::error(&format!("{name} thread'i başlatılamadı: {e}"));
             errors.push(format!("{name}: {e}"));
         })
         .ok()
 }
 
 fn main() -> eframe::Result<()> {
-    let args = parse_args(
+    let args = cli::parse(
         std::env::args_os()
             .skip(1)
-            .filter_map(|a| a.into_string().ok()),
+            .map(|a| a.to_string_lossy().into_owned()),
     );
+    let cli_strings = strings(cli::env_lang());
+    match args.action {
+        Action::Help => return print_stdout(&cli::help_text(cli_strings)),
+        Action::Version => return print_stdout(&cli::version_line()),
+        Action::Run => {}
+    }
+    let previous_crash = start_logging(&args.unknown, cli_strings);
     let exe = std::env::current_exe();
     let _timer = platform::setup_process();
-    log::line(&format!("{TITLE} başlatıldı"));
 
     let startup = Startup::load();
     let cfg = &startup.config;
@@ -108,27 +88,64 @@ fn main() -> eframe::Result<()> {
     };
 
     let restart = Arc::new(AtomicBool::new(false));
-    let result = run_window(
-        startup,
-        Arc::clone(&shared),
-        Arc::clone(&restart),
+    let launch = Launch {
         errors,
-        args.updated_from,
-    );
+        updated_from: args.updated_from,
+        previous_crash,
+        backend: args.backend,
+    };
+    let result = run_window(startup, Arc::clone(&shared), Arc::clone(&restart), launch);
     shutdown(&shared, threads);
     if restart.load(Ordering::Acquire) {
         let lang = Lang::from_i32(shared.config().1.language);
         relaunch(exe, strings(lang));
     }
+    log::flush();
     result
+}
+
+fn start_logging(unknown: &[String], s: &Strings) -> Option<PathBuf> {
+    for arg in unknown {
+        print_stderr(&cli::unknown_warning(s, arg));
+    }
+    log::move_legacy_log();
+    crash::install_panic_hook();
+    log::install_bridge();
+    log::info(&format!(
+        "{TITLE} başlatıldı ({})",
+        platform::environment_summary()
+    ));
+    for arg in unknown {
+        log::warn(&format!(
+            "bilinmeyen komut satırı seçeneği yok sayıldı: {arg}"
+        ));
+    }
+    let previous_crash = crash::take_previous_crash();
+    if let Some(report) = &previous_crash {
+        log::warn(&format!(
+            "önceki oturum beklenmedik şekilde kapanmış; rapor: {}",
+            report.display()
+        ));
+    }
+    previous_crash
+}
+
+fn print_stdout(text: &str) -> eframe::Result<()> {
+    use std::io::Write as _;
+    let _ = writeln!(std::io::stdout().lock(), "{text}");
+    Ok(())
+}
+
+fn print_stderr(text: &str) {
+    use std::io::Write as _;
+    let _ = writeln!(std::io::stderr().lock(), "{text}");
 }
 
 fn run_window(
     startup: Startup,
     shared: Arc<Shared>,
     restart: Arc<AtomicBool>,
-    errors: Vec<String>,
-    updated_from: Option<String>,
+    launch: Launch,
 ) -> eframe::Result<()> {
     let viewport = ViewportBuilder::default()
         .with_inner_size(WINDOW_SIZE)
@@ -139,6 +156,7 @@ fn run_window(
             Some(icon) => viewport.with_icon(icon),
             None => viewport,
         },
+        event_loop_builder: event_loop_hook(launch.backend),
         ..Default::default()
     };
     eframe::run_native(
@@ -146,18 +164,52 @@ fn run_window(
         options,
         Box::new(move |_cc| {
             let mut app = App::new(startup, shared, restart);
-            errors.iter().for_each(|e| app.report_launch_error(e));
-            if let Some(from) = &updated_from {
+            launch
+                .errors
+                .iter()
+                .for_each(|e| app.report_launch_error(e));
+            if let Some(from) = &launch.updated_from {
                 app.report_update(from);
+            }
+            if let Some(report) = &launch.previous_crash {
+                app.report_crash(report);
             }
             Ok(Box::new(app))
         }),
     )
+    .inspect_err(|e| log::error(&format!("pencere açılamadı: {e}")))
+}
+
+#[cfg(target_os = "linux")]
+fn event_loop_hook(backend: Option<Backend>) -> Option<eframe::EventLoopBuilderHook> {
+    use winit::platform::wayland::EventLoopBuilderExtWayland as _;
+    use winit::platform::x11::EventLoopBuilderExtX11 as _;
+    let backend = backend?;
+    log::info(&format!("pencere arka ucu zorlandı: {}", backend.label()));
+    Some(Box::new(move |builder| match backend {
+        Backend::X11 => {
+            builder.with_x11();
+        }
+        Backend::Wayland => {
+            builder.with_wayland();
+        }
+    }))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn event_loop_hook(backend: Option<Backend>) -> Option<eframe::EventLoopBuilderHook> {
+    if let Some(backend) = backend {
+        log::warn(&format!(
+            "--{} yalnız Linux'ta geçerli; yok sayıldı",
+            backend.label()
+        ));
+    }
+    None
 }
 
 fn app_icon() -> Option<IconData> {
     eframe::icon_data::from_png_bytes(APP_ICON_PNG)
-        .map_err(|e| log::line(&format!("uygulama ikonu okunamadı: {e}")))
+        .map_err(|e| log::warn(&format!("uygulama ikonu okunamadı: {e}")))
         .ok()
 }
 
@@ -166,14 +218,15 @@ fn shutdown(shared: &Shared, threads: Threads) {
     join("control", threads.control);
     input::stop();
     join("input", threads.input);
-    log::line("kapatıldı");
+    log::info("kapatıldı");
+    log::flush();
 }
 
 fn join(name: &str, handle: Option<JoinHandle<()>>) {
     if let Some(handle) = handle
         && handle.join().is_err()
     {
-        log::line(&format!("{name} thread'i panikle bitti"));
+        log::error(&format!("{name} thread'i panikle bitti"));
     }
 }
 
@@ -184,7 +237,7 @@ fn relaunch(exe: std::io::Result<PathBuf>, s: &Strings) {
             .spawn()
     });
     if let Err(e) = result {
-        log::line(&format!("yeniden başlatılamadı: {e}"));
+        log::error(&format!("yeniden başlatılamadı: {e}"));
         platform::alert(s.relaunch_failed_title, s.relaunch_failed_body);
     }
 }

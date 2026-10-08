@@ -112,12 +112,12 @@ fn thread_main() {
         let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
     }
     let Some(hwnd) = create_window() else {
-        crate::log::line("Raw Input penceresi oluşturulamadı");
+        crate::log::error("Raw Input penceresi oluşturulamadı");
         return;
     };
     HWND_VALUE.store(hwnd.0 as isize, Ordering::Release);
     if !register(hwnd) {
-        crate::log::line("Raw Input kaydı başarısız");
+        crate::log::error("Raw Input kaydı başarısız");
     }
     resolve_filter();
 

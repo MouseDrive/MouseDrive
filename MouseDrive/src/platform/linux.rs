@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 const TIMER_SLACK_NS: libc::c_ulong = 1_000;
 const RAISED_NICE: libc::c_int = -10;
+const OS_RELEASE_FILES: [&str; 2] = ["/etc/os-release", "/usr/lib/os-release"];
 
 pub(crate) struct Wake {
     fd: OnceLock<OwnedFd>,
@@ -105,7 +106,61 @@ pub fn setup_process() -> ProcessGuard {
     // SAFETY: yalnız çağıran thread'in (ve ondan açılacakların) ayarı değişir.
     let ok = unsafe { libc::prctl(libc::PR_SET_TIMERSLACK, TIMER_SLACK_NS) } == 0;
     if !ok {
-        crate::log::line("zamanlayıcı gevşekliği ayarlanamadı");
+        crate::log::warn("zamanlayıcı gevşekliği ayarlanamadı");
     }
     ProcessGuard
+}
+
+pub fn environment_summary() -> String {
+    let distro = OS_RELEASE_FILES
+        .iter()
+        .find_map(|path| std::fs::read_to_string(path).ok())
+        .and_then(|text| os_release_name(&text));
+    let kernel = std::fs::read_to_string("/proc/sys/kernel/osrelease").ok();
+    let session = std::env::var("XDG_SESSION_TYPE").ok();
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP").ok();
+    describe_environment(
+        distro.as_deref(),
+        kernel.as_deref().map(str::trim),
+        session.as_deref(),
+        desktop.as_deref(),
+        env_set("WAYLAND_DISPLAY") || env_set("WAYLAND_SOCKET"),
+        env_set("DISPLAY"),
+    )
+}
+
+fn env_set(name: &str) -> bool {
+    std::env::var_os(name).is_some_and(|v| !v.is_empty())
+}
+
+fn os_release_name(text: &str) -> Option<String> {
+    let field = |key: &str| {
+        text.lines()
+            .find_map(|line| line.trim().strip_prefix(key)?.strip_prefix('='))
+            .map(|value| value.trim().trim_matches(['"', '\'']).trim().to_owned())
+            .filter(|value| !value.is_empty())
+    };
+    field("PRETTY_NAME").or_else(|| field("NAME"))
+}
+
+fn describe_environment(
+    distro: Option<&str>,
+    kernel: Option<&str>,
+    session: Option<&str>,
+    desktop: Option<&str>,
+    wayland: bool,
+    x11: bool,
+) -> String {
+    let known = |v: Option<&str>| v.filter(|s| !s.is_empty()).unwrap_or("?").to_owned();
+    let present = |set: bool| if set { "var" } else { "yok" };
+    format!(
+        "linux {}, dağıtım {}, çekirdek {}, oturum {}, masaüstü {}, wayland {}, x11 {}",
+        std::env::consts::ARCH,
+        known(distro),
+        known(kernel),
+        known(session),
+        known(desktop),
+        present(wayland),
+        present(x11)
+    )
 }

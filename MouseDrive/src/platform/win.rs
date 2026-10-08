@@ -85,10 +85,14 @@ pub fn alert(title: &str, body: &str) {
 
 pub fn setup_process() -> TimerResolution {
     if !raise_process_priority() {
-        crate::log::line("HIGH öncelik sınıfı ayarlanamadı");
+        crate::log::warn("HIGH öncelik sınıfı ayarlanamadı");
     }
     if !opt_out_power_throttling() {
-        crate::log::line("güç kısıtlaması opt-out başarısız (eski Windows?)");
+        crate::log::warn("güç kısıtlaması opt-out başarısız (eski Windows?)");
     }
     TimerResolution::request_1ms()
+}
+
+pub fn environment_summary() -> String {
+    format!("windows {}", std::env::consts::ARCH)
 }

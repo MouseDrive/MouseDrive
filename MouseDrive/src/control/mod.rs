@@ -195,7 +195,7 @@ impl Shared {
 
     pub fn send(&self, command: Command) {
         if self.commands.send(command).is_err() {
-            crate::log::line("kontrol thread'i kapalı; komut atlandı");
+            crate::log::warn("kontrol thread'i kapalı; komut atlandı");
         }
     }
 
@@ -261,7 +261,7 @@ pub fn spawn(
         .name("control".into())
         .spawn(move || {
             if !crate::platform::raise_current_thread_priority() {
-                crate::log::line("kontrol thread'i önceliği yükseltilemedi");
+                crate::log::warn("kontrol thread'i önceliği yükseltilemedi");
             }
             let mut io = io::SystemIo::new();
             let (epoch, config) = shared.config();

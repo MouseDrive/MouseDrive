@@ -136,7 +136,7 @@ impl SoundPlayer {
         }
         match self.tx.try_send((cue, volume_pct)) {
             Ok(()) | Err(TrySendError::Full(_)) => {}
-            Err(TrySendError::Disconnected(_)) => crate::log::line("ses thread'i kapalı"),
+            Err(TrySendError::Disconnected(_)) => crate::log::warn("ses thread'i kapalı"),
         }
     }
 }

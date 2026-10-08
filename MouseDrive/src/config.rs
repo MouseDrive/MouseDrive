@@ -481,9 +481,10 @@ fn user_config_dir() -> Option<PathBuf> {
 
 #[cfg(target_os = "linux")]
 fn user_config_dir() -> Option<PathBuf> {
-    let base = xdg_config_home(
+    let base = xdg_base_dir(
         std::env::var_os("XDG_CONFIG_HOME"),
         std::env::var_os("HOME"),
+        ".config",
     )?;
     let dir = base.join("mousedrive");
     let _ = std::fs::create_dir_all(&dir);
@@ -491,24 +492,31 @@ fn user_config_dir() -> Option<PathBuf> {
 }
 
 #[cfg(target_os = "linux")]
-fn xdg_config_home(
+pub(crate) fn xdg_base_dir(
     xdg: Option<std::ffi::OsString>,
     home: Option<std::ffi::OsString>,
+    fallback: &str,
 ) -> Option<PathBuf> {
     xdg.map(PathBuf::from)
         .filter(|p| p.is_absolute())
         .or_else(|| {
             home.map(PathBuf::from)
                 .filter(|p| p.is_absolute())
-                .map(|h| h.join(".config"))
+                .map(|h| h.join(fallback))
         })
 }
 
+pub fn portable_dir() -> Option<PathBuf> {
+    let portable = portable_config_path()?;
+    if !portable.exists() {
+        return None;
+    }
+    portable.parent().map(Path::to_path_buf)
+}
+
 pub fn config_path() -> Option<PathBuf> {
-    if let Some(portable) = portable_config_path()
-        && portable.exists()
-    {
-        return Some(portable);
+    if let Some(dir) = portable_dir() {
+        return Some(dir.join("config.toml"));
     }
     user_config_dir().map(|d| d.join("config.toml"))
 }

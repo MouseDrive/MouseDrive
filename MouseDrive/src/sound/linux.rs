@@ -40,7 +40,7 @@ impl Output {
         let lib = match unsafe { Library::new(LIBRARY) } {
             Ok(lib) => lib,
             Err(e) => {
-                crate::log::line(&format!("ALSA yüklenemedi, sesler kapalı: {e}"));
+                crate::log::warn(&format!("ALSA yüklenemedi, sesler kapalı: {e}"));
                 return None;
             }
         };

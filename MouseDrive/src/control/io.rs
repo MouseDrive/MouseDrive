@@ -45,7 +45,7 @@ pub(crate) struct SystemIo {
 impl SystemIo {
     pub(crate) fn new() -> Self {
         let sound = SoundPlayer::start()
-            .inspect_err(|e| crate::log::line(&format!("ses thread'i başlatılamadı: {e}")))
+            .inspect_err(|e| crate::log::warn(&format!("ses thread'i başlatılamadı: {e}")))
             .ok();
         Self { sound }
     }

@@ -166,7 +166,7 @@ impl ConnectionManager {
     }
 
     fn mark_lost(&mut self, now_ms: f64) {
-        crate::log::line("çıkış bağlantısı koptu; yeniden denenecek");
+        crate::log::warn("çıkış bağlantısı koptu; yeniden denenecek");
         self.drop_backend();
         self.connection = Connection::Lost;
         self.lost_since_ms = Some(now_ms);
