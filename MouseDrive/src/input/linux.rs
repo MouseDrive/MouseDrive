@@ -118,6 +118,9 @@ pub fn denied_mice() -> Vec<String> {
 
 fn thread_main(wake: RawFd) {
     let _ = crate::platform::raise_current_thread_priority();
+    if !crate::platform::tighten_timer_slack() {
+        crate::log::warn("girdi thread'i zamanlayıcı gevşekliği ayarlanamadı");
+    }
     let mut notify = watch_dev_input();
     let mut reader = Reader::default();
     reader.rescan();

@@ -470,7 +470,7 @@ fn shell_appdata_dir() -> Option<PathBuf> {
 }
 
 #[cfg(windows)]
-fn user_config_dir() -> Option<PathBuf> {
+pub(crate) fn user_config_dir() -> Option<PathBuf> {
     let base = std::env::var_os("APPDATA")
         .map(PathBuf::from)
         .or_else(shell_appdata_dir)?;
@@ -480,7 +480,7 @@ fn user_config_dir() -> Option<PathBuf> {
 }
 
 #[cfg(target_os = "linux")]
-fn user_config_dir() -> Option<PathBuf> {
+pub(crate) fn user_config_dir() -> Option<PathBuf> {
     let base = xdg_base_dir(
         std::env::var_os("XDG_CONFIG_HOME"),
         std::env::var_os("HOME"),

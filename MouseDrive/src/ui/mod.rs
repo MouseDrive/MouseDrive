@@ -12,6 +12,7 @@ mod logo;
 mod monitor;
 mod notices;
 mod overview;
+mod pacing;
 mod profiles;
 mod setup;
 mod startup;
@@ -32,10 +33,14 @@ use eframe::egui::{
     Align, CentralPanel, Context, Frame, Key, Layout, Margin, Modifiers, RichText, ScrollArea,
     SidePanel, TopBottomPanel, Ui,
 };
+#[cfg(target_os = "linux")]
+use eframe::egui::{OpenUrl, OutputCommand};
 use mousedrive::control::{Command, KEYBOARD_BINDING, KEYBOARD_TEXT, Shared, Snapshot};
 use mousedrive::input::{self, MouseInfo};
 use mousedrive::keys::{self, VK_ESCAPE};
 use mousedrive::log;
+#[cfg(target_os = "linux")]
+use mousedrive::platform;
 use mousedrive::session::Session;
 
 use self::brake_tab::BrakeTab;
@@ -45,6 +50,7 @@ use self::diag::DiagUi;
 use self::keybind::{KeyBinder, Outcome};
 use self::monitor::Monitor;
 use self::notices::{Level, Notice, Notices};
+use self::pacing::FramePacer;
 use self::profiles::ProfilesUi;
 use self::setup::SetupUi;
 use self::theme::Palette;
@@ -52,6 +58,7 @@ use self::theme::Palette;
 use self::update_ui::UpdaterUi;
 use self::widgets::Cx;
 use crate::lang::{Lang, fill, strings};
+use crate::lifecycle::ExitRequest;
 
 pub use self::startup::Startup;
 use self::startup::{crashed_notice, updated_notice};
@@ -62,6 +69,8 @@ const NAV_WIDTH: f32 = 176.0;
 const WIDE_LAYOUT: f32 = 980.0;
 const LIVE_PANEL_WIDTH: f32 = 260.0;
 const LIVE_PANEL_ROOM: f32 = 800.0;
+#[cfg(target_os = "linux")]
+const URL_OPENER: &str = "xdg-open";
 
 pub fn keyboard_flags(text: bool, binding: bool) -> u8 {
     let text = if text { KEYBOARD_TEXT } else { 0 };
@@ -101,11 +110,18 @@ pub struct App {
     #[cfg(feature = "updater")]
     updater: UpdaterUi,
     restart: Arc<AtomicBool>,
+    exit_request: Arc<ExitRequest>,
+    pacer: FramePacer,
 }
 
 impl App {
     #[cfg_attr(not(feature = "updater"), allow(unused_mut))]
-    pub fn new(startup: Startup, shared: Arc<Shared>, restart: Arc<AtomicBool>) -> Self {
+    pub fn new(
+        startup: Startup,
+        shared: Arc<Shared>,
+        restart: Arc<AtomicBool>,
+        exit_request: Arc<ExitRequest>,
+    ) -> Self {
         let Startup {
             config,
             disk,
@@ -142,7 +158,13 @@ impl App {
             #[cfg(feature = "updater")]
             updater,
             restart,
+            exit_request,
+            pacer: FramePacer::default(),
         }
+    }
+
+    pub fn limit_frame_rate(&mut self) {
+        self.pacer = FramePacer::new(FAST_REPAINT);
     }
 
     pub fn report_launch_error(&mut self, error: &str) {
@@ -517,8 +539,50 @@ impl App {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn open_requested_urls(ctx: &Context, opener: &str) {
+    let unopened: Vec<OutputCommand> = take_url_commands(ctx)
+        .into_iter()
+        .filter(|open| !open_url(opener, &open.url))
+        .map(OutputCommand::OpenUrl)
+        .collect();
+    if !unopened.is_empty() {
+        ctx.output_mut(|output| output.commands.extend(unopened));
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn open_url(opener: &str, url: &str) -> bool {
+    match platform::spawn_reaped(platform::child_command(opener).arg(url)) {
+        Ok(_) => true,
+        Err(e) => {
+            log::warn(&format!(
+                "bağlantı {opener} ile açılamadı ({url}): {e}; eframe'e bırakıldı"
+            ));
+            false
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn take_url_commands(ctx: &Context) -> Vec<OpenUrl> {
+    ctx.output_mut(|output| {
+        let (urls, rest) = std::mem::take(&mut output.commands)
+            .into_iter()
+            .partition::<Vec<_>, _>(|command| matches!(command, OutputCommand::OpenUrl(_)));
+        output.commands = rest;
+        urls.into_iter()
+            .filter_map(|command| match command {
+                OutputCommand::OpenUrl(open) => Some(open),
+                _ => None,
+            })
+            .collect()
+    })
+}
+
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        self.pacer.pace();
         let now_ms = self.now_ms();
         #[cfg(target_os = "linux")]
         mousedrive::keys::set_app_focused(ctx.input(|i| i.viewport().focused).unwrap_or(true));
@@ -533,6 +597,8 @@ impl eframe::App for App {
         self.handle_close(ctx, &cx);
         #[cfg(feature = "updater")]
         self.handle_restart(ctx);
+        #[cfg(target_os = "linux")]
+        open_requested_urls(ctx, URL_OPENER);
         self.schedule_repaint(ctx);
     }
 

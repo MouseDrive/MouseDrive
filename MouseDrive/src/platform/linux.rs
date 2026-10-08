@@ -1,3 +1,7 @@
+mod alert;
+mod desktop;
+mod signals;
+
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::sync::OnceLock;
@@ -6,6 +10,12 @@ use std::sync::atomic::{AtomicU8, Ordering};
 const TIMER_SLACK_NS: libc::c_ulong = 1_000;
 const RAISED_NICE: libc::c_int = -10;
 const OS_RELEASE_FILES: [&str; 2] = ["/etc/os-release", "/usr/lib/os-release"];
+
+pub use alert::alert;
+pub use desktop::{
+    DisplayEnv, MissingLibs, WindowSystem, display_env, missing_runtime_libs, running_as_root,
+};
+pub use signals::{SignalEvent, child_command, signal_name, watch_termination_signals};
 
 pub(crate) struct Wake {
     fd: OnceLock<OwnedFd>,
@@ -97,17 +107,12 @@ pub fn raise_current_thread_priority() -> bool {
     unsafe { libc::setpriority(libc::PRIO_PROCESS, tid, RAISED_NICE) == 0 }
 }
 
-pub fn alert(title: &str, body: &str) {
-    use std::io::Write as _;
-    let _ = writeln!(io::stderr(), "{title}: {body}");
+pub fn tighten_timer_slack() -> bool {
+    // SAFETY: PR_SET_TIMERSLACK yalnız çağıran thread'in gevşekliğini değiştirir.
+    unsafe { libc::prctl(libc::PR_SET_TIMERSLACK, TIMER_SLACK_NS) == 0 }
 }
 
 pub fn setup_process() -> ProcessGuard {
-    // SAFETY: yalnız çağıran thread'in (ve ondan açılacakların) ayarı değişir.
-    let ok = unsafe { libc::prctl(libc::PR_SET_TIMERSLACK, TIMER_SLACK_NS) } == 0;
-    if !ok {
-        crate::log::warn("zamanlayıcı gevşekliği ayarlanamadı");
-    }
     ProcessGuard
 }
 

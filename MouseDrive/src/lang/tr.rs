@@ -464,8 +464,22 @@ Seçenekler:
       --x11             Linux: pencereyi X11 üzerinden açar (Wayland'de XWayland)
       --wayland         Linux: pencereyi Wayland üzerinden açar
       --test-counter    Eksenlere fare girdisi yerine test deseni yazar
-      --allow-injected  Bir fare seçiliyken yazılımın ürettiği girdiyi de kabul eder",
+      --allow-injected  Bir fare seçiliyken yazılımın ürettiği girdiyi de kabul eder
+      --allow-root      Linux: root olarak çalıştırıldığında da açılır (önerilmez)",
     cli_unknown_arg: "mousedrive: bilinmeyen seçenek yok sayıldı: {arg} (bkz. --help)",
+    instance_running_title: "MouseDrive zaten çalışıyor",
+    instance_running_body: "Kullanıcınız için başka bir MouseDrive zaten çalışıyor. O pencereyi kullanın ya da MouseDrive'ı yeniden başlatmadan önce onu kapatın.",
+    root_refused_title: "MouseDrive'ı root olarak çalıştırmayın",
+    root_refused_body: "MouseDrive'ı sudo kullanmadan, normal kullanıcınızla başlatın. Root olarak çalışırsa kullanıcınızın sonradan değiştiremeyeceği ayar ve günlük dosyaları oluşturabilir. Fare erişimi için bunun yerine Kurulum → “Kurulum komutlarını kopyala” ile alınan komutları bir kez çalıştırın. Yine de root olarak başlatmak için --allow-root ekleyin.",
+    no_display_title: "Masaüstü oturumu bulunamadı",
+    no_display_body: "MouseDrive grafik bir masaüstü gerektirir, ancak ne WAYLAND_DISPLAY ne de DISPLAY tanımlı. Onu metin konsolundan ya da SSH üzerinden değil, masaüstü oturumunuzdan başlatın.",
+    missing_libs_title: "Sistem kütüphaneleri eksik",
+    missing_libs_body: "MouseDrive penceresini açamıyor, çünkü şu sistem kütüphaneleri eksik: {libs}
+
+Paket yöneticinizle kurun:
+Debian/Ubuntu: sudo apt install {debian}
+Fedora: sudo dnf install {fedora}
+Arch: sudo pacman -S {arch}",
 
     upd_auto_check: "Güncellemeleri otomatik denetle",
     upd_check_now: "Şimdi denetle",

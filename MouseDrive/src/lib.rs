@@ -7,6 +7,7 @@ pub mod diagnostics;
 pub mod ergonomics;
 pub mod fsutil;
 pub mod input;
+pub mod instance;
 pub mod keys;
 pub mod log;
 pub mod logic;

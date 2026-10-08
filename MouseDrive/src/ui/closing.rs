@@ -27,6 +27,10 @@ fn close_decision(exit_on_close: bool, dirty: bool, waiting: bool) -> CloseDecis
     }
 }
 
+fn external_quit(requested: bool, allowed: bool, waiting: bool) -> bool {
+    requested && !allowed && !waiting
+}
+
 #[cfg(feature = "updater")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RestartDecision {
@@ -88,9 +92,11 @@ pub(super) struct CloseState {
 impl App {
     pub(super) fn handle_close(&mut self, ctx: &Context, cx: &Cx) {
         let requested = ctx.input(|i| i.viewport().close_requested());
-        if requested && !self.close.allowed {
+        let waiting = self.close.after_install.is_some();
+        if external_quit(self.exit_request.requested(), self.close.allowed, waiting) {
+            self.quit(ctx, CloseReason::Quit);
+        } else if requested && !self.close.allowed {
             let cfg = self.session.config();
-            let waiting = self.close.after_install.is_some();
             match close_decision(cfg.exit_on_close, self.session.is_dirty(), waiting) {
                 CloseDecision::Quit => self.quit(ctx, CloseReason::Quit),
                 CloseDecision::Minimize => {

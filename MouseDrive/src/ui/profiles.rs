@@ -4,6 +4,7 @@ use eframe::egui::{
     Button, ComboBox, Context, Id, Key, Modal, RichText, TextEdit, Ui, WidgetInfo, WidgetType,
 };
 use mousedrive::control::{AbSide, Command, Shared, Snapshot};
+use mousedrive::platform;
 use mousedrive::profiles::{MAX_NAME_LEN, NameError, ProfileError, ProfileStore, validate_name};
 use mousedrive::session::Session;
 
@@ -206,9 +207,7 @@ impl ProfilesUi {
             return;
         };
         let result = std::fs::create_dir_all(store.dir()).and_then(|()| {
-            std::process::Command::new(FILE_MANAGER)
-                .arg(store.dir())
-                .spawn()
+            platform::spawn_reaped(platform::child_command(FILE_MANAGER).arg(store.dir()))
         });
         if let Err(e) = result {
             notices.error(fill(s.err_launch, &[("error", &e.to_string())]));

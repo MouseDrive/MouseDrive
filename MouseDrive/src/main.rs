@@ -4,6 +4,8 @@
 mod cli;
 mod curve_editor;
 mod lang;
+mod lifecycle;
+mod preflight;
 mod ui;
 #[cfg(feature = "updater")]
 mod update;
@@ -15,10 +17,12 @@ use std::thread::JoinHandle;
 
 use eframe::egui::{IconData, ViewportBuilder};
 use mousedrive::control::{self, Options, Shared};
-use mousedrive::{crash, input, log, platform};
+use mousedrive::instance::InstanceLock;
+use mousedrive::{config, crash, input, log, platform};
 
 use crate::cli::{Action, Backend, UPDATED_FROM};
 use crate::lang::{Lang, Strings, strings};
+use crate::lifecycle::ExitRequest;
 use crate::ui::{App, Startup};
 
 const TITLE: &str = concat!("MouseDrive v", env!("CARGO_PKG_VERSION"));
@@ -31,11 +35,17 @@ struct Threads {
     input: Option<JoinHandle<()>>,
 }
 
+struct Prepared {
+    exit_request: Arc<ExitRequest>,
+    instance: Option<InstanceLock>,
+}
+
 struct Launch {
     errors: Vec<String>,
     updated_from: Option<String>,
     previous_crash: Option<PathBuf>,
     backend: Option<Backend>,
+    exit_request: Arc<ExitRequest>,
 }
 
 fn started(
@@ -57,13 +67,20 @@ fn main() -> eframe::Result<()> {
             .skip(1)
             .map(|a| a.to_string_lossy().into_owned()),
     );
-    let cli_strings = strings(cli::env_lang());
+    let cli_lang = cli::env_lang();
     match args.action {
-        Action::Help => return print_stdout(&cli::help_text(cli_strings)),
+        Action::Help => return print_stdout(&cli::help_text(strings(cli_lang))),
         Action::Version => return print_stdout(&cli::version_line()),
         Action::Run => {}
     }
-    let previous_crash = start_logging(&args.unknown, cli_strings);
+    let Some(Prepared {
+        exit_request,
+        instance,
+    }) = prepare(&args, cli_lang)
+    else {
+        return Ok(());
+    };
+    let previous_crash = take_previous_crash();
     let exe = std::env::current_exe();
     let _timer = platform::setup_process();
 
@@ -93,18 +110,64 @@ fn main() -> eframe::Result<()> {
         updated_from: args.updated_from,
         previous_crash,
         backend: args.backend,
+        exit_request: Arc::clone(&exit_request),
     };
     let result = run_window(startup, Arc::clone(&shared), Arc::clone(&restart), launch);
     shutdown(&shared, threads);
+    drop(instance);
     if restart.load(Ordering::Acquire) {
         let lang = Lang::from_i32(shared.config().1.language);
         relaunch(exe, strings(lang));
+    }
+    #[cfg(target_os = "linux")]
+    if result.is_err() {
+        lifecycle::retry_on_x11(args.backend, exit_request.requested());
     }
     log::flush();
     result
 }
 
-fn start_logging(unknown: &[String], s: &Strings) -> Option<PathBuf> {
+fn prepare(args: &cli::Args, cli_lang: Lang) -> Option<Prepared> {
+    let cli_strings = strings(cli_lang);
+    #[cfg(target_os = "linux")]
+    if let Err(refusal) = preflight::check_root(args, cli_strings) {
+        preflight::refuse(refusal);
+    }
+    let exit_request = ExitRequest::new();
+    let signals = lifecycle::watch_signals(&exit_request);
+    start_logging(&args.unknown, cli_strings);
+    if let Err(e) = signals {
+        log::warn(&format!("kapatma sinyalleri izlenemiyor: {e}"));
+    }
+    let lang = preflight::configured_lang(config::config_path().as_deref(), cli_lang);
+    let instance = preflight::run(args, x11_retry(), strings(lang))
+        .unwrap_or_else(|refusal| preflight::refuse(refusal));
+    if exit_request.requested() {
+        log::info("başlatma sırasında kapatma istendi");
+        log::flush();
+        return None;
+    }
+    Some(Prepared {
+        exit_request,
+        instance,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn x11_retry() -> bool {
+    let retried = lifecycle::is_x11_retry();
+    if retried {
+        log::info("Wayland penceresi açılamadığı için X11 ile yeniden başlatıldı");
+    }
+    retried
+}
+
+#[cfg(not(target_os = "linux"))]
+fn x11_retry() -> bool {
+    false
+}
+
+fn start_logging(unknown: &[String], s: &Strings) {
     for arg in unknown {
         print_stderr(&cli::unknown_warning(s, arg));
     }
@@ -120,6 +183,9 @@ fn start_logging(unknown: &[String], s: &Strings) -> Option<PathBuf> {
             "bilinmeyen komut satırı seçeneği yok sayıldı: {arg}"
         ));
     }
+}
+
+fn take_previous_crash() -> Option<PathBuf> {
     let previous_crash = crash::take_previous_crash();
     if let Some(report) = &previous_crash {
         log::warn(&format!(
@@ -147,6 +213,7 @@ fn run_window(
     restart: Arc<AtomicBool>,
     launch: Launch,
 ) -> eframe::Result<()> {
+    let wayland = wayland_window(launch.backend);
     let viewport = ViewportBuilder::default()
         .with_inner_size(WINDOW_SIZE)
         .with_min_inner_size(WINDOW_MIN_SIZE)
@@ -157,13 +224,18 @@ fn run_window(
             None => viewport,
         },
         event_loop_builder: event_loop_hook(launch.backend),
+        vsync: !wayland,
         ..Default::default()
     };
     eframe::run_native(
         "MouseDrive",
         options,
-        Box::new(move |_cc| {
-            let mut app = App::new(startup, shared, restart);
+        Box::new(move |cc| {
+            launch.exit_request.attach(&cc.egui_ctx);
+            let mut app = App::new(startup, shared, restart, Arc::clone(&launch.exit_request));
+            if wayland {
+                app.limit_frame_rate();
+            }
             launch
                 .errors
                 .iter()
@@ -178,6 +250,21 @@ fn run_window(
         }),
     )
     .inspect_err(|e| log::error(&format!("pencere açılamadı: {e}")))
+}
+
+#[cfg(target_os = "linux")]
+fn wayland_window(backend: Option<Backend>) -> bool {
+    let wayland = preflight::window_system(platform::display_env(), backend)
+        == platform::WindowSystem::Wayland;
+    if wayland {
+        log::info("Wayland penceresi: dikey eşitleme kapalı, kare hızı uygulamada sınırlanıyor");
+    }
+    wayland
+}
+
+#[cfg(not(target_os = "linux"))]
+fn wayland_window(_backend: Option<Backend>) -> bool {
+    false
 }
 
 #[cfg(target_os = "linux")]
@@ -232,9 +319,9 @@ fn join(name: &str, handle: Option<JoinHandle<()>>) {
 
 fn relaunch(exe: std::io::Result<PathBuf>, s: &Strings) {
     let result = exe.and_then(|exe| {
-        std::process::Command::new(exe)
-            .args([UPDATED_FROM, env!("CARGO_PKG_VERSION")])
-            .spawn()
+        platform::spawn_reaped(
+            platform::child_command(exe).args([UPDATED_FROM, env!("CARGO_PKG_VERSION")]),
+        )
     });
     if let Err(e) = result {
         log::error(&format!("yeniden başlatılamadı: {e}"));

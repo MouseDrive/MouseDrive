@@ -260,10 +260,14 @@ pub fn spawn(
     std::thread::Builder::new()
         .name("control".into())
         .spawn(move || {
+            let mut io = io::SystemIo::new();
             if !crate::platform::raise_current_thread_priority() {
                 crate::log::warn("kontrol thread'i önceliği yükseltilemedi");
             }
-            let mut io = io::SystemIo::new();
+            #[cfg(target_os = "linux")]
+            if !crate::platform::tighten_timer_slack() {
+                crate::log::warn("kontrol thread'i zamanlayıcı gevşekliği ayarlanamadı");
+            }
             let (epoch, config) = shared.config();
             let mut engine = Engine::new(config, epoch, options);
             run(&shared, &commands, &mut engine, &mut io);

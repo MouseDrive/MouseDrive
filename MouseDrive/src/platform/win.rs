@@ -1,4 +1,5 @@
-use std::ffi::c_void;
+use std::ffi::{OsStr, c_void};
+use std::process::Command;
 
 use windows::Win32::Media::{timeBeginPeriod, timeEndPeriod};
 use windows::Win32::System::Threading::{
@@ -95,4 +96,8 @@ pub fn setup_process() -> TimerResolution {
 
 pub fn environment_summary() -> String {
     format!("windows {}", std::env::consts::ARCH)
+}
+
+pub fn child_command(program: impl AsRef<OsStr>) -> Command {
+    Command::new(program)
 }

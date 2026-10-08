@@ -34,6 +34,7 @@ pub struct Args {
     pub action: Action,
     pub test_counter: bool,
     pub allow_injected: bool,
+    pub allow_root: bool,
     pub backend: Option<Backend>,
     pub updated_from: Option<String>,
     pub unknown: Vec<String>,
@@ -53,6 +54,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Args {
             "--wayland" => parsed.backend = Some(Backend::Wayland),
             "--test-counter" => parsed.test_counter = true,
             "--allow-injected" => parsed.allow_injected = true,
+            "--allow-root" => parsed.allow_root = true,
             UPDATED_FROM => {
                 if let Some(version) = args.next_if(|v| is_version(v)) {
                     parsed.updated_from = Some(version);
