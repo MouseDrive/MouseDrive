@@ -75,6 +75,7 @@ pub(crate) struct Engine {
     loop_summary: LoopSummary,
     rate: RateMeter,
     counters: InputCounters,
+    drops_at_center: u64,
     counts_total: i64,
     device_filter: DeviceFilter,
     registration_ok: bool,
@@ -141,6 +142,7 @@ impl Engine {
             loop_summary: LoopSummary::default(),
             rate: RateMeter::default(),
             counters: InputCounters::default(),
+            drops_at_center: 0,
             counts_total: 0,
             device_filter: DeviceFilter::AllMice,
             registration_ok: true,
@@ -190,6 +192,7 @@ impl Engine {
             Some(prev) => (now_ms - prev).max(0.0),
             None => {
                 self.apply_side_effects(io, now_ms);
+                self.mark_centered(io);
                 self.interval_ms()
             }
         };
@@ -269,7 +272,7 @@ impl Engine {
     fn handle_command(&mut self, command: Command, io: &mut impl ControlIo, now_ms: f64) {
         match command {
             Command::Reconnect => self.conn.recheck(now_ms),
-            Command::ResetSteering => self.state.reset_steering(),
+            Command::ResetSteering => self.recenter(io),
             Command::SetCapture(on) => self.set_capture(on, io),
             Command::ToggleCapture => self.toggle_capture(io),
             Command::StartBind(target) => self.start_bind(target, io),
@@ -330,6 +333,7 @@ impl Engine {
         }
         self.capture = on;
         self.state.reset();
+        self.mark_centered(io);
         io.clear_input();
         self.guards = [ButtonGuard::default(); 2];
         self.marker = if on {
@@ -353,11 +357,29 @@ impl Engine {
         }
     }
 
+    fn recenter(&mut self, io: &impl ControlIo) {
+        self.state.reset_steering();
+        self.mark_centered(io);
+    }
+
+    fn mark_centered(&mut self, io: &impl ControlIo) {
+        self.drops_at_center = io.input_counters().dropped_reports;
+    }
+
+    fn drops_since_center(&self) -> u64 {
+        if !self.capture {
+            return 0;
+        }
+        self.counters
+            .dropped_reports
+            .saturating_sub(self.drops_at_center)
+    }
+
     fn read_input(&mut self, dt_ms: f64, io: &mut impl ControlIo) -> TickInput {
         let counts = io.take_counts();
         self.counts_total = self.counts_total.wrapping_add(counts);
         if io.take_middle_click() {
-            self.state.reset_steering();
+            self.recenter(io);
         }
         self.check_stuck_buttons(dt_ms, io);
         let counters = io.input_counters();
@@ -596,6 +618,10 @@ impl Engine {
             mouse_hz: self.rate.peak_hz(),
             absolute_events: self.counters.absolute_events,
             ignored_events: self.counters.ignored_events,
+            dropped_reports: self.counters.dropped_reports,
+            drops_since_center: self.drops_since_center(),
+            reconcile_releases: self.counters.reconcile_releases,
+            input_stopped: self.counters.thread_stopped,
             device_filter: self.device_filter,
             registration_ok: self.registration_ok,
             stuck_releases: self.stuck_releases,

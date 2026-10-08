@@ -53,16 +53,21 @@ pub fn footer_issues(snap: &Snapshot, s: &Strings) -> Option<String> {
 }
 
 pub fn warnings(snap: &Snapshot, s: &Strings) -> Vec<String> {
-    let absolute = (snap.absolute_events > 0)
-        .then(|| fill(s.diag_absolute, &[("n", &snap.absolute_events.to_string())]));
-    let stuck = (snap.stuck_releases > 0)
-        .then(|| fill(s.diag_stuck, &[("n", &snap.stuck_releases.to_string())]));
+    let count = |text: &str, n: u64| (n > 0).then(|| fill(text, &[("n", &n.to_string())]));
+    let stopped = snap.input_stopped.then(|| s.diag_input_stopped.to_string());
     let registration = (!snap.registration_ok && snap.loop_summary.samples > 0)
         .then(|| s.diag_registration.to_string());
-    [absolute, stuck, registration]
-        .into_iter()
-        .flatten()
-        .collect()
+    [
+        stopped,
+        count(s.diag_dropped, snap.dropped_reports),
+        count(s.diag_reconciled, snap.reconcile_releases),
+        count(s.diag_absolute, snap.absolute_events),
+        count(s.diag_stuck, snap.stuck_releases),
+        registration,
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 pub fn report_info(snap: &Snapshot, setup: &SetupInfo, cfg: &Config) -> DiagnosticsInfo {

@@ -1,6 +1,8 @@
 use std::ffi::c_void;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
 use std::thread::JoinHandle;
+use std::time::Instant;
 
 use windows::Win32::Devices::HumanInterfaceDevice::HidD_GetProductString;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, LPARAM, LRESULT, WPARAM};
@@ -24,13 +26,14 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{PCWSTR, w};
 
-use super::{MouseInfo, STATE, disambiguate, label_for};
+use super::{MouseInfo, Report, STATE, disambiguate, label_for};
 
 const WM_APP_REGISTER: u32 = WM_APP + 1;
 const WM_APP_FILTER: u32 = WM_APP + 2;
 
 static HWND_VALUE: AtomicIsize = AtomicIsize::new(0);
 static THREAD_ID: AtomicU32 = AtomicU32::new(0);
+static CLOCK_EPOCH: OnceLock<Instant> = OnceLock::new();
 
 #[repr(C, align(8))]
 struct RawBuf([u8; 128]);
@@ -229,11 +232,21 @@ fn read_raw_input(handle: HRAWINPUT) {
     let buttons = unsafe { mouse.Anonymous.Anonymous.usButtonFlags };
     STATE.process(
         raw.header.hDevice.0 as isize,
-        mouse.usFlags.0 & MOUSE_MOVE_ABSOLUTE.0 != 0,
-        mouse.lLastX,
-        mouse.lLastY,
-        buttons,
+        Report {
+            dx: mouse.lLastX,
+            dy: mouse.lLastY,
+            buttons,
+            absolute: mouse.usFlags.0 & MOUSE_MOVE_ABSOLUTE.0 != 0,
+            time_ns: now_ns(),
+        },
     );
+}
+
+pub(super) fn now_ns() -> u64 {
+    let epoch = *CLOCK_EPOCH.get_or_init(Instant::now);
+    u64::try_from(epoch.elapsed().as_nanos())
+        .unwrap_or(u64::MAX)
+        .max(1)
 }
 
 fn resolve_filter() {

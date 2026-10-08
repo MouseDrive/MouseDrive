@@ -89,6 +89,7 @@ const BASE: Strings = Strings {
     det_active: "Reading the mouse and writing to the game.",
     det_no_pointer: "No mouse input can be read (Raw Input registration failed); no input reaches the game. MouseDrive keeps retrying.",
     det_loop_stalled: "The control loop is not responding; the game receives no updates. If this persists, restart MouseDrive and attach the log file to a bug report.",
+    det_input_lost: "Some mouse input was lost while MouseDrive was busy, so the wheel may be off-centre. Middle-click to recentre.",
     reason_write_failures: "vJoy write errors",
     reason_slow_loop: "control loop is slow ({hz} Hz)",
     reason_clipped: "steering speed limit is delaying movement",
@@ -186,6 +187,9 @@ const BASE: Strings = Strings {
     diag_absolute: "Motion of {n} absolute-position events ignored (tablet or remote desktop?).",
     diag_stuck: "A stuck button was released {n} times.",
     diag_registration: "Raw Input registration was lost; re-registering.",
+    diag_dropped: "Mouse reports were lost {n} times because they could not be read in time; the button states were read again.",
+    diag_reconciled: "The input check released a button {n} times because its release was lost.",
+    diag_input_stopped: "The input thread stopped: the mouse and keys are no longer read. Restart MouseDrive and attach the log file to a bug report.",
     btn_copy_diag: "Copy diagnostics",
     copied: "Copied to clipboard",
 

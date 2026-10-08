@@ -87,14 +87,27 @@ impl ButtonLatch {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Report {
+    dx: i32,
+    dy: i32,
+    buttons: u16,
+    absolute: bool,
+    time_ns: u64,
+}
+
 pub struct InputState {
     counts_x: AtomicI64,
+    move_time_ns: AtomicU64,
     left: ButtonLatch,
     right: ButtonLatch,
     middle_clicked: AtomicBool,
     move_events: AtomicU64,
     absolute_events: AtomicU64,
     ignored_events: AtomicU64,
+    dropped_reports: AtomicU64,
+    reconcile_releases: AtomicU64,
+    thread_stopped: AtomicBool,
     last_device: AtomicIsize,
     accepted_device: AtomicIsize,
     allow_injected: AtomicBool,
@@ -106,12 +119,16 @@ impl InputState {
     pub const fn new() -> Self {
         Self {
             counts_x: AtomicI64::new(0),
+            move_time_ns: AtomicU64::new(0),
             left: ButtonLatch::new(),
             right: ButtonLatch::new(),
             middle_clicked: AtomicBool::new(false),
             move_events: AtomicU64::new(0),
             absolute_events: AtomicU64::new(0),
             ignored_events: AtomicU64::new(0),
+            dropped_reports: AtomicU64::new(0),
+            reconcile_releases: AtomicU64::new(0),
+            thread_stopped: AtomicBool::new(false),
             last_device: AtomicIsize::new(0),
             accepted_device: AtomicIsize::new(0),
             allow_injected: AtomicBool::new(false),
@@ -131,8 +148,8 @@ impl InputState {
         device == wanted
     }
 
-    fn process(&self, device: isize, absolute: bool, dx: i32, dy: i32, button_flags: u16) {
-        let moved = !absolute && (dx != 0 || dy != 0);
+    fn process(&self, device: isize, report: Report) {
+        let moved = !report.absolute && (report.dx != 0 || report.dy != 0);
         if moved && device != 0 {
             self.last_device.store(device, Ordering::Relaxed);
         }
@@ -140,17 +157,38 @@ impl InputState {
             self.ignored_events.fetch_add(1, Ordering::Relaxed);
             return;
         }
-        if absolute {
+        if report.absolute {
             self.absolute_events.fetch_add(1, Ordering::Relaxed);
         } else if moved {
             let _ = self
                 .counts_x
                 .try_update(Ordering::Relaxed, Ordering::Relaxed, |acc| {
-                    Some(accumulate_counts(acc, dx))
+                    Some(accumulate_counts(acc, report.dx))
                 });
+            self.note_move_time(report.time_ns);
             self.move_events.fetch_add(1, Ordering::Relaxed);
         }
-        self.apply_buttons(button_flags);
+        self.apply_buttons(report.buttons);
+    }
+
+    fn note_move_time(&self, time_ns: u64) {
+        if time_ns != 0 {
+            let _ =
+                self.move_time_ns
+                    .compare_exchange(0, time_ns, Ordering::AcqRel, Ordering::Relaxed);
+        }
+    }
+
+    fn take_motion(&self) -> Motion {
+        let time_ns = self.move_time_ns.swap(0, Ordering::AcqRel);
+        let counts = self
+            .counts_x
+            .swap(0, Ordering::Relaxed)
+            .clamp(-COUNT_ACCUM_LIMIT, COUNT_ACCUM_LIMIT);
+        Motion {
+            counts,
+            oldest_ns: (time_ns != 0).then_some(time_ns),
+        }
     }
 
     fn apply_buttons(&self, bf: u16) {
@@ -205,6 +243,7 @@ impl InputState {
 
     fn clear(&self) {
         self.counts_x.store(0, Ordering::Relaxed);
+        self.move_time_ns.store(0, Ordering::Release);
         self.left.clear();
         self.right.clear();
         self.middle_clicked.store(false, Ordering::Release);
@@ -215,6 +254,17 @@ impl InputState {
             0 => DeviceFilter::AllMice,
             NO_MOUSE => DeviceFilter::SelectedMissing,
             _ => DeviceFilter::Selected,
+        }
+    }
+
+    fn counters(&self) -> InputCounters {
+        InputCounters {
+            move_events: self.move_events.load(Ordering::Relaxed),
+            absolute_events: self.absolute_events.load(Ordering::Relaxed),
+            ignored_events: self.ignored_events.load(Ordering::Relaxed),
+            dropped_reports: self.dropped_reports.load(Ordering::Relaxed),
+            reconcile_releases: self.reconcile_releases.load(Ordering::Relaxed),
+            thread_stopped: self.thread_stopped.load(Ordering::Acquire),
         }
     }
 }
@@ -232,6 +282,15 @@ pub struct InputCounters {
     pub move_events: u64,
     pub absolute_events: u64,
     pub ignored_events: u64,
+    pub dropped_reports: u64,
+    pub reconcile_releases: u64,
+    pub thread_stopped: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Motion {
+    pub counts: i64,
+    pub oldest_ns: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -272,10 +331,11 @@ pub fn stop() {
 }
 
 pub fn take_counts() -> i64 {
-    STATE
-        .counts_x
-        .swap(0, Ordering::Relaxed)
-        .clamp(-COUNT_ACCUM_LIMIT, COUNT_ACCUM_LIMIT)
+    take_motion().counts
+}
+
+pub fn take_motion() -> Motion {
+    STATE.take_motion()
 }
 
 pub fn buttons() -> (bool, bool) {
@@ -298,12 +358,12 @@ pub fn clear() {
     STATE.clear();
 }
 
+pub fn now_ns() -> u64 {
+    sys::now_ns()
+}
+
 pub fn counters() -> InputCounters {
-    InputCounters {
-        move_events: STATE.move_events.load(Ordering::Relaxed),
-        absolute_events: STATE.absolute_events.load(Ordering::Relaxed),
-        ignored_events: STATE.ignored_events.load(Ordering::Relaxed),
-    }
+    STATE.counters()
 }
 
 pub fn set_input_sink(enabled: bool) {

@@ -1,46 +1,36 @@
-use std::collections::HashSet;
+mod decode;
+mod device;
+
+use std::collections::HashMap;
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use evdev::{AbsoluteAxisCode, BusType, Device, KeyCode, RelativeAxisCode};
-
+use self::decode::{Event, KeyChange, clock_ns};
+use self::device::{Open, ReadOutcome, buttons_report, emit, open_node};
 use super::{
-    MouseInfo, RI_MOUSE_LEFT_BUTTON_DOWN, RI_MOUSE_LEFT_BUTTON_UP, RI_MOUSE_MIDDLE_BUTTON_DOWN,
-    RI_MOUSE_RIGHT_BUTTON_DOWN, RI_MOUSE_RIGHT_BUTTON_UP, STATE, disambiguate, label_for,
+    InputState, MouseButton, MouseInfo, RI_MOUSE_LEFT_BUTTON_UP, RI_MOUSE_RIGHT_BUTTON_UP, STATE,
+    disambiguate, label_for,
 };
-use crate::keys::linux as keys;
 use crate::platform::{self, Wake, pollfd};
 
 const DEV_INPUT: &str = "/dev/input";
 const HOTPLUG_SETTLE: Duration = Duration::from_millis(250);
 const WATCH_RETRY: Duration = Duration::from_secs(2);
-const OWN_DEVICE_PREFIX: &str = "MouseDrive";
-
-const EV_SYN: u16 = 0x00;
-const EV_KEY: u16 = 0x01;
-const EV_REL: u16 = 0x02;
-const EV_ABS: u16 = 0x03;
-const SYN_REPORT: u16 = 0;
-const REL_X: u16 = 0x00;
-const REL_Y: u16 = 0x01;
-const ABS_X: u16 = 0x00;
-const ABS_Y: u16 = 0x01;
-const BTN_LEFT: u16 = 0x110;
-const BTN_RIGHT: u16 = 0x111;
-const BTN_MIDDLE: u16 = 0x112;
-const KEY_REPEAT: i32 = 2;
+const RECONCILE_EVERY: Duration = Duration::from_millis(100);
+const POLL_BACKOFF_MIN: Duration = Duration::from_millis(100);
+const POLL_BACKOFF_MAX: Duration = Duration::from_secs(2);
 
 const REQ_STOP: u8 = 1;
 const REQ_RESCAN: u8 = 2;
 const REQ_FILTER: u8 = 4;
 
 static WAKE: Wake = Wake::new();
-static NEXT_HANDLE: AtomicIsize = AtomicIsize::new(1);
 static POINTER_OPEN: AtomicBool = AtomicBool::new(false);
 static DEVICES: Mutex<Vec<Known>> = Mutex::new(Vec::new());
 static DENIED: Mutex<Vec<String>> = Mutex::new(Vec::new());
@@ -53,12 +43,29 @@ struct Known {
     mouse: bool,
 }
 
+impl Known {
+    fn of(open: &Open) -> Self {
+        Self {
+            handle: open.handle,
+            path: open.path.clone(),
+            name: open.name.clone(),
+            mouse: open.mouse,
+        }
+    }
+}
+
 pub(super) fn spawn() -> io::Result<JoinHandle<()>> {
-    let wake = WAKE.fd()?;
-    WAKE.clear(REQ_STOP);
-    std::thread::Builder::new()
-        .name("evdev-input".into())
-        .spawn(move || thread_main(wake))
+    let started = WAKE.fd().and_then(|wake| {
+        WAKE.clear(REQ_STOP);
+        STATE.thread_stopped.store(false, Ordering::Release);
+        std::thread::Builder::new()
+            .name("evdev-input".into())
+            .spawn(move || thread_main(wake))
+    });
+    if started.is_err() {
+        STATE.thread_stopped.store(true, Ordering::Release);
+    }
+    started
 }
 
 pub(super) fn stop() {
@@ -116,7 +123,65 @@ pub fn denied_mice() -> Vec<String> {
     DENIED.lock().map(|d| d.clone()).unwrap_or_default()
 }
 
+pub(super) fn now_ns() -> u64 {
+    let mut ts = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: ts yazılabilir yerel bir timespec; saat kimliği sabit ve geçerli.
+    if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) } != 0 {
+        return 0;
+    }
+    let secs = u64::try_from(ts.tv_sec).unwrap_or(0);
+    let nanos = u64::try_from(ts.tv_nsec).unwrap_or(0);
+    clock_ns(secs, nanos)
+}
+
+struct ExitWatch {
+    state: &'static InputState,
+    requested: bool,
+}
+
+impl ExitWatch {
+    fn new(state: &'static InputState) -> Self {
+        Self {
+            state,
+            requested: false,
+        }
+    }
+}
+
+impl Drop for ExitWatch {
+    fn drop(&mut self) {
+        if !self.requested {
+            self.state.thread_stopped.store(true, Ordering::Release);
+            crate::log::error("evdev girdi thread'i beklenmedik biçimde durdu");
+        }
+    }
+}
+
+#[derive(Default)]
+struct Backoff {
+    wait: Option<Duration>,
+}
+
+impl Backoff {
+    fn fail(&mut self) -> (Duration, bool) {
+        let first = self.wait.is_none();
+        let wait = self
+            .wait
+            .map_or(POLL_BACKOFF_MIN, |w| (w * 2).min(POLL_BACKOFF_MAX));
+        self.wait = Some(wait);
+        (wait, first)
+    }
+
+    fn recover(&mut self) -> bool {
+        self.wait.take().is_some()
+    }
+}
+
 fn thread_main(wake: RawFd) {
+    let mut exit = ExitWatch::new(&STATE);
     let _ = crate::platform::raise_current_thread_priority();
     if !crate::platform::tighten_timer_slack() {
         crate::log::warn("girdi thread'i zamanlayıcı gevşekliği ayarlanamadı");
@@ -125,6 +190,7 @@ fn thread_main(wake: RawFd) {
     let mut reader = Reader::default();
     reader.rescan();
     let mut fds: Vec<libc::pollfd> = Vec::new();
+    let mut backoff = Backoff::default();
     loop {
         if notify.is_none() {
             notify = watch_dev_input();
@@ -137,15 +203,13 @@ fn thread_main(wake: RawFd) {
         fds.push(pollfd(notify.as_ref().map_or(-1, AsRawFd::as_raw_fd)));
         fds.extend(reader.devices.iter().map(|d| pollfd(d.dev.as_raw_fd())));
         let timeout = reader.poll_timeout(Instant::now());
-        if let Err(e) = platform::poll(&mut fds, timeout) {
-            crate::log::error(&format!("evdev poll başarısız: {e}"));
-            break;
-        }
+        poll_or_back_off(&mut fds, timeout, wake, &mut backoff);
         if fds[0].revents != 0 {
             platform::drain(wake);
         }
         let requests = WAKE.take();
         if requests & REQ_STOP != 0 {
+            exit.requested = true;
             break;
         }
         if fds[1].revents != 0 {
@@ -154,14 +218,8 @@ fn thread_main(wake: RawFd) {
             }
             reader.rescan_at = Some(Instant::now() + HOTPLUG_SETTLE);
         }
-        let ready: Vec<usize> = fds[2..]
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| p.revents != 0)
-            .map(|(i, _)| i)
-            .collect();
-        reader.read_ready(&ready);
-
+        reader.read_ready(&ready_devices(&fds[2..]));
+        reader.reconcile_if_due(Instant::now());
         let due = reader.rescan_at.is_some_and(|t| Instant::now() >= t);
         if requests & REQ_RESCAN != 0 || due {
             reader.rescan();
@@ -170,6 +228,42 @@ fn thread_main(wake: RawFd) {
         }
     }
     reader.close_all();
+}
+
+fn poll_or_back_off(fds: &mut [libc::pollfd], timeout: i32, wake: RawFd, backoff: &mut Backoff) {
+    match platform::poll(fds, timeout) {
+        Ok(()) => {
+            if backoff.recover() {
+                crate::log::info("evdev poll yeniden çalışıyor");
+            }
+        }
+        Err(e) => {
+            fds.iter_mut().for_each(|p| p.revents = 0);
+            let (wait, first) = backoff.fail();
+            if first {
+                crate::log::error(&format!("evdev poll başarısız, yeniden denenecek: {e}"));
+            }
+            wait_for_wake(wake, wait);
+        }
+    }
+}
+
+fn wait_for_wake(wake: RawFd, wait: Duration) {
+    let ms = i32::try_from(wait.as_millis()).unwrap_or(i32::MAX);
+    let mut fds = [pollfd(wake)];
+    match platform::poll(&mut fds, ms) {
+        Ok(()) if fds[0].revents != 0 => platform::drain(wake),
+        Ok(()) => {}
+        Err(_) => std::thread::sleep(wait),
+    }
+}
+
+fn ready_devices(fds: &[libc::pollfd]) -> Vec<usize> {
+    fds.iter()
+        .enumerate()
+        .filter(|(_, p)| p.revents != 0)
+        .map(|(i, _)| i)
+        .collect()
 }
 
 fn watch_dev_input() -> Option<OwnedFd> {
@@ -186,16 +280,79 @@ fn watch_dev_input() -> Option<OwnedFd> {
     (watch >= 0).then_some(fd)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct NodeStamp {
+    rdev: u64,
+    ctime: i64,
+    ctime_nsec: i64,
+}
+
+impl NodeStamp {
+    fn of(node: &Path) -> Option<Self> {
+        let meta = std::fs::metadata(node).ok()?;
+        Some(Self {
+            rdev: meta.rdev(),
+            ctime: meta.ctime(),
+            ctime_nsec: meta.ctime_nsec(),
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Skipped {
+    Denied(Option<String>),
+    Ignored,
+}
+
+impl Skipped {
+    fn denied_mouse(&self) -> Option<String> {
+        match self {
+            Skipped::Denied(mouse) => mouse.clone(),
+            Skipped::Ignored => None,
+        }
+    }
+}
+
+#[derive(Default)]
+struct SkippedNodes(HashMap<PathBuf, (NodeStamp, Skipped)>);
+
+impl SkippedNodes {
+    fn unchanged(&self, node: &Path, stamp: NodeStamp) -> Option<&Skipped> {
+        self.0
+            .get(node)
+            .filter(|(seen, _)| *seen == stamp)
+            .map(|(_, skipped)| skipped)
+    }
+
+    fn remember(&mut self, node: PathBuf, stamp: NodeStamp, skipped: Skipped) {
+        self.0.insert(node, (stamp, skipped));
+    }
+
+    fn forget(&mut self, node: &Path) {
+        self.0.remove(node);
+    }
+
+    fn retain(&mut self, nodes: &[PathBuf]) {
+        self.0.retain(|node, _| nodes.contains(node));
+    }
+}
+
 #[derive(Default)]
 struct Reader {
     devices: Vec<Open>,
+    skipped: SkippedNodes,
     rescan_at: Option<Instant>,
-    events: Vec<(u16, u16, i32)>,
+    reconcile_at: Option<Instant>,
+    events: Vec<Event>,
 }
 
 impl Reader {
     fn poll_timeout(&self, now: Instant) -> i32 {
-        self.rescan_at.map_or(-1, |t| {
+        let next = [self.rescan_at, self.reconcile_at]
+            .into_iter()
+            .flatten()
+            .min();
+        next.map_or(-1, |t| {
             let ms = t.saturating_duration_since(now).as_millis();
             i32::try_from(ms).unwrap_or(i32::MAX)
         })
@@ -203,13 +360,19 @@ impl Reader {
 
     fn read_ready(&mut self, ready: &[usize]) {
         let mut dead = Vec::new();
+        let mut resync = Vec::new();
         for &i in ready {
             let Some(open) = self.devices.get_mut(i) else {
                 continue;
             };
-            if !open.read(&mut self.events) {
-                dead.push(i);
+            match open.read(&mut self.events) {
+                ReadOutcome::Dead => dead.push(i),
+                ReadOutcome::Drained if open.needs_sync() => resync.push(i),
+                ReadOutcome::Drained | ReadOutcome::Pending => {}
             }
+        }
+        if !resync.is_empty() {
+            self.reconcile(&resync);
         }
         if dead.is_empty() {
             return;
@@ -220,6 +383,55 @@ impl Reader {
         self.publish();
     }
 
+    fn reconcile_if_due(&mut self, now: Instant) {
+        let (left, right) = STATE.buttons();
+        if !left && !right {
+            self.reconcile_at = None;
+            return;
+        }
+        let due = *self.reconcile_at.get_or_insert(now + RECONCILE_EVERY);
+        if now < due {
+            return;
+        }
+        self.reconcile_at = Some(now + RECONCILE_EVERY);
+        let targets: Vec<usize> = self
+            .devices
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| d.pointer && STATE.accepts(d.handle))
+            .map(|(i, _)| i)
+            .collect();
+        self.reconcile(&targets);
+    }
+
+    fn reconcile(&mut self, targets: &[usize]) {
+        let before = STATE.buttons();
+        let changes: Vec<(usize, KeyChange)> = targets
+            .iter()
+            .filter_map(|&i| Some((i, self.devices.get_mut(i)?.resync()?)))
+            .collect();
+        let held = self.held_buttons();
+        for (i, change) in changes {
+            let open = &self.devices[i];
+            if !open.pointer || !STATE.accepts(open.handle) {
+                continue;
+            }
+            let flags = change.button_flags(held);
+            if flags != 0 {
+                emit(open.handle, buttons_report(flags));
+            }
+        }
+        release_unheld(held);
+        note_reconciled(before, STATE.buttons());
+    }
+
+    fn held_buttons(&self) -> u16 {
+        self.devices
+            .iter()
+            .filter(|d| STATE.accepts(d.handle))
+            .fold(0, |flags, d| flags | d.held_buttons())
+    }
+
     fn rescan(&mut self) {
         self.rescan_at = None;
         let nodes = event_nodes();
@@ -228,19 +440,13 @@ impl Reader {
             .partition(|d| nodes.contains(&d.node));
         gone.into_iter().for_each(Open::close);
         self.devices = kept;
-
+        self.skipped.retain(&nodes);
         let mut denied = Vec::new();
         for node in nodes {
             if self.devices.iter().any(|d| d.node == node) {
                 continue;
             }
-            match Device::open(&node) {
-                Ok(dev) => self.devices.extend(Open::new(dev, node)),
-                Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
-                    denied.extend(sysfs_mouse_name(&node));
-                }
-                Err(_) => {}
-            }
+            denied.extend(self.try_open(node));
         }
         self.publish();
         if let Ok(mut d) = DENIED.lock() {
@@ -248,8 +454,40 @@ impl Reader {
         }
     }
 
+    fn try_open(&mut self, node: PathBuf) -> Option<String> {
+        let stamp = NodeStamp::of(&node);
+        if let Some(stamp) = stamp
+            && let Some(skipped) = self.skipped.unchanged(&node, stamp)
+        {
+            return skipped.denied_mouse();
+        }
+        let skipped = match open_node(&node) {
+            Ok(dev) => match Open::new(dev, node.clone()) {
+                Some(open) => {
+                    self.skipped.forget(&node);
+                    self.devices.push(open);
+                    return None;
+                }
+                None => Skipped::Ignored,
+            },
+            Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
+                Skipped::Denied(sysfs_mouse_name(&node))
+            }
+            Err(_) => {
+                self.skipped.forget(&node);
+                return None;
+            }
+        };
+        let denied = skipped.denied_mouse();
+        match stamp {
+            Some(stamp) => self.skipped.remember(node, stamp, skipped),
+            None => self.skipped.forget(&node),
+        }
+        denied
+    }
+
     fn publish(&self) {
-        let known = self.devices.iter().map(Open::known).collect();
+        let known = self.devices.iter().map(Known::of).collect();
         if let Ok(mut d) = DEVICES.lock() {
             *d = known;
         }
@@ -275,6 +513,35 @@ impl Reader {
     }
 }
 
+fn release_unheld(held: u16) {
+    let buttons = [
+        (MouseButton::Left, RI_MOUSE_LEFT_BUTTON_UP),
+        (MouseButton::Right, RI_MOUSE_RIGHT_BUTTON_UP),
+    ];
+    for (button, up) in buttons {
+        if held & up == 0 {
+            STATE.force_release(button);
+        }
+    }
+}
+
+fn released_buttons(before: (bool, bool), after: (bool, bool)) -> u64 {
+    u64::from(before.0 && !after.0) + u64::from(before.1 && !after.1)
+}
+
+fn note_reconciled(before: (bool, bool), after: (bool, bool)) {
+    let released = released_buttons(before, after);
+    if released == 0 {
+        return;
+    }
+    STATE
+        .reconcile_releases
+        .fetch_add(released, Ordering::Relaxed);
+    crate::log::warn(&format!(
+        "tuş durumu uzlaştırması bırakma olayı kaçan {released} butonu bıraktı"
+    ));
+}
+
 fn event_nodes() -> Vec<PathBuf> {
     let Ok(dir) = std::fs::read_dir(DEV_INPUT) else {
         return Vec::new();
@@ -290,202 +557,6 @@ fn event_nodes() -> Vec<PathBuf> {
         .collect();
     nodes.sort();
     nodes
-}
-
-struct Open {
-    dev: Device,
-    node: PathBuf,
-    handle: isize,
-    path: String,
-    name: String,
-    mouse: bool,
-    pointer: bool,
-    pressed: HashSet<u16>,
-    frame: Frame,
-}
-
-impl Open {
-    fn new(dev: Device, node: PathBuf) -> Option<Self> {
-        let name = dev.name().unwrap_or_default().trim().to_string();
-        if name.starts_with(OWN_DEVICE_PREFIX) {
-            return None;
-        }
-        let keys_set = dev.supported_keys();
-        let has_key = |k: KeyCode| keys_set.is_some_and(|s| s.contains(k));
-        let rel = dev.supported_relative_axes();
-        let has_rel = |a: RelativeAxisCode| rel.is_some_and(|r| r.contains(a));
-        let abs_x = dev
-            .supported_absolute_axes()
-            .is_some_and(|a| a.contains(AbsoluteAxisCode::ABS_X));
-        let rel_xy = has_rel(RelativeAxisCode::REL_X) && has_rel(RelativeAxisCode::REL_Y);
-        let pointer = has_key(KeyCode::BTN_LEFT) && (rel_xy || abs_x);
-        let has_mapped_key =
-            keys_set.is_some_and(|s| s.iter().any(|k| keys::vk_for_code(k.0).is_some()));
-        if !pointer && !has_mapped_key {
-            return None;
-        }
-        let _ = dev.set_nonblocking(true);
-        let id = dev.input_id();
-        let handle = if id.bus_type() == BusType::BUS_VIRTUAL {
-            0
-        } else {
-            NEXT_HANDLE.fetch_add(1, Ordering::Relaxed)
-        };
-        let path = identity(
-            id.vendor(),
-            id.product(),
-            dev.unique_name().unwrap_or_default(),
-            dev.physical_path().unwrap_or_default(),
-            &name,
-        );
-        let mut open = Self {
-            dev,
-            node,
-            handle,
-            path,
-            name,
-            mouse: pointer && rel_xy,
-            pointer,
-            pressed: HashSet::new(),
-            frame: Frame::default(),
-        };
-        open.seed_held_keys();
-        Some(open)
-    }
-
-    fn seed_held_keys(&mut self) {
-        let Ok(held) = self.dev.get_key_state() else {
-            return;
-        };
-        for key in held.iter() {
-            self.track_key(key.0, true);
-        }
-    }
-
-    fn known(&self) -> Known {
-        Known {
-            handle: self.handle,
-            path: self.path.clone(),
-            name: self.name.clone(),
-            mouse: self.mouse,
-        }
-    }
-
-    fn read(&mut self, events: &mut Vec<(u16, u16, i32)>) -> bool {
-        events.clear();
-        match self.dev.fetch_events() {
-            Ok(it) => events.extend(it.map(|e| (e.event_type().0, e.code(), e.value()))),
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => return true,
-            Err(_) => return false,
-        }
-        for &(kind, code, value) in events.iter() {
-            self.handle(kind, code, value);
-        }
-        true
-    }
-
-    fn handle(&mut self, kind: u16, code: u16, value: i32) {
-        if kind == EV_KEY && value != KEY_REPEAT {
-            self.track_key(code, value != 0);
-        }
-        if !self.pointer {
-            return;
-        }
-        if let Some(frame) = self.frame.push(kind, code, value) {
-            emit(self.handle, frame);
-        }
-    }
-
-    fn track_key(&mut self, code: u16, down: bool) {
-        let Some(vk) = keys::vk_for_code(code) else {
-            return;
-        };
-        if down {
-            if self.pressed.insert(code) {
-                keys::press(vk);
-            }
-        } else if self.pressed.remove(&code) {
-            keys::release(vk);
-        }
-    }
-
-    fn close(mut self) {
-        let mut ups = 0;
-        for code in std::mem::take(&mut self.pressed) {
-            ups |= button_flag(code, false);
-            if let Some(vk) = keys::vk_for_code(code) {
-                keys::release(vk);
-            }
-        }
-        if self.pointer && ups != 0 {
-            STATE.process(self.handle, false, 0, 0, ups);
-        }
-    }
-}
-
-fn emit(handle: isize, frame: Frame) {
-    let sink = STATE.input_sink.load(Ordering::Acquire);
-    if !sink && !keys::app_is_foreground() {
-        let ups = frame.buttons & (RI_MOUSE_LEFT_BUTTON_UP | RI_MOUSE_RIGHT_BUTTON_UP);
-        if ups != 0 {
-            STATE.process(handle, false, 0, 0, ups);
-        }
-        return;
-    }
-    STATE.process(handle, frame.absolute, frame.dx, frame.dy, frame.buttons);
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-struct Frame {
-    dx: i32,
-    dy: i32,
-    buttons: u16,
-    absolute: bool,
-    dirty: bool,
-}
-
-impl Frame {
-    fn push(&mut self, kind: u16, code: u16, value: i32) -> Option<Frame> {
-        match (kind, code) {
-            (EV_REL, REL_X) => self.dx = self.dx.saturating_add(value),
-            (EV_REL, REL_Y) => self.dy = self.dy.saturating_add(value),
-            (EV_ABS, ABS_X | ABS_Y) => self.absolute = true,
-            (EV_KEY, _) if value != KEY_REPEAT => {
-                let flag = button_flag(code, value != 0);
-                if flag == 0 {
-                    return None;
-                }
-                self.buttons |= flag;
-            }
-            (EV_SYN, SYN_REPORT) => {
-                let done = std::mem::take(self);
-                return done.dirty.then_some(done);
-            }
-            _ => return None,
-        }
-        self.dirty = true;
-        None
-    }
-}
-
-fn button_flag(code: u16, down: bool) -> u16 {
-    match (code, down) {
-        (BTN_LEFT, true) => RI_MOUSE_LEFT_BUTTON_DOWN,
-        (BTN_LEFT, false) => RI_MOUSE_LEFT_BUTTON_UP,
-        (BTN_RIGHT, true) => RI_MOUSE_RIGHT_BUTTON_DOWN,
-        (BTN_RIGHT, false) => RI_MOUSE_RIGHT_BUTTON_UP,
-        (BTN_MIDDLE, true) => RI_MOUSE_MIDDLE_BUTTON_DOWN,
-        _ => 0,
-    }
-}
-
-fn identity(vendor: u16, product: u16, uniq: &str, phys: &str, name: &str) -> String {
-    let place = if uniq.trim().is_empty() { phys } else { uniq };
-    format!(
-        "evdev#VID_{vendor:04X}&PID_{product:04X}#{}#{}",
-        place.trim(),
-        name.trim()
-    )
 }
 
 fn sysfs_mouse_name(node: &Path) -> Option<String> {

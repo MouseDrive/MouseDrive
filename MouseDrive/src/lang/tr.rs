@@ -89,6 +89,7 @@ const BASE: Strings = Strings {
     det_active: "Fare okunuyor ve oyuna yazılıyor.",
     det_no_pointer: "Fare girdisi okunamıyor (Raw Input kaydı başarısız); oyuna girdi gitmiyor. MouseDrive yeniden denemeye devam ediyor.",
     det_loop_stalled: "Kontrol döngüsü yanıt vermiyor; oyuna güncelleme gitmiyor. Sürerse MouseDrive'ı yeniden başlatın ve hata bildirimine günlük dosyasını ekleyin.",
+    det_input_lost: "MouseDrive meşgulken bazı fare girdileri kaçtı; direksiyon merkezden kaymış olabilir. Ortalamak için farenin orta tuşuna basın.",
     reason_write_failures: "vJoy yazma hataları",
     reason_slow_loop: "kontrol döngüsü yavaş ({hz} Hz)",
     reason_clipped: "direksiyon hız sınırı hareketi geciktiriyor",
@@ -186,6 +187,9 @@ const BASE: Strings = Strings {
     diag_absolute: "Mutlak konumlu {n} olayın hareketi yok sayıldı (tablet ya da uzak masaüstü olabilir).",
     diag_stuck: "Takılı kalan buton {n} kez bırakıldı.",
     diag_registration: "Raw Input kaydı kayboldu; yeniden kaydediliyor.",
+    diag_dropped: "Zamanında okunamadığı için fare raporları {n} kez kaçtı; buton durumları yeniden okundu.",
+    diag_reconciled: "Girdi denetimi, bırakma olayı kaçan bir butonu {n} kez bıraktı.",
+    diag_input_stopped: "Girdi okuma iş parçacığı durdu: fare ve tuşlar artık okunmuyor. MouseDrive'ı yeniden başlatın ve hata bildirimine günlük dosyasını ekleyin.",
     btn_copy_diag: "Tanılamayı kopyala",
     copied: "Panoya kopyalandı",
 

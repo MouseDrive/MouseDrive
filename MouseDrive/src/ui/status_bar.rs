@@ -172,13 +172,20 @@ pub fn show(
         }
         chips(ui, cx, snap, cfg);
     });
+    let warn = ui.visuals().warn_fg_color;
     if stalled {
-        let warn = ui.visuals().warn_fg_color;
         ui.label(RichText::new(cx.s.det_loop_stalled).color(warn));
     } else {
         theme::hint(ui, &detail(snap, setup, cfg, cx.s, cx.lang));
     }
+    if let Some(text) = input_lost_hint(snap, cx.s) {
+        ui.label(RichText::new(text).color(warn));
+    }
     clicked
+}
+
+fn input_lost_hint<'a>(snap: &Snapshot, s: &'a Strings) -> Option<&'a str> {
+    (snap.drops_since_center > 0).then_some(s.det_input_lost)
 }
 
 fn chips(ui: &mut Ui, cx: &Cx, snap: &Snapshot, cfg: &Config) {

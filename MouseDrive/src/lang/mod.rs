@@ -120,6 +120,7 @@ pub struct Strings {
     pub det_active: &'static str,
     pub det_no_pointer: &'static str,
     pub det_loop_stalled: &'static str,
+    pub det_input_lost: &'static str,
     pub reason_write_failures: &'static str,
     pub reason_slow_loop: &'static str,
     pub reason_clipped: &'static str,
@@ -210,6 +211,9 @@ pub struct Strings {
     pub diag_absolute: &'static str,
     pub diag_stuck: &'static str,
     pub diag_registration: &'static str,
+    pub diag_dropped: &'static str,
+    pub diag_reconciled: &'static str,
+    pub diag_input_stopped: &'static str,
     pub btn_copy_diag: &'static str,
     pub copied: &'static str,
 
