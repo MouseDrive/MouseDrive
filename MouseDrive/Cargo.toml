@@ -2,6 +2,7 @@
 name = "mousedrive"
 version = "0.7.0"
 edition = "2024"
+rust-version = "1.95"
 license = "GPL-3.0-or-later"
 
 [dependencies]
@@ -12,11 +13,12 @@ egui_plot = "0.31"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 
+flate2 = { version = "1", default-features = false, features = ["rust_backend"], optional = true }
 self-replace = { version = "1", optional = true }
 serde_json = { version = "1", optional = true }
 sha2 = { version = "0.10", optional = true }
 ureq = { version = "2", optional = true }
-zip = { version = "2", default-features = false, features = ["deflate"], optional = true }
+zip = { version = "2", default-features = false, features = ["deflate-flate2", "flate2"], optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
@@ -42,7 +44,7 @@ libc = "0.2"
 
 [features]
 default = ["updater"]
-updater = ["dep:self-replace", "dep:serde_json", "dep:sha2", "dep:ureq", "dep:zip"]
+updater = ["dep:flate2", "dep:self-replace", "dep:serde_json", "dep:sha2", "dep:ureq", "dep:zip"]
 
 [profile.release]
 opt-level = 3
