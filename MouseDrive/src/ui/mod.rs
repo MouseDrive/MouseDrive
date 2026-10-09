@@ -495,7 +495,7 @@ impl App {
         }
     }
 
-    fn windows(&mut self, ctx: &Context, cx: &Cx) {
+    fn windows(&mut self, ctx: &Context, cx: &Cx, now_ms: f64) {
         if self.setup.open {
             let env = setup::Env {
                 shared: &self.shared,
@@ -519,7 +519,8 @@ impl App {
         }
         if self.calibration.is_open() {
             let dpi = &mut self.session.config_mut().mouse_dpi;
-            self.calibration.show(ctx, cx, self.snap.counts_total, dpi);
+            let counts_total = self.snap.counts_total;
+            self.calibration.show(ctx, cx, counts_total, now_ms, dpi);
         }
         let mut env = profiles::Env {
             session: &mut self.session,
@@ -561,7 +562,10 @@ impl App {
         let updating = self.updater.busy();
         #[cfg(not(feature = "updater"))]
         let updating = false;
-        updating || self.keybind.listening() || self.snap.binding.is_some()
+        updating
+            || self.keybind.listening()
+            || self.snap.binding.is_some()
+            || self.calibration.is_measuring()
     }
 
     fn schedule_repaint(&self, ctx: &Context) {
@@ -628,7 +632,7 @@ impl eframe::App for App {
         self.poll_keybind();
         self.shortcuts(ctx, &cx);
         self.render_panels(ctx, &cx, now_ms);
-        self.windows(ctx, &cx);
+        self.windows(ctx, &cx, now_ms);
         self.push(ctx, &cx, now_ms);
         self.handle_close(ctx, &cx);
         #[cfg(feature = "updater")]

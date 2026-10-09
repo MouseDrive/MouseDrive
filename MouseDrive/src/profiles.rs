@@ -50,6 +50,7 @@ pub fn validate_name(name: &str) -> Result<(), NameError> {
 pub enum ProfileError {
     Name(NameError),
     NotFound(String),
+    Ambiguous { name: String, matches: Vec<String> },
     LastProfile,
     Io(std::io::Error),
     Config(ConfigError),
@@ -60,6 +61,11 @@ impl fmt::Display for ProfileError {
         match self {
             ProfileError::Name(e) => write!(f, "invalid name: {e:?}"),
             ProfileError::NotFound(n) => write!(f, "profile not found: {n}"),
+            ProfileError::Ambiguous { name, matches } => write!(
+                f,
+                "several profiles match {name} when case is ignored: {}",
+                matches.join(", ")
+            ),
             ProfileError::LastProfile => f.write_str("the last profile cannot be deleted"),
             ProfileError::Io(e) => write!(f, "{e}"),
             ProfileError::Config(e) => write!(f, "{e}"),
@@ -89,6 +95,37 @@ pub struct DeadzoneReset {
 
 pub struct ProfileStore {
     dir: PathBuf,
+}
+
+fn fold(name: &str) -> String {
+    name.to_lowercase()
+}
+
+fn match_name(names: &[String], wanted: &str) -> Result<Option<String>, ProfileError> {
+    if let Some(exact) = names.iter().find(|n| *n == wanted) {
+        return Ok(Some(exact.clone()));
+    }
+    let folded = fold(wanted);
+    let matches: Vec<String> = names
+        .iter()
+        .filter(|n| fold(n) == folded)
+        .cloned()
+        .collect();
+    match matches.as_slice() {
+        [] => Ok(None),
+        [single] => Ok(Some(single.clone())),
+        _ => Err(ProfileError::Ambiguous {
+            name: wanted.to_string(),
+            matches,
+        }),
+    }
+}
+
+fn is_taken(names: &[String], wanted: &str, except: Option<&str>) -> bool {
+    let folded = fold(wanted);
+    names
+        .iter()
+        .any(|n| Some(n.as_str()) != except && fold(n) == folded)
 }
 
 fn write_tuning(path: &Path, tuning: &Tuning) -> Result<(), ProfileError> {
@@ -126,22 +163,28 @@ impl ProfileStore {
                 names.push(stem.to_string());
             }
         }
-        names.sort_by_key(|n| n.to_lowercase());
+        names.sort_by(|a, b| fold(a).cmp(&fold(b)).then_with(|| a.cmp(b)));
         Ok(names)
     }
 
-    pub fn find(&self, name: &str) -> Option<String> {
-        let wanted = name.to_lowercase();
-        self.list()
-            .ok()?
-            .into_iter()
-            .find(|n| n.to_lowercase() == wanted)
+    fn find(&self, name: &str) -> Result<Option<String>, ProfileError> {
+        match_name(&self.list()?, name)
+    }
+
+    fn stored(&self, name: &str) -> Result<String, ProfileError> {
+        self.find(name)?
+            .ok_or_else(|| ProfileError::NotFound(name.to_string()))
+    }
+
+    fn ensure_free(&self, name: &str, except: Option<&str>) -> Result<(), ProfileError> {
+        if is_taken(&self.list()?, name, except) {
+            return Err(ProfileError::Name(NameError::Duplicate));
+        }
+        Ok(())
     }
 
     pub fn load(&self, name: &str, interval_ms: f64) -> Result<LoadedProfile, ProfileError> {
-        let stored = self
-            .find(name)
-            .ok_or_else(|| ProfileError::NotFound(name.to_string()))?;
+        let stored = self.stored(name)?;
         let text = std::fs::read_to_string(self.path_of(&stored))?;
         let mut tuning = Tuning::from_toml_str(&text, interval_ms).map_err(ProfileError::Config)?;
         let corrected = tuning.validate();
@@ -151,47 +194,34 @@ impl ProfileStore {
     pub fn save(&self, name: &str, tuning: &Tuning) -> Result<(), ProfileError> {
         validate_name(name).map_err(ProfileError::Name)?;
         std::fs::create_dir_all(&self.dir)?;
-        let target = self.find(name).unwrap_or_else(|| name.to_string());
+        let target = self.find(name)?.unwrap_or_else(|| name.to_string());
         write_tuning(&self.path_of(&target), tuning)
     }
 
     pub fn save_new(&self, name: &str, tuning: &Tuning) -> Result<(), ProfileError> {
         validate_name(name).map_err(ProfileError::Name)?;
-        if self.find(name).is_some() {
-            return Err(ProfileError::Name(NameError::Duplicate));
-        }
+        self.ensure_free(name, None)?;
         self.save(name, tuning)
     }
 
     pub fn duplicate(&self, from: &str, to: &str) -> Result<(), ProfileError> {
-        let stored = self
-            .find(from)
-            .ok_or_else(|| ProfileError::NotFound(from.to_string()))?;
+        let stored = self.stored(from)?;
         validate_name(to).map_err(ProfileError::Name)?;
-        if self.find(to).is_some() {
-            return Err(ProfileError::Name(NameError::Duplicate));
-        }
+        self.ensure_free(to, None)?;
         std::fs::copy(self.path_of(&stored), self.path_of(to))?;
         Ok(())
     }
 
     pub fn rename(&self, from: &str, to: &str) -> Result<(), ProfileError> {
-        let stored = self
-            .find(from)
-            .ok_or_else(|| ProfileError::NotFound(from.to_string()))?;
+        let stored = self.stored(from)?;
         validate_name(to).map_err(ProfileError::Name)?;
-        let same_profile = stored.to_lowercase() == to.to_lowercase();
-        if !same_profile && self.find(to).is_some() {
-            return Err(ProfileError::Name(NameError::Duplicate));
-        }
+        self.ensure_free(to, Some(&stored))?;
         std::fs::rename(self.path_of(&stored), self.path_of(to))?;
         Ok(())
     }
 
     pub fn delete(&self, name: &str) -> Result<(), ProfileError> {
-        let stored = self
-            .find(name)
-            .ok_or_else(|| ProfileError::NotFound(name.to_string()))?;
+        let stored = self.stored(name)?;
         if self.list()?.len() <= 1 {
             return Err(ProfileError::LastProfile);
         }
@@ -229,32 +259,17 @@ impl ProfileStore {
     }
 
     pub fn backup(&self, name: &str) -> Result<PathBuf, ProfileError> {
-        let stored = self
-            .find(name)
-            .ok_or_else(|| ProfileError::NotFound(name.to_string()))?;
-        let path = self.path_of(&stored);
-        let content = std::fs::read(&path)?;
-        if let Some(existing) = self.find_backup(&stored, &content) {
-            return Ok(existing);
+        let stored = self.stored(name)?;
+        Ok(crate::fsutil::backup_once(&self.path_of(&stored))?)
+    }
+
+    pub fn resolve_active(&self, wanted: &str) -> Result<Option<String>, ProfileError> {
+        if let Some(found) = self.find(wanted)? {
+            return Ok(Some(found));
         }
-        Ok(crate::fsutil::backup_file(&path)?)
-    }
-
-    fn find_backup(&self, stored: &str, content: &[u8]) -> Option<PathBuf> {
-        let prefix = format!("{stored}.{EXTENSION}.");
-        std::fs::read_dir(&self.dir)
-            .ok()?
-            .filter_map(|entry| Some(entry.ok()?.path()))
-            .filter(|path| {
-                let name = path.file_name().and_then(|n| n.to_str());
-                name.is_some_and(|n| n.starts_with(&prefix) && n.ends_with(".bak"))
-            })
-            .find(|path| std::fs::read(path).is_ok_and(|bytes| bytes == content))
-    }
-
-    pub fn resolve_active(&self, wanted: &str) -> Option<String> {
-        self.find(wanted)
-            .or_else(|| self.find(DEFAULT_PROFILE))
-            .or_else(|| self.list().ok()?.into_iter().next())
+        if let Some(default) = self.find(DEFAULT_PROFILE)? {
+            return Ok(Some(default));
+        }
+        Ok(self.list()?.into_iter().next())
     }
 }

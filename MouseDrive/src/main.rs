@@ -182,6 +182,7 @@ fn start_logging(unknown: &[String], s: &Strings) {
         "{TITLE} başlatıldı ({})",
         platform::environment_summary()
     ));
+    config::log_portable_mode();
     for arg in unknown {
         log::warn(&format!(
             "bilinmeyen komut satırı seçeneği yok sayıldı: {arg}"

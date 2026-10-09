@@ -40,7 +40,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 
 - **Steering** — Mouse X movement mapped to the virtual X axis with 5 modes: *Linear*, *Expo* (soft centre), *Smoothed* (time constant in ms), *Self-centering* and *Adaptive* (One Euro filter: smooth when slow, little lag when fast). Filters are time-based, so the feel does not change with the loop rate.
 - **Lossless mouse counts** — Raw counts are accumulated without rounding or per-event caps (only a ±16.7 million count safety limit between ticks); an optional *spike filter* (maximum steering rate, %/s) limits single-event jumps and counts what it clips.
-- **Steering speed in cm** — Shows how many centimetres of mouse travel give full lock; type a distance to set the speed. A built-in *DPI measure* tool finds your mouse DPI with a ruler.
+- **Steering speed in cm** — Shows how many centimetres of mouse travel give full lock; type a distance to set the speed. A built-in *DPI measure* tool finds your mouse DPI with a ruler; the measurement ends by itself when the mouse rests, so moving back to the window is not counted.
 - **Throttle** — Left mouse button with rise/drop times, envelope curves and an optional *throttle cut in corners* summarised as a sentence and a mini chart.
 - **Brake** — Right mouse button with a five-phase envelope (fill, full pressure, decay while held, short hold after release, release), an optional trail floor that rises with steering, and a **brake ceiling** (max output %) that scales every phase. A live timeline simulated by the real logic shows what the game will receive.
 - **Graphical curve editors** — Drag-point envelope editors (2–8 points, linear or smooth/monotone-cubic) with presets, a live marker, numeric entry and full keyboard control.
@@ -235,7 +235,7 @@ cargo clippy --manifest-path MouseDrive/Cargo.toml --all-targets --no-default-fe
 
 Settings are stored as TOML in one folder:
 
-1. Next to the exe if a `config.toml` exists there (portable mode)
+1. Next to the exe (portable mode) if an empty `mousedrive.portable` file exists there, or a `config.toml` written by MouseDrive (it has a `config_version` key). A `config.toml` with no MouseDrive keys — another program's file — is never used or rewritten.
 2. Otherwise `%APPDATA%\MouseDrive\` on Windows, `~/.config/mousedrive/` on Linux (`$XDG_CONFIG_HOME` is honoured)
 
 | File | Contents |
@@ -246,7 +246,7 @@ Settings are stored as TOML in one folder:
 | `last_crash.txt` | Next to the log: thread, location, message and backtrace of a crash. The next start shows a notice and renames it to `last_crash.old.txt` — attach it to a bug report |
 | `mousedrive.lock` | Empty single-instance lock, released when MouseDrive exits. On Linux it lives in `$XDG_RUNTIME_DIR` (the config folder only when that is not set); on Windows in `%APPDATA%\MouseDrive\`, also in portable mode |
 
-Changes are saved automatically for app settings; profiles are saved with **Save** (Ctrl+S). Saves are atomic (`.tmp` then rename); backups and duplicated profiles are plain copies. Out-of-range values are corrected on load and reported by name; a file that cannot be read is backed up as `<file>.<timestamp>.bak` (once per content); for config.toml the defaults are used, for the active profile the last saved settings stay in use. In-game recommendations: [In-game settings](#in-game-settings).
+Changes are saved automatically for app settings; profiles are saved with **Save** (Ctrl+S). Saves are atomic (`.tmp` then rename, the folder is flushed on Linux); a symlinked `config.toml` or profile stays a symlink and keeps its permissions. Backups and duplicated profiles are plain copies. Out-of-range values are corrected on load and reported by name; a file that cannot be read is backed up as `<file>.<timestamp>.bak` (once per content); for config.toml the defaults are used, for the active profile the last saved settings stay in use. A `config.toml` from a newer MouseDrive, or one with settings this version does not know, is backed up the same way before anything is written; if that backup fails, settings are not saved in that session. Profile names are matched exactly first and then ignoring letter case; when two profile files differ only in case (`Hypercar.toml`, `hypercar.toml`), a name that matches both is refused instead of guessing. In-game recommendations: [In-game settings](#in-game-settings).
 
 ### Command-line options
 

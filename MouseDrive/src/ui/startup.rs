@@ -2,10 +2,13 @@
 
 use std::path::{Path, PathBuf};
 
-use mousedrive::config::{self, Config, LoadNotice};
+use mousedrive::config::{
+    self, Backup, CURRENT_CONFIG_VERSION, Config, LoadNotice, PORTABLE_MARKER, Portable,
+};
 use mousedrive::profiles::{ProfileError, ProfileStore};
 
 use super::notices::{Level, Notice};
+use super::profiles::profile_error_text;
 use crate::lang::{Lang, Strings, fill, strings};
 
 const CHANGELOG_URL: &str = "https://github.com/MouseDrive/MouseDrive/blob/main/CHANGELOG.md";
@@ -24,13 +27,14 @@ impl Startup {
         let loaded = config::load_startup(config_path.as_deref());
         let file_exists = config_path.as_deref().is_some_and(Path::exists);
         let s = strings(Lang::from_i32(loaded.config.language));
-        let mut notices: Vec<Notice> = loaded
-            .notice
-            .iter()
-            .flat_map(|n| load_notices(n, s))
-            .collect();
-        let disk = (file_exists && loaded.notice.is_none() && !loaded.outdated)
-            .then(|| loaded.config.clone());
+        let exe_dir = config::exe_dir();
+        let mut notices: Vec<Notice> =
+            portable_notice(config::portable_mode(), exe_dir.as_deref(), s)
+                .into_iter()
+                .chain(loaded.notices.iter().flat_map(|n| load_notices(n, s)))
+                .collect();
+        let rewrite = loaded.notices.iter().any(LoadNotice::rewrites_file);
+        let disk = (file_exists && !rewrite && !loaded.outdated).then(|| loaded.config.clone());
         let store = config_path
             .as_deref()
             .and_then(Path::parent)
@@ -50,14 +54,38 @@ impl Startup {
         Self {
             config,
             disk,
-            config_path,
+            config_path: config_path.filter(|_| loaded.writable),
             store,
             notices,
         }
     }
 }
 
+fn portable_notice(mode: Portable, dir: Option<&Path>, s: &Strings) -> Option<Notice> {
+    let (level, template) = match mode {
+        Portable::IgnoredUnmarked => (Level::Info, s.notice_portable_unmarked),
+        Portable::IgnoredForeign { marked: true } => (Level::Warn, s.notice_portable_foreign),
+        _ => return None,
+    };
+    let text = fill(
+        template,
+        &[
+            ("dir", &dir?.display().to_string()),
+            ("marker", PORTABLE_MARKER),
+        ],
+    );
+    Some(Notice::new(level, text))
+}
+
 fn load_notices(notice: &LoadNotice, s: &Strings) -> Vec<Notice> {
+    let main = load_notice(notice, s);
+    let backup = notice
+        .backup()
+        .map(|backup| backup_result_notice(notice, backup, s));
+    std::iter::once(main).chain(backup).collect()
+}
+
+fn load_notice(notice: &LoadNotice, s: &Strings) -> Notice {
     match notice {
         LoadNotice::Corrected(fields) => {
             let text = fill(
@@ -67,19 +95,43 @@ fn load_notices(notice: &LoadNotice, s: &Strings) -> Vec<Notice> {
                     ("fields", &fields.join(", ")),
                 ],
             );
-            vec![Notice::new(Level::Warn, text)]
+            Notice::new(Level::Warn, text)
         }
-        LoadNotice::Unreadable { error, backup } => {
-            let mut out = vec![Notice::new(
-                Level::Error,
-                fill(s.notice_unreadable, &[("error", error)]),
-            )];
-            if let Some(path) = backup {
-                let text = fill(s.notice_backup, &[("path", &path.display().to_string())]);
-                out.push(Notice::new(Level::Info, text));
-            }
-            out
+        LoadNotice::Unreadable { error, .. } => {
+            Notice::new(Level::Error, fill(s.notice_unreadable, &[("error", error)]))
         }
+        LoadNotice::Newer { version, .. } => {
+            let text = fill(
+                s.notice_newer,
+                &[
+                    ("version", &version.to_string()),
+                    ("current", &CURRENT_CONFIG_VERSION.to_string()),
+                ],
+            );
+            Notice::new(Level::Warn, text)
+        }
+        LoadNotice::UnknownKeys { keys, .. } => Notice::new(
+            Level::Warn,
+            fill(s.notice_unknown_keys, &[("keys", &keys.join(", "))]),
+        ),
+        LoadNotice::Foreign { .. } => Notice::new(Level::Warn, s.notice_foreign),
+    }
+}
+
+fn backup_result_notice(notice: &LoadNotice, backup: &Backup, s: &Strings) -> Notice {
+    match backup {
+        Ok(path) => {
+            let template = match notice {
+                LoadNotice::Unreadable { .. } => s.notice_backup,
+                _ => s.notice_backup_copy,
+            };
+            let text = fill(template, &[("path", &path.display().to_string())]);
+            Notice::new(Level::Info, text)
+        }
+        Err(error) => Notice::new(
+            Level::Error,
+            fill(s.notice_backup_failed, &[("error", error)]),
+        ),
     }
 }
 
@@ -104,11 +156,8 @@ pub fn crashed_notice(s: &Strings, report: &Path) -> Notice {
     Notice::new(Level::Warn, text)
 }
 
-fn error_notice(template: &str, error: &dyn std::fmt::Display) -> Notice {
-    Notice::new(
-        Level::Error,
-        fill(template, &[("error", &error.to_string())]),
-    )
+fn error_notice(template: &str, error: &str) -> Notice {
+    Notice::new(Level::Error, fill(template, &[("error", error)]))
 }
 
 fn init_profiles(
@@ -129,7 +178,7 @@ fn init_profiles(
 fn migrate_profiles(store: &ProfileStore, config: &Config, s: &Strings) -> Vec<Notice> {
     let report = match store.reset_legacy_deadzone(f64::from(config.thread_interval_ms)) {
         Ok(report) => report,
-        Err(e) => return vec![error_notice(s.err_profile_list, &e)],
+        Err(e) => return vec![error_notice(s.err_profile_list, &profile_error_text(&e, s))],
     };
     let changed = (!report.changed.is_empty()).then(|| {
         let names = report.changed.join(", ");
@@ -150,10 +199,16 @@ fn migrate_profiles(store: &ProfileStore, config: &Config, s: &Strings) -> Vec<N
 
 fn activate_profile(store: &ProfileStore, config: Config, s: &Strings) -> (Config, Vec<Notice>) {
     if let Err(e) = store.ensure_initialized(&config.tuning) {
-        return (config, vec![error_notice(s.err_profile_list, &e)]);
+        let text = profile_error_text(&e, s);
+        return (config, vec![error_notice(s.err_profile_list, &text)]);
     }
-    let Some(active) = store.resolve_active(&config.active_profile) else {
-        return (config, Vec::new());
+    let active = match store.resolve_active(&config.active_profile) {
+        Ok(Some(active)) => active,
+        Ok(None) => return (config, Vec::new()),
+        Err(e) => {
+            let text = profile_error_text(&e, s);
+            return (config, vec![error_notice(s.err_profile_load, &text)]);
+        }
     };
     match store.load(&active, f64::from(config.thread_interval_ms)) {
         Ok(loaded) => {
@@ -167,7 +222,7 @@ fn activate_profile(store: &ProfileStore, config: Config, s: &Strings) -> (Confi
             (next, notices)
         }
         Err(e) => {
-            let load = error_notice(s.err_profile_load, &e);
+            let load = error_notice(s.err_profile_load, &profile_error_text(&e, s));
             let backup = backup_notice(store, &active, s);
             (config, std::iter::once(load).chain(backup).collect())
         }
@@ -180,7 +235,10 @@ pub(super) fn backup_notice(store: &ProfileStore, name: &str, s: &Strings) -> Op
             let text = fill(s.notice_backup, &[("path", &path.display().to_string())]);
             Some(Notice::new(Level::Info, text))
         }
-        Err(ProfileError::NotFound(_)) => None,
-        Err(e) => Some(error_notice(s.err_profile_backup, &e)),
+        Err(ProfileError::NotFound(_) | ProfileError::Ambiguous { .. }) => None,
+        Err(e) => Some(error_notice(
+            s.err_profile_backup,
+            &profile_error_text(&e, s),
+        )),
     }
 }

@@ -537,6 +537,10 @@ fn load_failed_notices(
 pub fn profile_error_text(e: &ProfileError, s: &Strings) -> String {
     match e {
         ProfileError::Name(n) => name_error_text(n, s),
+        ProfileError::Ambiguous { name, matches } => fill(
+            s.profile_ambiguous,
+            &[("name", name), ("names", &matches.join(", "))],
+        ),
         other => other.to_string(),
     }
 }
@@ -551,8 +555,9 @@ pub fn input_error(
         return Some(name_error_text(&e, s));
     }
     let wanted = input.to_lowercase();
-    let is_self = keep.is_some_and(|k| k.to_lowercase() == wanted);
-    let taken = !is_self && names.iter().any(|n| n.to_lowercase() == wanted);
+    let taken = names
+        .iter()
+        .any(|n| Some(n.as_str()) != keep && n.to_lowercase() == wanted);
     taken.then(|| name_error_text(&NameError::Duplicate, s))
 }
 

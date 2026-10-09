@@ -2,13 +2,31 @@
 
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
 use crate::curve::Curve;
 use crate::logic::filters::{MAX_SMOOTHING_MS, tau_from_legacy_alpha};
 
+mod portable;
+
+pub use self::portable::{Portable, exe_dir, log_portable_mode, portable_dir, portable_mode};
+
 pub const CURRENT_CONFIG_VERSION: u32 = 3;
+
+pub const CONFIG_FILE: &str = "config.toml";
+
+pub const PORTABLE_MARKER: &str = "mousedrive.portable";
+
+const VERSION_KEY: &str = "config_version";
+
+const LEGACY_KEYS: [&str; 4] = [
+    "steering_filter_alpha",
+    "mouse_delta_cap",
+    "overlay_enabled",
+    "overlay_corner",
+];
 
 const LEGACY_DEFAULT_DEADZONE: f64 = 0.02;
 
@@ -312,32 +330,37 @@ impl Config {
     }
 
     pub fn from_toml_str(content: &str) -> Result<Self, ConfigError> {
-        Self::parse(content).map(|(cfg, _)| cfg)
+        Self::parse(content).map(|parsed| parsed.config)
     }
 
-    fn parse(content: &str) -> Result<(Self, i64), ConfigError> {
+    fn parse(content: &str) -> Result<Parsed, ConfigError> {
         let raw: toml::Table = toml::from_str(content).map_err(parse_error)?;
         let mut cfg: Config = toml::from_str(content).map_err(parse_error)?;
-        let file_version = raw
-            .get("config_version")
+        let version = raw
+            .get(VERSION_KEY)
             .and_then(toml::Value::as_integer)
             .unwrap_or(1);
-        if file_version < 2 {
+        if version < 2 {
             let interval = f64::from(cfg.thread_interval_ms.max(1));
             migrate_legacy_tuning(&mut cfg.tuning, &raw, interval);
         }
-        if file_version < 3 {
+        if version < 3 {
             reset_legacy_deadzone(&mut cfg.tuning);
         }
         cfg.config_version = CURRENT_CONFIG_VERSION;
-        Ok((cfg, file_version))
+        Ok(Parsed {
+            config: cfg,
+            version,
+            unknown: unknown_keys(&raw),
+            foreign: is_foreign(&raw),
+        })
     }
 
     pub fn load_from_file(path: &Path) -> Result<Self, ConfigError> {
-        Self::read(path).map(|(cfg, _)| cfg)
+        Self::read(path).map(|parsed| parsed.config)
     }
 
-    fn read(path: &Path) -> Result<(Self, i64), ConfigError> {
+    fn read(path: &Path) -> Result<Parsed, ConfigError> {
         let content = std::fs::read_to_string(path).map_err(ConfigError::Io)?;
         Self::parse(&content)
     }
@@ -347,6 +370,52 @@ impl Config {
             toml::to_string_pretty(self).map_err(|e| ConfigError::Serialize(e.to_string()))?;
         crate::fsutil::write_atomic(path, content.as_bytes()).map_err(ConfigError::Io)
     }
+}
+
+struct Parsed {
+    config: Config,
+    version: i64,
+    unknown: Vec<String>,
+    foreign: bool,
+}
+
+fn schema() -> Option<&'static toml::Table> {
+    static SCHEMA: OnceLock<Option<toml::Table>> = OnceLock::new();
+    SCHEMA
+        .get_or_init(|| toml::Table::try_from(Config::default()).ok())
+        .as_ref()
+}
+
+fn is_known_key(key: &str) -> bool {
+    LEGACY_KEYS.contains(&key) || schema().is_some_and(|known| known.contains_key(key))
+}
+
+fn unknown_keys(raw: &toml::Table) -> Vec<String> {
+    schema().map_or_else(Vec::new, |known| unknown_in(raw, known, ""))
+}
+
+fn unknown_in(raw: &toml::Table, known: &toml::Table, prefix: &str) -> Vec<String> {
+    raw.iter()
+        .flat_map(|(key, value)| {
+            let path = if prefix.is_empty() {
+                key.clone()
+            } else {
+                format!("{prefix}.{key}")
+            };
+            match (known.get(key), value) {
+                (Some(toml::Value::Table(inner)), toml::Value::Table(table)) => {
+                    unknown_in(table, inner, &path)
+                }
+                (Some(_), _) => Vec::new(),
+                (None, _) if prefix.is_empty() && LEGACY_KEYS.contains(&key.as_str()) => Vec::new(),
+                (None, _) => vec![path],
+            }
+        })
+        .collect()
+}
+
+fn is_foreign(raw: &toml::Table) -> bool {
+    schema().is_some() && !raw.is_empty() && !raw.keys().any(|k| is_known_key(k))
 }
 
 fn migrate_legacy_tuning(tuning: &mut Tuning, raw: &toml::Table, interval_ms: f64) {
@@ -392,57 +461,142 @@ impl fmt::Display for ConfigError {
 
 impl std::error::Error for ConfigError {}
 
+pub type Backup = Result<PathBuf, String>;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum LoadNotice {
     Corrected(Vec<&'static str>),
-    Unreadable {
-        error: String,
-        backup: Option<PathBuf>,
-    },
+    Unreadable { error: String, backup: Backup },
+    Newer { version: i64, backup: Backup },
+    UnknownKeys { keys: Vec<String>, backup: Backup },
+    Foreign { backup: Backup },
+}
+
+impl LoadNotice {
+    pub fn rewrites_file(&self) -> bool {
+        matches!(
+            self,
+            LoadNotice::Corrected(_) | LoadNotice::Unreadable { .. }
+        )
+    }
+
+    pub fn backup(&self) -> Option<&Backup> {
+        match self {
+            LoadNotice::Corrected(_) => None,
+            LoadNotice::Unreadable { backup, .. }
+            | LoadNotice::Newer { backup, .. }
+            | LoadNotice::UnknownKeys { backup, .. }
+            | LoadNotice::Foreign { backup } => Some(backup),
+        }
+    }
 }
 
 pub struct Loaded {
     pub config: Config,
-    pub notice: Option<LoadNotice>,
+    pub notices: Vec<LoadNotice>,
     pub outdated: bool,
+    pub writable: bool,
+}
+
+impl Loaded {
+    fn new(config: Config, notices: Vec<LoadNotice>, outdated: bool) -> Self {
+        let writable = !notices
+            .iter()
+            .filter_map(LoadNotice::backup)
+            .any(Result::is_err);
+        Self {
+            config,
+            notices,
+            outdated,
+            writable,
+        }
+    }
 }
 
 pub fn load_startup(path: Option<&Path>) -> Loaded {
     let Some(path) = path else {
-        return Loaded {
-            config: Config::default(),
-            notice: None,
-            outdated: false,
-        };
+        return Loaded::new(Config::default(), Vec::new(), false);
     };
-    match Config::read(path) {
-        Ok((mut config, file_version)) => {
-            let fixed = config.validate();
-            Loaded {
-                config,
-                notice: (!fixed.is_empty()).then_some(LoadNotice::Corrected(fixed)),
-                outdated: file_version < i64::from(CURRENT_CONFIG_VERSION),
-            }
+    let loaded = match Config::read(path) {
+        Ok(parsed) => loaded_from(path, parsed),
+        Err(ConfigError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+            Loaded::new(Config::default(), Vec::new(), false)
         }
-        Err(ConfigError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => Loaded {
-            config: Config::default(),
-            notice: None,
-            outdated: false,
-        },
-        Err(e) => Loaded {
-            config: Config::default(),
-            notice: Some(LoadNotice::Unreadable {
+        Err(e) => {
+            let notice = LoadNotice::Unreadable {
                 error: e.to_string(),
-                backup: crate::fsutil::backup_file(path).ok(),
-            }),
-            outdated: false,
-        },
+                backup: backup_config(path),
+            };
+            Loaded::new(Config::default(), vec![notice], false)
+        }
+    };
+    log_load(path, &loaded);
+    loaded
+}
+
+fn loaded_from(path: &Path, parsed: Parsed) -> Loaded {
+    let Parsed {
+        mut config,
+        version,
+        unknown,
+        foreign,
+    } = parsed;
+    if foreign {
+        let notice = LoadNotice::Foreign {
+            backup: backup_config(path),
+        };
+        return Loaded::new(Config::default(), vec![notice], false);
+    }
+    let current = i64::from(CURRENT_CONFIG_VERSION);
+    let mut notices = Vec::new();
+    if version > current {
+        notices.push(LoadNotice::Newer {
+            version,
+            backup: backup_config(path),
+        });
+    } else if !unknown.is_empty() {
+        notices.push(LoadNotice::UnknownKeys {
+            keys: unknown,
+            backup: backup_config(path),
+        });
+    }
+    let fixed = config.validate();
+    if !fixed.is_empty() {
+        notices.push(LoadNotice::Corrected(fixed));
+    }
+    Loaded::new(config, notices, version < current)
+}
+
+fn backup_config(path: &Path) -> Backup {
+    crate::fsutil::backup_once(path).map_err(|e| e.to_string())
+}
+
+fn log_load(path: &Path, loaded: &Loaded) {
+    for notice in &loaded.notices {
+        let what = load_summary(notice);
+        match notice.backup() {
+            None => crate::log::warn(&what),
+            Some(Ok(backup)) => crate::log::warn(&format!("{what}; yedek: {}", backup.display())),
+            Some(Err(e)) => crate::log::error(&format!(
+                "{what}; yedek alınamadı ({e}), bu oturumda {} yazılmayacak",
+                path.display()
+            )),
+        }
     }
 }
 
-fn portable_config_path() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    Some(exe.parent()?.join("config.toml"))
+fn load_summary(notice: &LoadNotice) -> String {
+    match notice {
+        LoadNotice::Corrected(fields) => format!("config düzeltildi: {}", fields.join(", ")),
+        LoadNotice::Unreadable { error, .. } => format!("config okunamadı ({error})"),
+        LoadNotice::Newer { version, .. } => {
+            format!("config daha yeni bir sürümle yazılmış (config_version {version})")
+        }
+        LoadNotice::UnknownKeys { keys, .. } => {
+            format!("config'te bilinmeyen anahtarlar var: {}", keys.join(", "))
+        }
+        LoadNotice::Foreign { .. } => "config mousedrive'a ait görünmüyor".to_string(),
+    }
 }
 
 #[cfg(windows)]
@@ -506,19 +660,11 @@ pub(crate) fn xdg_base_dir(
         })
 }
 
-pub fn portable_dir() -> Option<PathBuf> {
-    let portable = portable_config_path()?;
-    if !portable.exists() {
-        return None;
-    }
-    portable.parent().map(Path::to_path_buf)
-}
-
 pub fn config_path() -> Option<PathBuf> {
     if let Some(dir) = portable_dir() {
-        return Some(dir.join("config.toml"));
+        return Some(dir.join(CONFIG_FILE));
     }
-    user_config_dir().map(|d| d.join("config.toml"))
+    user_config_dir().map(|d| d.join(CONFIG_FILE))
 }
 
 pub fn config_dir() -> Option<PathBuf> {
