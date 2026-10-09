@@ -4,7 +4,7 @@ use crate::output::OutputBackend;
 use crate::priority::Priorities;
 use crate::setup::SetupReport;
 use crate::sound::SoundPlayer;
-use crate::status::Cue;
+use crate::status::{Cue, SessionState};
 
 #[cfg(target_os = "linux")]
 use crate::uinput as backend;
@@ -30,6 +30,7 @@ pub(crate) trait ControlIo {
     fn buttons_swapped(&self) -> bool;
     fn app_foreground(&self) -> bool;
     fn input_desktop_active(&self) -> bool;
+    fn session(&self) -> SessionState;
 
     fn priorities(&self) -> Priorities;
     fn keep_cpu_budget(&mut self);
@@ -53,6 +54,8 @@ impl SystemIo {
         let sound = SoundPlayer::start()
             .inspect_err(|e| crate::log::warn(&format!("ses thread'i başlatılamadı: {e}")))
             .ok();
+        #[cfg(target_os = "linux")]
+        keys::linux::watch_session();
         Self { sound }
     }
 }
@@ -125,6 +128,10 @@ impl ControlIo for SystemIo {
 
     fn input_desktop_active(&self) -> bool {
         keys::input_desktop_active()
+    }
+
+    fn session(&self) -> SessionState {
+        keys::session_state()
     }
 
     fn priorities(&self) -> Priorities {

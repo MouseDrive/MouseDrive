@@ -9,7 +9,9 @@ use crate::logic::{MouseDriveState, STEERING_RANGE, TickInput};
 use crate::output::{BUTTON_GEAR_DOWN, BUTTON_GEAR_UP, OutputFrame};
 use crate::priority::{Priorities, ThreadPriority};
 use crate::setup::REQUIRED_BUTTONS;
-use crate::status::{AppStatus, Cue, CuePlanner, Health, StatusInputs, derive_status};
+use crate::status::{
+    AppStatus, Cue, CuePlanner, Health, SessionState, StatusInputs, derive_status,
+};
 use crate::telemetry::{Marker, Sample};
 
 use super::connection::ConnectionManager;
@@ -69,6 +71,7 @@ pub(crate) struct Engine {
     guards: [ButtonGuard; 2],
     guard_elapsed_ms: f64,
     desktop: DesktopWatch,
+    session: SessionState,
     stuck_releases: u64,
     telemetry_dropped: u64,
     conn: ConnectionManager,
@@ -139,6 +142,7 @@ impl Engine {
             guards: [ButtonGuard::default(); 2],
             guard_elapsed_ms: 0.0,
             desktop: DesktopWatch::default(),
+            session: SessionState::Active,
             stuck_releases: 0,
             telemetry_dropped: 0,
             conn,
@@ -191,6 +195,7 @@ impl Engine {
         while let Ok(command) = commands.try_recv() {
             self.handle_command(command, io, now_ms);
         }
+        self.watch_session(io);
         self.poll_hotkeys(io, shared);
         self.conn.poll(now_ms, io);
         self.publish_setup(shared);
@@ -341,17 +346,31 @@ impl Engine {
         }
     }
 
+    fn watch_session(&mut self, io: &mut impl ControlIo) {
+        let session = io.session();
+        if session == self.session {
+            return;
+        }
+        let was_active = self.session.is_active();
+        self.session = session;
+        crate::log::info(session_change_note(session));
+        if was_active != session.is_active() {
+            self.restart_input(io);
+        }
+    }
+
     fn poll_hotkeys(&mut self, io: &mut impl ControlIo, shared: &Shared) {
         self.keyboard_busy = shared.gui_keyboard() != 0 && io.app_foreground();
+        let hotkeys_live = !self.keyboard_busy && self.session.is_active();
         let capture_down = io.key_down(self.config.capture_toggle_key);
-        if capture_down && !self.keys.capture && !self.keyboard_busy {
+        if capture_down && !self.keys.capture && hotkeys_live {
             self.toggle_capture(io);
         }
         self.keys.capture = capture_down;
 
         let ab_key = self.config.ab_toggle_key;
         let ab_down = ab_key != UNBOUND && io.key_down(ab_key);
-        if ab_down && !self.keys.ab && !self.keyboard_busy {
+        if ab_down && !self.keys.ab && hotkeys_live {
             self.request_ab_toggle();
         }
         self.keys.ab = ab_down;
@@ -370,15 +389,23 @@ impl Engine {
             return;
         }
         self.capture = on;
-        self.state.reset();
-        self.mark_centered(io);
-        io.clear_input();
-        self.guards = [ButtonGuard::default(); 2];
+        self.restart_input(io);
         self.marker = if on {
             Marker::CaptureOn
         } else {
             Marker::CaptureOff
         };
+    }
+
+    fn restart_input(&mut self, io: &mut impl ControlIo) {
+        self.state.reset();
+        self.mark_centered(io);
+        io.clear_input();
+        self.guards = [ButtonGuard::default(); 2];
+    }
+
+    fn steering_live(&self) -> bool {
+        self.capture && self.session.is_active()
     }
 
     fn start_bind(&mut self, target: BindTarget, io: &mut impl ControlIo) {
@@ -421,7 +448,7 @@ impl Engine {
         }
         let counts = motion.counts;
         self.counts_total = self.counts_total.wrapping_add(counts);
-        if io.take_middle_click() {
+        if io.take_middle_click() && self.session.is_active() {
             self.recenter(io);
         }
         self.check_stuck_buttons(dt_ms, io);
@@ -430,7 +457,7 @@ impl Engine {
         self.rate.update(new_events, dt_ms);
         self.counters = counters;
         let (left, right) = io.take_buttons();
-        if !self.capture {
+        if !self.steering_live() {
             return TickInput {
                 dt_ms,
                 ..TickInput::default()
@@ -445,6 +472,9 @@ impl Engine {
     }
 
     fn check_stuck_buttons(&mut self, dt_ms: f64, io: &mut impl ControlIo) {
+        if !self.session.is_active() {
+            return;
+        }
         self.guard_elapsed_ms += dt_ms;
         if self.guard_elapsed_ms < CHECK_INTERVAL_MS {
             return;
@@ -487,6 +517,9 @@ impl Engine {
     fn next_frame(&mut self, input: TickInput, dt_ms: f64, io: &mut impl ControlIo) -> OutputFrame {
         self.state.tick(&self.config, input);
         self.repair_state();
+        if !self.session.is_active() {
+            return OutputFrame::NEUTRAL;
+        }
         if let Some(frame) = self.bind_frame(dt_ms, io) {
             return frame;
         }
@@ -583,9 +616,13 @@ impl Engine {
             app_foreground: !sink && io.app_foreground(),
             mouse_missing: self.device_filter == DeviceFilter::SelectedMissing,
             pointer_readable: self.registration_ok,
+            session: self.session,
             health: self.health,
         };
         self.status = derive_status(&inputs);
+        if !self.session.is_active() {
+            return;
+        }
         if let Some(cue) = self.cues.on_status(self.status, now_ms) {
             self.play(io, cue);
         }
@@ -673,12 +710,23 @@ impl Engine {
             input_stopped: self.counters.thread_stopped,
             device_filter: self.device_filter,
             registration_ok: self.registration_ok,
+            session: self.session,
             stuck_releases: self.stuck_releases,
             telemetry_dropped: self.telemetry_dropped,
             counts_total: self.counts_total,
             health: self.health,
             test_counter: self.options.test_counter,
             tick: self.tick_count,
+        }
+    }
+}
+
+fn session_change_note(session: SessionState) -> &'static str {
+    match session {
+        SessionState::Active => "oturum yeniden etkin; girdi okunmaya devam ediyor",
+        SessionState::Locked => "ekran kilitlendi; girdi duraklatıldı, oyuna nötr değerler gidiyor",
+        SessionState::Inactive => {
+            "oturum etkin değil (başka bir kullanıcı ya da konsol önde); girdi duraklatıldı, oyuna nötr değerler gidiyor"
         }
     }
 }

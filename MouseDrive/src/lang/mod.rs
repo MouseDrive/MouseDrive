@@ -126,6 +126,8 @@ pub struct Strings {
     pub det_input_lost: &'static str,
     pub det_mouse_moved: &'static str,
     pub det_mouse_grabbed: &'static str,
+    pub det_session_locked: &'static str,
+    pub det_session_inactive: &'static str,
     pub reason_write_failures: &'static str,
     pub reason_slow_loop: &'static str,
     pub reason_clipped: &'static str,

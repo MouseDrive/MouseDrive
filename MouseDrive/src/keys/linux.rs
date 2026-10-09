@@ -1,4 +1,8 @@
+mod session;
+
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+
+use crate::status::SessionState;
 
 const KEY_CODES: usize = 0x300;
 
@@ -216,7 +220,15 @@ pub fn app_is_foreground() -> bool {
 }
 
 pub fn input_desktop_active() -> bool {
-    true
+    session_state().is_active()
+}
+
+pub fn session_state() -> SessionState {
+    session::current()
+}
+
+pub(crate) fn watch_session() {
+    session::watch();
 }
 
 pub fn set_app_focused(focused: bool) {

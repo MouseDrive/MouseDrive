@@ -93,6 +93,8 @@ const BASE: Strings = Strings {
     det_input_lost: "Some mouse input was lost while MouseDrive was busy, so the wheel may be off-centre. Middle-click to recentre.",
     det_mouse_moved: "The selected mouse ({name}) was found on a new port: {old} → {new}. Save to keep using it there.",
     det_mouse_grabbed: "Another tool (input-remapper, keyd, evsieve…) has grabbed the selected mouse: only its virtual copy moves, so MouseDrive receives nothing. Exclude the mouse in that tool or close it.",
+    det_session_locked: "The screen is locked: mouse, buttons and keys are ignored and neutral values go to the game. MouseDrive continues by itself after you unlock.",
+    det_session_inactive: "This desktop session is not in the foreground (another user or a text console is active): mouse, buttons and keys are ignored and neutral values go to the game. MouseDrive continues by itself when you return.",
     reason_write_failures: "vJoy write errors",
     reason_slow_loop: "control loop is slow ({hz} Hz)",
     reason_clipped: "steering speed limit is delaying movement",

@@ -11,6 +11,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetSystemMetrics, GetWindowThreadProcessId, SM_SWAPBUTTON,
 };
 
+use crate::status::SessionState;
+
 pub fn is_key_down(vk: i32) -> bool {
     if !(1..=254).contains(&vk) {
         return false;
@@ -73,6 +75,10 @@ pub fn input_desktop_active() -> bool {
         .ok()
         .and_then(desktop_name);
     input_name.is_some() && input_name == own
+}
+
+pub fn session_state() -> SessionState {
+    SessionState::Active
 }
 
 fn desktop_name(desktop: HDESK) -> Option<String> {

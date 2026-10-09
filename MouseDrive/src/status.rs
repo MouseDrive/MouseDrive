@@ -62,6 +62,20 @@ pub fn status_rgb(s: AppStatus) -> [u8; 3] {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SessionState {
+    #[default]
+    Active,
+    Locked,
+    Inactive,
+}
+
+impl SessionState {
+    pub fn is_active(self) -> bool {
+        self == SessionState::Active
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Health {
     pub write_failures: u64,
@@ -96,6 +110,7 @@ pub struct StatusInputs {
     pub app_foreground: bool,
     pub mouse_missing: bool,
     pub pointer_readable: bool,
+    pub session: SessionState,
     pub health: Health,
 }
 
@@ -108,6 +123,8 @@ pub fn derive_status(i: &StatusInputs) -> AppStatus {
     }
     if i.setup_failures {
         AppStatus::SetupRequired
+    } else if !i.session.is_active() {
+        AppStatus::Paused
     } else if i.binding {
         AppStatus::Binding
     } else if !i.capture_enabled {

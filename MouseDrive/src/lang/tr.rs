@@ -93,6 +93,8 @@ const BASE: Strings = Strings {
     det_input_lost: "MouseDrive meşgulken bazı fare girdileri kaçtı; direksiyon merkezden kaymış olabilir. Ortalamak için farenin orta tuşuna basın.",
     det_mouse_moved: "Seçili fare ({name}) yeni bir portta bulundu: {old} → {new}. Orada kullanmaya devam etmek için kaydedin.",
     det_mouse_grabbed: "Başka bir araç (input-remapper, keyd, evsieve…) seçili fareyi yakaladı: yalnız onun sanal kopyası hareket ediyor, MouseDrive hiçbir şey almıyor. Fareyi o araçta hariç tutun ya da aracı kapatın.",
+    det_session_locked: "Ekran kilitli: fare, tuşlar ve butonlar yok sayılıyor, oyuna nötr değerler gidiyor. Kilidi açtığınızda MouseDrive kendiliğinden devam eder.",
+    det_session_inactive: "Bu masaüstü oturumu şu an önde değil (başka bir kullanıcı ya da metin konsolu etkin): fare, tuşlar ve butonlar yok sayılıyor, oyuna nötr değerler gidiyor. Bu oturuma döndüğünüzde MouseDrive kendiliğinden devam eder.",
     reason_write_failures: "vJoy yazma hataları",
     reason_slow_loop: "kontrol döngüsü yavaş ({hz} Hz)",
     reason_clipped: "direksiyon hız sınırı hareketi geciktiriyor",

@@ -1,7 +1,9 @@
 use std::collections::HashSet;
+use std::ffi::CString;
 use std::fs::OpenOptions;
 use std::io;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
@@ -31,6 +33,14 @@ pub(super) fn open_node(node: &Path) -> io::Result<RawDevice> {
         .custom_flags(libc::O_NONBLOCK | libc::O_CLOEXEC)
         .open(node)?;
     RawDevice::from_fd(OwnedFd::from(file))
+}
+
+pub(super) fn node_readable(node: &Path) -> bool {
+    let Ok(path) = CString::new(node.as_os_str().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: path sıfır sonlu ve çağrı boyunca geçerli; faccessat yalnız izin sorgular.
+    unsafe { libc::faccessat(libc::AT_FDCWD, path.as_ptr(), libc::R_OK, libc::AT_EACCESS) == 0 }
 }
 
 fn use_monotonic_clock(fd: RawFd) -> bool {

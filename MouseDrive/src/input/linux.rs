@@ -14,7 +14,9 @@ use std::time::{Duration, Instant};
 
 use self::classify::DeviceCaps;
 use self::decode::{Event, KeyChange};
-use self::device::{Candidate, Open, ReadOutcome, buttons_report, emit, find_selected};
+use self::device::{
+    Candidate, Open, ReadOutcome, buttons_report, emit, find_selected, node_readable,
+};
 use self::scan::{NodeCache, Opened, Verdict, device_report, evaluate, event_nodes};
 use super::{
     Class, DeviceReport, InputState, MouseButton, MouseInfo, RI_MOUSE_LEFT_BUTTON_UP,
@@ -397,7 +399,7 @@ impl Reader {
         let nodes = event_nodes();
         self.nodes.refresh(&nodes);
         let all = self.nodes.caps();
-        self.close_invalid(&nodes, &all);
+        self.close_invalid(&nodes, &all, node_readable);
         let reports = nodes
             .iter()
             .filter_map(|node| self.scan_node(node, &all))
@@ -406,7 +408,12 @@ impl Reader {
         self.publish_reports(reports);
     }
 
-    fn close_invalid(&mut self, nodes: &[PathBuf], all: &[DeviceCaps]) {
+    fn close_invalid(
+        &mut self,
+        nodes: &[PathBuf],
+        all: &[DeviceCaps],
+        readable: impl Fn(&Path) -> bool,
+    ) {
         let (kept, gone): (Vec<Open>, Vec<Open>) = std::mem::take(&mut self.devices)
             .into_iter()
             .partition(|d| {
@@ -416,7 +423,15 @@ impl Reader {
                         .verdict(&d.node, all)
                         .is_none_or(|verdict| verdict.is_ok())
             });
-        gone.into_iter().for_each(Open::close);
+        let (kept, revoked): (Vec<Open>, Vec<Open>) =
+            kept.into_iter().partition(|d| readable(&d.node));
+        for open in &revoked {
+            crate::log::info(&format!(
+                "girdi cihazının okuma izni kalktı, kapatıldı: {}",
+                open.node.display()
+            ));
+        }
+        gone.into_iter().chain(revoked).for_each(Open::close);
         self.devices = kept;
     }
 

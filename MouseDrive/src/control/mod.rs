@@ -17,7 +17,7 @@ use crate::logic::BrakePhase;
 use crate::output::{OutputFrame, WriteHealth};
 use crate::priority::{Priorities, PrioritySlot};
 use crate::setup::SetupReport;
-use crate::status::{AppStatus, Connection, Cue, Health};
+use crate::status::{AppStatus, Connection, Cue, Health, SessionState};
 use crate::telemetry::{DEFAULT_CAPACITY, Sample, TelemetryRing};
 
 use clock::LoopClock;
@@ -82,6 +82,7 @@ pub struct Snapshot {
     pub input_stopped: bool,
     pub device_filter: DeviceFilter,
     pub registration_ok: bool,
+    pub session: SessionState,
     pub stuck_releases: u64,
     pub telemetry_dropped: u64,
     pub counts_total: i64,
@@ -123,6 +124,7 @@ impl Default for Snapshot {
             input_stopped: false,
             device_filter: DeviceFilter::AllMice,
             registration_ok: false,
+            session: SessionState::Active,
             stuck_releases: 0,
             telemetry_dropped: 0,
             counts_total: 0,

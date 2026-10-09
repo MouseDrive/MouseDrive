@@ -4,7 +4,7 @@ use eframe::egui::{RichText, Ui};
 use mousedrive::config::Config;
 use mousedrive::control::{SetupInfo, Snapshot};
 use mousedrive::input::{self, DeviceFilter, MovedMouse};
-use mousedrive::status::{AppStatus, Connection, Health};
+use mousedrive::status::{AppStatus, Connection, Health, SessionState};
 
 use super::logo;
 use super::setup::owner_label;
@@ -74,8 +74,22 @@ pub fn action_for(status: AppStatus) -> Action {
 pub fn action_for_snapshot(snap: &Snapshot) -> Action {
     if mouse_missing(snap) {
         Action::UseAllMice
+    } else if session_paused(snap) {
+        Action::Details
     } else {
         action_for(snap.status)
+    }
+}
+
+fn session_paused(snap: &Snapshot) -> bool {
+    snap.status == AppStatus::Paused && !snap.session.is_active()
+}
+
+fn paused_detail(session: SessionState, s: &Strings, key: &str) -> String {
+    match session {
+        SessionState::Locked => s.det_session_locked.into(),
+        SessionState::Inactive => s.det_session_inactive.into(),
+        SessionState::Active => fill(s.det_paused, &[("key", key)]),
     }
 }
 
@@ -158,7 +172,7 @@ pub fn detail(snap: &Snapshot, setup: &SetupInfo, cfg: &Config, s: &Strings, lan
             fill(s.det_lost, &[("secs", &lang.num(secs, 1))])
         }
         AppStatus::Binding => s.det_binding.into(),
-        AppStatus::Paused => fill(s.det_paused, &[("key", &key)]),
+        AppStatus::Paused => paused_detail(snap.session, s, &key),
         AppStatus::NotReading if mouse_missing(snap) => s.det_mouse_missing.into(),
         AppStatus::NotReading => s.det_not_reading.into(),
         AppStatus::Degraded => {
