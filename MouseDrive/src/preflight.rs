@@ -66,7 +66,8 @@ pub fn run(args: &Args, retried: bool, s: &Strings) -> Result<Option<InstanceLoc
     if args.allow_root {
         log::warn("--allow-root yalnız Linux'ta geçerli; yok sayıldı");
     }
-    single_instance(lock_wait(args.updated_from.is_some() || retried), s)
+    let relaunched = args.updated_from.is_some() || args.rolled_back;
+    single_instance(lock_wait(relaunched || retried), s)
 }
 
 #[cfg(target_os = "linux")]

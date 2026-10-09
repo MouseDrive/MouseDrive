@@ -5,6 +5,7 @@ use mousedrive::input::DeviceReport;
 use crate::lang::{Lang, Strings, fill};
 
 pub const UPDATED_FROM: &str = "--updated-from";
+pub const ROLLED_BACK: &str = "--update-rolled-back";
 const MAX_VERSION_LEN: usize = 32;
 const LOCALE_VARS: [&str; 3] = ["LC_ALL", "LC_MESSAGES", "LANG"];
 
@@ -40,6 +41,7 @@ pub struct Args {
     pub allow_root: bool,
     pub backend: Option<Backend>,
     pub updated_from: Option<String>,
+    pub rolled_back: bool,
     pub unknown: Vec<String>,
 }
 
@@ -67,6 +69,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Args {
                     parsed.updated_from = Some(version);
                 }
             }
+            ROLLED_BACK => parsed.rolled_back = true,
             _ => parsed.unknown.push(arg),
         }
     }

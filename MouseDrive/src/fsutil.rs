@@ -71,9 +71,16 @@ fn write_tmp(tmp: &Path, bytes: &[u8], original: Option<&Permissions>) -> io::Re
         Err(e) if e.kind() == io::ErrorKind::NotFound => {}
         Err(e) => return Err(e),
     }
-    let mut file = create_new(tmp, original)?;
-    file.write_all(bytes)?;
-    file.sync_all()
+    write_new(tmp, bytes, original)
+}
+
+pub fn write_new(path: &Path, bytes: &[u8], permissions: Option<&Permissions>) -> io::Result<()> {
+    let mut file = create_new(path, permissions)?;
+    let written = file.write_all(bytes).and_then(|()| file.sync_all());
+    if written.is_err() {
+        let _ = std::fs::remove_file(path);
+    }
+    written
 }
 
 #[cfg(unix)]
@@ -86,8 +93,12 @@ fn create_new(path: &Path, original: Option<&Permissions>) -> io::Result<File> {
         options.mode(mode);
     }
     let file = options.open(path)?;
-    if let Some(mode) = mode {
-        file.set_permissions(Permissions::from_mode(mode))?;
+    if let Some(mode) = mode
+        && let Err(e) = file.set_permissions(Permissions::from_mode(mode))
+    {
+        drop(file);
+        let _ = std::fs::remove_file(path);
+        return Err(e);
     }
     Ok(file)
 }
@@ -98,7 +109,7 @@ fn create_new(path: &Path, _original: Option<&Permissions>) -> io::Result<File> 
 }
 
 #[cfg(unix)]
-fn sync_dir(dir: &Path) {
+pub fn sync_dir(dir: &Path) {
     use std::sync::atomic::{AtomicBool, Ordering};
     static WARNED: AtomicBool = AtomicBool::new(false);
     let Err(e) = File::open(dir).and_then(|d| d.sync_all()) else {
@@ -113,7 +124,7 @@ fn sync_dir(dir: &Path) {
 }
 
 #[cfg(not(unix))]
-fn sync_dir(_dir: &Path) {}
+pub fn sync_dir(_dir: &Path) {}
 
 pub fn backup_file(path: &Path) -> io::Result<PathBuf> {
     let ts = SystemTime::now()

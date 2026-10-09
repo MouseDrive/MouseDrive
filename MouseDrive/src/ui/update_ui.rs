@@ -6,7 +6,7 @@ use mousedrive::config::Config;
 use super::theme::text_on;
 use super::widgets::Cx;
 use crate::lang::Strings;
-use crate::update::{UpdateChecker, UpdateStatus, unix_now};
+use crate::update::{FailReason, Manual, ReleaseInfo, UpdateChecker, UpdateStatus, unix_now};
 
 pub const CHECK_INTERVAL_S: i64 = 86_400;
 
@@ -57,21 +57,7 @@ impl UpdaterUi {
     pub fn button(&mut self, ui: &mut Ui, cx: &Cx, cfg: &mut Config) {
         match self.checker.status() {
             UpdateStatus::Available(info) if info.version != cfg.skipped_version => {
-                let label = format!("⬆ {} {}", cx.s.upd_update_btn, info.version);
-                let auto = info.auto_installable();
-                let button = accent_button(ui, cx, &label);
-                let button = if auto {
-                    button.on_hover_text(cx.s.upd_update_tip)
-                } else {
-                    button
-                };
-                if button.clicked() {
-                    if auto {
-                        self.checker.spawn_update(info.clone());
-                    } else {
-                        ui.ctx().open_url(OpenUrl::new_tab(info.html_url.clone()));
-                    }
-                }
+                self.offer(ui, cx, &info);
                 if ui.small_button(cx.s.upd_skip).clicked() {
                     cfg.skipped_version = info.version;
                 }
@@ -90,11 +76,32 @@ impl UpdaterUi {
             UpdateStatus::ReadyToRestart => {
                 ui.label(cx.s.upd_restarting);
             }
-            UpdateStatus::UpdateFailed(info) => {
-                ui.colored_label(ui.visuals().error_fg_color, cx.s.upd_update_failed);
+            UpdateStatus::UpdateFailed(info, reason) => {
+                let text = format!("{}: {}", cx.s.upd_update_failed, fail_text(reason, cx.s));
+                ui.colored_label(ui.visuals().error_fg_color, text)
+                    .on_hover_text(fail_tip(reason, cx.s));
                 ui.hyperlink_to(cx.s.upd_download, info.html_url);
             }
             _ => {}
+        }
+    }
+
+    fn offer(&self, ui: &mut Ui, cx: &Cx, info: &ReleaseInfo) {
+        match self.checker.manual(info) {
+            None => {
+                let label = format!("⬆ {} {}", cx.s.upd_update_btn, info.version);
+                let button = accent_button(ui, cx, &label).on_hover_text(cx.s.upd_update_tip);
+                if button.clicked() {
+                    self.checker.spawn_update(info.clone());
+                }
+            }
+            Some(manual) => {
+                let label = format!("⬆ {} {}", cx.s.upd_available, info.version);
+                let tip = format!("{}. {}", manual_text(manual, cx.s), cx.s.upd_manual_tip);
+                if accent_button(ui, cx, &label).on_hover_text(tip).clicked() {
+                    ui.ctx().open_url(OpenUrl::new_tab(info.html_url.clone()));
+                }
+            }
         }
     }
 
@@ -111,7 +118,11 @@ impl UpdaterUi {
                 cfg.last_update_check = unix_now();
                 self.checker.spawn_check();
             }
-            if let Some(text) = status_text(&status, cx.s) {
+            let manual = match &status {
+                UpdateStatus::Available(info) => self.checker.manual(info),
+                _ => None,
+            };
+            if let Some(text) = status_text(&status, manual, cx.s) {
                 ui.label(RichText::new(text).weak());
             }
         });
@@ -128,18 +139,55 @@ pub fn due(enabled: bool, last: i64, now: i64) -> bool {
     enabled && (now < last || now - last >= CHECK_INTERVAL_S)
 }
 
-pub fn status_text(status: &UpdateStatus, s: &Strings) -> Option<String> {
+pub fn status_text(status: &UpdateStatus, manual: Option<Manual>, s: &Strings) -> Option<String> {
     let text = match status {
         UpdateStatus::Idle => return None,
         UpdateStatus::Checking => s.upd_checking,
         UpdateStatus::UpToDate => s.upd_up_to_date,
         UpdateStatus::Failed => s.upd_failed,
         UpdateStatus::Available(info) => {
-            return Some(format!("{} {}", s.upd_available, info.version));
+            let available = format!("{} {}", s.upd_available, info.version);
+            return Some(match manual {
+                Some(manual) => format!("{available} ({})", manual_text(manual, s)),
+                None => available,
+            });
         }
         UpdateStatus::Updating => s.upd_updating,
         UpdateStatus::ReadyToRestart => s.upd_installed,
-        UpdateStatus::UpdateFailed(_) => s.upd_update_failed,
+        UpdateStatus::UpdateFailed(_, reason) => {
+            return Some(format!(
+                "{}: {}",
+                s.upd_update_failed,
+                fail_text(*reason, s)
+            ));
+        }
     };
     Some(text.to_string())
+}
+
+pub fn manual_text(manual: Manual, s: &Strings) -> &'static str {
+    match manual {
+        Manual::PackageManager => s.upd_manual_package,
+        Manual::AppImage => s.upd_manual_appimage,
+        Manual::NoBuild => s.upd_manual_no_build,
+    }
+}
+
+pub fn fail_text(reason: FailReason, s: &Strings) -> &'static str {
+    match reason {
+        FailReason::Network => s.upd_fail_network,
+        FailReason::Verify => s.upd_fail_verify,
+        FailReason::NotWritable => s.upd_fail_not_writable,
+        FailReason::SelfTest => s.upd_fail_self_test,
+        FailReason::Replace => s.upd_fail_replace,
+        FailReason::Restore => s.upd_fail_restore,
+        FailReason::Other => s.upd_fail_other,
+    }
+}
+
+pub fn fail_tip(reason: FailReason, s: &Strings) -> &'static str {
+    match reason {
+        FailReason::Restore => s.upd_fail_restore_tip,
+        _ => s.upd_fail_tip,
+    }
 }

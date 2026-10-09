@@ -69,7 +69,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 - **Decoupled control loop** — A dedicated high-priority 250 Hz thread owns the virtual device and writes all axes in **one report per tick** (no torn frames); the window can be minimised or stall without affecting the output.
 - **Safe config** — Config and profile saves are atomic (`.tmp` then rename), out-of-range values corrected and reported by name, unreadable files backed up (a plain copy) instead of overwritten.
 - **Accessibility** — Colour-blind palette (Okabe-Ito), brake always dashed in charts, screen-reader labels on custom widgets, rebindable hotkeys (including mouse side buttons), interface scale 75–200 %.
-- **Auto-update** — Background check against GitHub releases with one-click self-update (download → SHA-256 verify → replace → restart). The restart asks first about unsaved profile changes and never happens while another window, such as the game, is in front.
+- **Auto-update** — Background check against GitHub releases with one-click self-update for the matching OS and CPU (download → SHA-256 check, plus the minisign signature once releases are signed → test run with `--version` → replace, keeping the previous binary as `mousedrive.old` (`mousedrive.exe.old` on Windows) until the new version has started → restart; if the new version does not start, the previous one is put back). Package-manager installs (under `/usr` except `/usr/local`, or `/nix/store`) and AppImages only get a link to the release page; a folder MouseDrive cannot write to is reported before anything is downloaded. HTTPS goes through the HTTP proxy named in `https_proxy`, `all_proxy` or `http_proxy` (SOCKS proxies are not supported; hosts in `no_proxy` are reached directly) and, on Linux, also trusts the system certificates. The restart asks first about unsaved profile changes and never happens while another window, such as the game, is in front.
 - **Languages** — Turkish and English.
 
 ## Input / Output mapping
@@ -275,7 +275,7 @@ MouseDrive/
     ├── ui/                # egui screens: status bar, navigation, overview, settings pages, profiles, monitor, setup, ...
     ├── curve_editor.rs    # Drag-point curve editor widget
     ├── lang/              # TR / EN strings
-    ├── update.rs          # Auto-update: release check, SHA-256 verify, self-replace ("updater" feature)
+    ├── update.rs, update/ # Auto-update: release check, SHA-256 + minisign verify, test run, replace and roll back ("updater" feature)
     ├── lib.rs             # Library: all modules below, no GUI
     ├── logic.rs, logic/   # Pure driving logic (steering, throttle, brake) + filters
     ├── curve.rs           # Envelope curve model (PCHIP eval/inverse, point editing, presets)

@@ -15,7 +15,7 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 
 flate2 = { version = "1", default-features = false, features = ["rust_backend"], optional = true }
-self-replace = { version = "1", optional = true }
+minisign-verify = { version = "0.3", optional = true }
 serde_json = { version = "1", optional = true }
 sha2 = { version = "0.10", optional = true }
 ureq = { version = "2", optional = true }
@@ -44,10 +44,21 @@ evdev = "0.13"
 libc = "0.2"
 winit = { version = "0.30", default-features = false, features = ["wayland", "x11"] }
 zbus = { version = "4.4", default-features = false, features = ["async-io"] }
+rustls-native-certs = { version = "0.8", optional = true }
+webpki-roots = { version = "1", optional = true }
 
 [features]
 default = ["updater"]
-updater = ["dep:flate2", "dep:self-replace", "dep:serde_json", "dep:sha2", "dep:ureq", "dep:zip"]
+updater = [
+    "dep:flate2",
+    "dep:minisign-verify",
+    "dep:rustls-native-certs",
+    "dep:serde_json",
+    "dep:sha2",
+    "dep:ureq",
+    "dep:webpki-roots",
+    "dep:zip",
+]
 
 [profile.release]
 opt-level = 3

@@ -20,7 +20,11 @@ use mousedrive::control::{self, Options, Shared};
 use mousedrive::instance::InstanceLock;
 use mousedrive::{config, crash, input, log, platform};
 
+#[cfg(feature = "updater")]
+use crate::cli::ROLLED_BACK;
 use crate::cli::{Action, Backend, UPDATED_FROM};
+#[cfg(feature = "updater")]
+use crate::lang::fill;
 use crate::lang::{Lang, Strings, strings};
 use crate::lifecycle::ExitRequest;
 use crate::ui::{App, Startup};
@@ -43,6 +47,7 @@ struct Prepared {
 struct Launch {
     errors: Vec<String>,
     updated_from: Option<String>,
+    rolled_back: bool,
     previous_crash: Option<PathBuf>,
     backend: Option<Backend>,
     exit_request: Arc<ExitRequest>,
@@ -112,6 +117,7 @@ fn main() -> eframe::Result<()> {
     let launch = Launch {
         errors,
         updated_from: args.updated_from,
+        rolled_back: args.rolled_back,
         previous_crash,
         backend: args.backend,
         exit_request: Arc::clone(&exit_request),
@@ -248,6 +254,14 @@ fn run_window(
             if let Some(from) = &launch.updated_from {
                 app.report_update(from);
             }
+            if launch.rolled_back {
+                log::warn("güncelleme geri alındıktan sonra önceki sürüm açıldı");
+                app.report_rollback();
+            }
+            #[cfg(feature = "updater")]
+            if !launch.rolled_back {
+                update::forget_backup_later();
+            }
             if let Some(report) = &launch.previous_crash {
                 app.report_crash(report);
             }
@@ -322,6 +336,35 @@ fn join(name: &str, handle: Option<JoinHandle<()>>) {
     }
 }
 
+#[cfg(feature = "updater")]
+fn relaunch(exe: std::io::Result<PathBuf>, s: &Strings) {
+    let exe = match exe {
+        Ok(exe) => exe,
+        Err(e) => {
+            log::error(&format!("yeniden başlatılamadı: {e}"));
+            platform::alert(s.relaunch_failed_title, s.relaunch_failed_body);
+            return;
+        }
+    };
+    let new_args = [UPDATED_FROM, env!("CARGO_PKG_VERSION")];
+    match update::relaunch(&exe, &new_args, &[ROLLED_BACK]) {
+        update::Relaunch::Started | update::Relaunch::RolledBack => {}
+        update::Relaunch::RestoredOnly => {
+            platform::alert(s.relaunch_failed_title, s.relaunch_restored_body);
+        }
+        update::Relaunch::Broken => {
+            let backup = update::backup_path(&exe).display().to_string();
+            let exe = exe.display().to_string();
+            let body = fill(
+                s.relaunch_broken_body,
+                &[("backup", &backup), ("exe", &exe)],
+            );
+            platform::alert(s.relaunch_failed_title, &body);
+        }
+    }
+}
+
+#[cfg(not(feature = "updater"))]
 fn relaunch(exe: std::io::Result<PathBuf>, s: &Strings) {
     let result = exe.and_then(|exe| {
         platform::spawn_reaped(

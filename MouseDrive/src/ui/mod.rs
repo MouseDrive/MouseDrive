@@ -62,7 +62,7 @@ use crate::lang::{Lang, fill, strings};
 use crate::lifecycle::ExitRequest;
 
 pub use self::startup::Startup;
-use self::startup::{crashed_notice, updated_notice};
+use self::startup::{crashed_notice, rolled_back_notice, updated_notice};
 
 const FAST_REPAINT: Duration = Duration::from_millis(16);
 const SLOW_REPAINT: Duration = Duration::from_millis(250);
@@ -190,6 +190,11 @@ impl App {
         if let Some(notice) = updated_notice(s, from) {
             self.notices.push(notice);
         }
+    }
+
+    pub fn report_rollback(&mut self) {
+        let s = self.cx().s;
+        self.notices.push(rolled_back_notice(s));
     }
 
     pub fn report_crash(&mut self, report: &Path) {

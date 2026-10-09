@@ -151,6 +151,14 @@ pub fn updated_notice(s: &Strings, from: &str) -> Option<Notice> {
     })
 }
 
+pub fn rolled_back_notice(s: &Strings) -> Notice {
+    let text = fill(
+        s.notice_update_rolled_back,
+        &[("version", env!("CARGO_PKG_VERSION"))],
+    );
+    Notice::new(Level::Warn, text)
+}
+
 pub fn crashed_notice(s: &Strings, report: &Path) -> Notice {
     let text = fill(s.notice_crashed, &[("path", &report.display().to_string())]);
     Notice::new(Level::Warn, text)

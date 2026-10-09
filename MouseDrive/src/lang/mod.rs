@@ -67,7 +67,10 @@ pub fn strings(lang: Lang) -> &'static Strings {
     }
 }
 
-#[cfg_attr(not(feature = "updater"), allow(dead_code))]
+#[cfg_attr(
+    any(not(feature = "updater"), not(target_os = "linux")),
+    allow(dead_code)
+)]
 pub struct Strings {
     pub nav_home: &'static str,
     pub nav_monitor: &'static str,
@@ -544,6 +547,7 @@ pub struct Strings {
     pub notice_portable_unmarked: &'static str,
     pub notice_portable_foreign: &'static str,
     pub notice_updated: &'static str,
+    pub notice_update_rolled_back: &'static str,
     pub link_changelog: &'static str,
     pub notice_crashed: &'static str,
     pub notice_deadzone_reset: &'static str,
@@ -566,6 +570,8 @@ pub struct Strings {
     pub btn_quit_now: &'static str,
     pub relaunch_failed_title: &'static str,
     pub relaunch_failed_body: &'static str,
+    pub relaunch_restored_body: &'static str,
+    pub relaunch_broken_body: &'static str,
     pub cli_help: &'static str,
     pub cli_unknown_arg: &'static str,
     pub instance_running_title: &'static str,
@@ -592,6 +598,19 @@ pub struct Strings {
     pub upd_installed: &'static str,
     pub upd_restart_now: &'static str,
     pub upd_update_failed: &'static str,
+    pub upd_manual_package: &'static str,
+    pub upd_manual_appimage: &'static str,
+    pub upd_manual_no_build: &'static str,
+    pub upd_manual_tip: &'static str,
+    pub upd_fail_network: &'static str,
+    pub upd_fail_verify: &'static str,
+    pub upd_fail_not_writable: &'static str,
+    pub upd_fail_self_test: &'static str,
+    pub upd_fail_replace: &'static str,
+    pub upd_fail_restore: &'static str,
+    pub upd_fail_other: &'static str,
+    pub upd_fail_tip: &'static str,
+    pub upd_fail_restore_tip: &'static str,
 }
 
 impl Strings {
