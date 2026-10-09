@@ -1,25 +1,27 @@
+mod classify;
 mod decode;
 mod device;
+mod scan;
 
 use std::collections::HashMap;
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+use self::classify::DeviceCaps;
 use self::decode::{Event, KeyChange, clock_ns};
-use self::device::{Open, ReadOutcome, buttons_report, emit, open_node};
+use self::device::{Candidate, Open, ReadOutcome, buttons_report, emit, find_selected};
+use self::scan::{NodeCache, Opened, Verdict, device_report, evaluate, event_nodes};
 use super::{
-    InputState, MouseButton, MouseInfo, RI_MOUSE_LEFT_BUTTON_UP, RI_MOUSE_RIGHT_BUTTON_UP, STATE,
-    disambiguate, label_for,
+    Class, DeviceReport, InputState, MouseButton, MouseInfo, RI_MOUSE_LEFT_BUTTON_UP,
+    RI_MOUSE_RIGHT_BUTTON_UP, STATE, Skip, disambiguate, label_for,
 };
 use crate::platform::{self, Wake, pollfd};
 
-const DEV_INPUT: &str = "/dev/input";
 const HOTPLUG_SETTLE: Duration = Duration::from_millis(250);
 const WATCH_RETRY: Duration = Duration::from_secs(2);
 const RECONCILE_EVERY: Duration = Duration::from_millis(100);
@@ -33,9 +35,9 @@ const REQ_FILTER: u8 = 4;
 static WAKE: Wake = Wake::new();
 static POINTER_OPEN: AtomicBool = AtomicBool::new(false);
 static DEVICES: Mutex<Vec<Known>> = Mutex::new(Vec::new());
-static DENIED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static REPORTS: Mutex<Vec<DeviceReport>> = Mutex::new(Vec::new());
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct Known {
     handle: isize,
     path: String,
@@ -119,8 +121,28 @@ pub(super) fn list_mice() -> Vec<MouseInfo> {
         .collect()
 }
 
+pub fn devices() -> Vec<DeviceReport> {
+    REPORTS.lock().map(|r| r.clone()).unwrap_or_default()
+}
+
 pub fn denied_mice() -> Vec<String> {
-    DENIED.lock().map(|d| d.clone()).unwrap_or_default()
+    denied(Class::is_pointer)
+}
+
+pub fn denied_keyboards() -> Vec<String> {
+    denied(|class| class == Class::Keyboard)
+}
+
+fn denied(wanted: impl Fn(Class) -> bool + Copy) -> Vec<String> {
+    devices()
+        .iter()
+        .filter(|r| r.denied_as(wanted))
+        .map(DeviceReport::label)
+        .collect()
+}
+
+pub(super) fn list_devices() -> Vec<DeviceReport> {
+    scan::list_devices()
 }
 
 pub(super) fn now_ns() -> u64 {
@@ -280,67 +302,14 @@ fn watch_dev_input() -> Option<OwnedFd> {
     (watch >= 0).then_some(fd)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct NodeStamp {
-    rdev: u64,
-    ctime: i64,
-    ctime_nsec: i64,
-}
-
-impl NodeStamp {
-    fn of(node: &Path) -> Option<Self> {
-        let meta = std::fs::metadata(node).ok()?;
-        Some(Self {
-            rdev: meta.rdev(),
-            ctime: meta.ctime(),
-            ctime_nsec: meta.ctime_nsec(),
-        })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Skipped {
-    Denied(Option<String>),
-    Ignored,
-}
-
-impl Skipped {
-    fn denied_mouse(&self) -> Option<String> {
-        match self {
-            Skipped::Denied(mouse) => mouse.clone(),
-            Skipped::Ignored => None,
-        }
-    }
-}
-
-#[derive(Default)]
-struct SkippedNodes(HashMap<PathBuf, (NodeStamp, Skipped)>);
-
-impl SkippedNodes {
-    fn unchanged(&self, node: &Path, stamp: NodeStamp) -> Option<&Skipped> {
-        self.0
-            .get(node)
-            .filter(|(seen, _)| *seen == stamp)
-            .map(|(_, skipped)| skipped)
-    }
-
-    fn remember(&mut self, node: PathBuf, stamp: NodeStamp, skipped: Skipped) {
-        self.0.insert(node, (stamp, skipped));
-    }
-
-    fn forget(&mut self, node: &Path) {
-        self.0.remove(node);
-    }
-
-    fn retain(&mut self, nodes: &[PathBuf]) {
-        self.0.retain(|node, _| nodes.contains(node));
-    }
-}
+type Verdicts = HashMap<PathBuf, (Option<Class>, Option<Skip>)>;
 
 #[derive(Default)]
 struct Reader {
     devices: Vec<Open>,
-    skipped: SkippedNodes,
+    nodes: NodeCache,
+    logged: Verdicts,
+    selected_ids: Option<(u16, u16)>,
     rescan_at: Option<Instant>,
     reconcile_at: Option<Instant>,
     events: Vec<Event>,
@@ -370,6 +339,7 @@ impl Reader {
                 ReadOutcome::Drained if open.needs_sync() => resync.push(i),
                 ReadOutcome::Drained | ReadOutcome::Pending => {}
             }
+            note_motion(open, self.selected_ids);
         }
         if !resync.is_empty() {
             self.reconcile(&resync);
@@ -435,74 +405,91 @@ impl Reader {
     fn rescan(&mut self) {
         self.rescan_at = None;
         let nodes = event_nodes();
+        self.nodes.refresh(&nodes);
+        let all = self.nodes.caps();
+        self.close_invalid(&nodes, &all);
+        let reports = nodes
+            .iter()
+            .filter_map(|node| self.scan_node(node, &all))
+            .collect();
+        self.publish();
+        self.publish_reports(reports);
+    }
+
+    fn close_invalid(&mut self, nodes: &[PathBuf], all: &[DeviceCaps]) {
         let (kept, gone): (Vec<Open>, Vec<Open>) = std::mem::take(&mut self.devices)
             .into_iter()
-            .partition(|d| nodes.contains(&d.node));
+            .partition(|d| {
+                nodes.contains(&d.node)
+                    && self
+                        .nodes
+                        .verdict(&d.node, all)
+                        .is_none_or(|verdict| verdict.is_ok())
+            });
         gone.into_iter().for_each(Open::close);
         self.devices = kept;
-        self.skipped.retain(&nodes);
-        let mut denied = Vec::new();
-        for node in nodes {
-            if self.devices.iter().any(|d| d.node == node) {
-                continue;
-            }
-            denied.extend(self.try_open(node));
+    }
+
+    fn scan_node(&mut self, node: &Path, all: &[DeviceCaps]) -> Option<DeviceReport> {
+        if let Some(open) = self.devices.iter().find(|d| d.node == node) {
+            return Some(open.report());
         }
-        self.publish();
-        if let Ok(mut d) = DENIED.lock() {
-            *d = denied;
+        let entry = self.nodes.get_mut(node)?;
+        match evaluate(node, entry, all) {
+            Verdict::Open(opened) => {
+                let Opened { dev, caps, class } = *opened;
+                let open = Open::new(dev, node.to_path_buf(), caps, class);
+                let report = open.report();
+                self.devices.push(open);
+                Some(report)
+            }
+            Verdict::Skip(class, skip) => {
+                Some(device_report(node, entry.caps.as_ref(), class, Some(skip)))
+            }
         }
     }
 
-    fn try_open(&mut self, node: PathBuf) -> Option<String> {
-        let stamp = NodeStamp::of(&node);
-        if let Some(stamp) = stamp
-            && let Some(skipped) = self.skipped.unchanged(&node, stamp)
-        {
-            return skipped.denied_mouse();
-        }
-        let skipped = match open_node(&node) {
-            Ok(dev) => match Open::new(dev, node.clone()) {
-                Some(open) => {
-                    self.skipped.forget(&node);
-                    self.devices.push(open);
-                    return None;
-                }
-                None => Skipped::Ignored,
-            },
-            Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
-                Skipped::Denied(sysfs_mouse_name(&node))
-            }
-            Err(_) => {
-                self.skipped.forget(&node);
-                return None;
-            }
-        };
-        let denied = skipped.denied_mouse();
-        match stamp {
-            Some(stamp) => self.skipped.remember(node, stamp, skipped),
-            None => self.skipped.forget(&node),
-        }
-        denied
-    }
-
-    fn publish(&self) {
-        let known = self.devices.iter().map(Known::of).collect();
-        if let Ok(mut d) = DEVICES.lock() {
+    fn publish(&mut self) {
+        let known: Vec<Known> = self.devices.iter().map(Known::of).collect();
+        let changed = DEVICES.lock().is_ok_and(|mut d| {
+            let changed = *d != known;
             *d = known;
-        }
+            changed
+        });
         let pointer = self.devices.iter().any(|d| d.pointer);
         POINTER_OPEN.store(pointer, Ordering::Release);
         self.resolve_filter();
+        if changed {
+            STATE.bump_generation();
+        }
     }
 
-    fn resolve_filter(&self) {
-        STATE.resolve_filter(|path| {
-            self.devices
-                .iter()
-                .find(|d| d.mouse && d.handle != 0 && d.path.eq_ignore_ascii_case(path))
-                .map(|d| d.handle)
+    fn publish_reports(&mut self, reports: Vec<DeviceReport>) {
+        self.logged = log_changes(&self.logged, &reports);
+        let changed = REPORTS.lock().is_ok_and(|mut r| {
+            let changed = *r != reports;
+            *r = reports;
+            changed
         });
+        if changed {
+            STATE.bump_generation();
+        }
+    }
+
+    fn resolve_filter(&mut self) {
+        let candidates: Vec<Candidate> = self
+            .devices
+            .iter()
+            .filter(|d| d.mouse && d.handle != 0)
+            .map(Candidate::of)
+            .collect();
+        STATE.resolve_filter(|wanted| find_selected(&candidates, wanted));
+        let accepted = STATE.accepted_device.load(Ordering::Acquire);
+        self.selected_ids = self
+            .devices
+            .iter()
+            .find(|d| d.handle != 0 && d.handle == accepted)
+            .map(|d| d.ids);
     }
 
     fn close_all(&mut self) {
@@ -525,6 +512,71 @@ fn release_unheld(held: u16) {
     }
 }
 
+fn note_motion(open: &mut Open, selected_ids: Option<(u16, u16)>) {
+    let Some(at) = open.take_moved_at() else {
+        return;
+    };
+    let selected = open.handle != 0 && open.handle == STATE.accepted_device.load(Ordering::Relaxed);
+    if selected {
+        STATE.note_selected_motion(open.handle, at);
+    } else if open.virtual_source && selected_ids == Some(open.ids) {
+        STATE.note_twin_motion(at);
+    }
+}
+
+fn log_changes(logged: &Verdicts, reports: &[DeviceReport]) -> Verdicts {
+    reports
+        .iter()
+        .map(|r| {
+            let node = PathBuf::from(&r.node);
+            let verdict = (r.class, r.skip);
+            if logged.get(&node) != Some(&verdict) {
+                crate::log::info(&describe(r));
+            }
+            (node, verdict)
+        })
+        .collect()
+}
+
+fn describe(r: &DeviceReport) -> String {
+    let device = format!(
+        "{} \"{}\" ({:04x}:{:04x})",
+        r.node, r.name, r.vendor, r.product
+    );
+    match (r.class, r.skip) {
+        (Some(class), None) => format!("girdi cihazı açıldı: {device}, {}", class_name(class)),
+        (class, Some(skip)) => {
+            let class = class.map_or(String::new(), |c| format!(", {}", class_name(c)));
+            format!(
+                "girdi cihazı kullanılmıyor: {device}{class}: {}",
+                skip_reason(skip)
+            )
+        }
+        (None, None) => format!("girdi cihazı: {device}"),
+    }
+}
+
+fn class_name(class: Class) -> &'static str {
+    match class {
+        Class::Mouse => "fare",
+        Class::AbsolutePointer => "mutlak konumlu işaretçi",
+        Class::Touchpad => "touchpad",
+        Class::Keyboard => "klavye",
+        Class::OtherKeys => "tuşlu cihaz",
+    }
+}
+
+fn skip_reason(skip: Skip) -> String {
+    match skip {
+        Skip::OwnDevice => "MouseDrive'ın kendi cihazı".into(),
+        Skip::NotPointerNoKeys => "fare ya da klavye değil".into(),
+        Skip::Gamepad => "oyun kolu".into(),
+        Skip::GamepadTouchpad => "oyun kolunun touchpad'i".into(),
+        Skip::PermissionDenied => "okuma izni yok".into(),
+        Skip::OpenFailed(kind) => format!("açılamadı ({kind})"),
+    }
+}
+
 fn released_buttons(before: (bool, bool), after: (bool, bool)) -> u64 {
     u64::from(before.0 && !after.0) + u64::from(before.1 && !after.1)
 }
@@ -540,39 +592,4 @@ fn note_reconciled(before: (bool, bool), after: (bool, bool)) {
     crate::log::warn(&format!(
         "tuş durumu uzlaştırması bırakma olayı kaçan {released} butonu bıraktı"
     ));
-}
-
-fn event_nodes() -> Vec<PathBuf> {
-    let Ok(dir) = std::fs::read_dir(DEV_INPUT) else {
-        return Vec::new();
-    };
-    let mut nodes: Vec<PathBuf> = dir
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with("event"))
-        })
-        .collect();
-    nodes.sort();
-    nodes
-}
-
-fn sysfs_mouse_name(node: &Path) -> Option<String> {
-    let event = node.file_name()?.to_str()?;
-    let base = Path::new("/sys/class/input").join(event).join("device");
-    let rel = std::fs::read_to_string(base.join("capabilities/rel")).ok()?;
-    if !rel_caps_have_xy(&rel) {
-        return None;
-    }
-    let name = std::fs::read_to_string(base.join("name")).unwrap_or_default();
-    Some(format!("{} ({})", name.trim(), node.display()))
-}
-
-fn rel_caps_have_xy(caps: &str) -> bool {
-    caps.split_whitespace()
-        .next_back()
-        .and_then(|w| u64::from_str_radix(w, 16).ok())
-        .is_some_and(|bits| bits & 0b11 == 0b11)
 }

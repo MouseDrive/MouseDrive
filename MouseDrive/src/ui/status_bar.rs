@@ -3,7 +3,7 @@
 use eframe::egui::{RichText, Ui};
 use mousedrive::config::Config;
 use mousedrive::control::{SetupInfo, Snapshot};
-use mousedrive::input::DeviceFilter;
+use mousedrive::input::{self, DeviceFilter, MovedMouse};
 use mousedrive::status::{AppStatus, Connection, Health};
 
 use super::logo;
@@ -26,6 +26,37 @@ pub enum Action {
     EnableSink,
     UseAllMice,
     Details,
+    SaveMovedMouse,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InputHints {
+    pub moved: Option<MovedMouse>,
+    pub grabbed: bool,
+}
+
+impl InputHints {
+    pub fn read(selected: &str) -> Self {
+        Self::new(input::moved_mouse(), input::grab_suspected(), selected)
+    }
+
+    fn new(moved: Option<MovedMouse>, grabbed: bool, selected: &str) -> Self {
+        Self {
+            moved: moved.filter(|m| m.old.eq_ignore_ascii_case(selected)),
+            grabbed: grabbed && !selected.is_empty(),
+        }
+    }
+}
+
+pub fn moved_text(moved: &MovedMouse, s: &Strings) -> String {
+    fill(
+        s.det_mouse_moved,
+        &[
+            ("name", moved.name()),
+            ("old", moved.old_port()),
+            ("new", moved.new_port()),
+        ],
+    )
 }
 
 pub fn action_for(status: AppStatus) -> Action {
@@ -93,6 +124,7 @@ fn action_label(action: Action, s: &Strings, key: &str) -> String {
         Action::EnableSink => s.act_enable_sink.into(),
         Action::UseAllMice => s.act_use_all_mice.into(),
         Action::Details => s.act_details.into(),
+        Action::SaveMovedMouse => s.btn_save.into(),
     }
 }
 
@@ -144,6 +176,7 @@ pub fn show(
     setup: &SetupInfo,
     cfg: &Config,
     stalled: bool,
+    hints: &InputHints,
 ) -> Option<Action> {
     let status = snap.status;
     let action = action_for_snapshot(snap);
@@ -180,6 +213,20 @@ pub fn show(
     }
     if let Some(text) = input_lost_hint(snap, cx.s) {
         ui.label(RichText::new(text).color(warn));
+    }
+    if hints.grabbed {
+        ui.label(RichText::new(cx.s.det_mouse_grabbed).color(warn));
+    }
+    if let Some(moved) = &hints.moved {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(moved_text(moved, cx.s)).color(warn));
+            if ui
+                .button(action_label(Action::SaveMovedMouse, cx.s, &key))
+                .clicked()
+            {
+                clicked = Some(Action::SaveMovedMouse);
+            }
+        });
     }
     clicked
 }

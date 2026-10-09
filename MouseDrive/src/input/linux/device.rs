@@ -7,14 +7,18 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 
 use evdev::raw_stream::RawDevice;
-use evdev::{AbsoluteAxisCode, AttributeSetRef, BusType, KeyCode, RelativeAxisCode};
+use evdev::{AttributeSetRef, BusType, KeyCode};
 
-use super::super::{RI_MOUSE_LEFT_BUTTON_UP, RI_MOUSE_RIGHT_BUTTON_UP, Report, STATE};
+use super::super::{
+    Class, DeviceReport, Found, RI_MOUSE_LEFT_BUTTON_UP, RI_MOUSE_RIGHT_BUTTON_UP, Report, STATE,
+    identity_parts,
+};
+use super::classify::DeviceCaps;
 use super::decode::{Decoder, Event, KeyChange, Packet, Step, button_flags, key_diff};
 use super::now_ns;
+use super::scan::device_report;
 use crate::keys::linux as keys;
 
-const OWN_DEVICE_PREFIX: &str = "MouseDrive";
 const MAX_READS_PER_WAKE: usize = 64;
 const EVIOCSCLOCKID: libc::Ioctl = libc::_IOW::<libc::c_int>(b'E' as u32, 0xa0);
 
@@ -56,8 +60,13 @@ pub(super) struct Open {
     pub(super) handle: isize,
     pub(super) path: String,
     pub(super) name: String,
+    pub(super) class: Class,
     pub(super) mouse: bool,
     pub(super) pointer: bool,
+    pub(super) ids: (u16, u16),
+    pub(super) virtual_source: bool,
+    caps: DeviceCaps,
+    moved_at: Option<u64>,
     kernel_clock: bool,
     clock_switched_at: Option<u64>,
     pressed: HashSet<u16>,
@@ -67,47 +76,33 @@ pub(super) struct Open {
 }
 
 impl Open {
-    pub(super) fn new(dev: RawDevice, node: PathBuf) -> Option<Self> {
-        let name = dev.name().unwrap_or_default().trim().to_string();
-        if name.starts_with(OWN_DEVICE_PREFIX) {
-            return None;
-        }
-        let keys_set = dev.supported_keys();
-        let has_key = |k: KeyCode| keys_set.is_some_and(|s| s.contains(k));
-        let rel = dev.supported_relative_axes();
-        let has_rel = |a: RelativeAxisCode| rel.is_some_and(|r| r.contains(a));
-        let abs_x = dev
-            .supported_absolute_axes()
-            .is_some_and(|a| a.contains(AbsoluteAxisCode::ABS_X));
-        let rel_xy = has_rel(RelativeAxisCode::REL_X) && has_rel(RelativeAxisCode::REL_Y);
-        let pointer = has_key(KeyCode::BTN_LEFT) && (rel_xy || abs_x);
-        let has_mapped_key =
-            keys_set.is_some_and(|s| s.iter().any(|k| keys::vk_for_code(k.0).is_some()));
-        if !pointer && !has_mapped_key {
-            return None;
-        }
+    pub(super) fn new(dev: RawDevice, node: PathBuf, caps: DeviceCaps, class: Class) -> Self {
         let clock_switched_at = use_monotonic_clock(dev.as_raw_fd()).then(now_ns);
-        let id = dev.input_id();
-        let handle = if id.bus_type() == BusType::BUS_VIRTUAL {
+        let handle = if caps.bus == BusType::BUS_VIRTUAL.0 {
             0
         } else {
             NEXT_HANDLE.fetch_add(1, Ordering::Relaxed)
         };
         let path = identity(
-            id.vendor(),
-            id.product(),
-            dev.unique_name().unwrap_or_default(),
-            dev.physical_path().unwrap_or_default(),
-            &name,
+            caps.vendor,
+            caps.product,
+            &caps.uniq,
+            &caps.phys,
+            &caps.name,
         );
         let mut open = Self {
             dev,
             node,
             handle,
             path,
-            name,
-            mouse: pointer && rel_xy,
-            pointer,
+            name: caps.name.trim().to_string(),
+            class,
+            mouse: class == Class::Mouse,
+            pointer: class.is_pointer(),
+            ids: (caps.vendor, caps.product),
+            virtual_source: caps.is_virtual(),
+            caps,
+            moved_at: None,
             kernel_clock: clock_switched_at.is_some(),
             clock_switched_at,
             pressed: HashSet::new(),
@@ -116,7 +111,15 @@ impl Open {
             overflows: 0,
         };
         open.resync();
-        Some(open)
+        open
+    }
+
+    pub(super) fn report(&self) -> DeviceReport {
+        device_report(&self.node, Some(&self.caps), Some(self.class), None)
+    }
+
+    pub(super) fn take_moved_at(&mut self) -> Option<u64> {
+        self.moved_at.take()
     }
 
     pub(super) fn needs_sync(&self) -> bool {
@@ -189,11 +192,17 @@ impl Open {
         for key in &packet.keys {
             self.track_key(key.code, key.down);
         }
-        if self.pointer
-            && let Some(report) = packet.report()
-        {
-            emit(self.handle, report);
+        if !self.pointer {
+            return;
         }
+        let Some(report) = packet.report() else {
+            return;
+        };
+        let report = pointer_report(report, self.class);
+        if report.dx != 0 || report.dy != 0 {
+            self.moved_at = Some(report.time_ns);
+        }
+        emit(self.handle, report);
     }
 
     pub(super) fn resync(&mut self) -> Option<KeyChange> {
@@ -278,6 +287,39 @@ pub(super) fn emit(handle: isize, report: Report) {
     STATE.process(handle, report);
 }
 
+fn pointer_report(report: Report, class: Class) -> Report {
+    Report {
+        absolute: report.absolute && class != Class::Touchpad,
+        ..report
+    }
+}
+
+pub(super) fn caps_of_device(dev: &RawDevice) -> DeviceCaps {
+    let id = dev.input_id();
+    DeviceCaps {
+        name: dev.name().unwrap_or_default().trim().to_string(),
+        bus: id.bus_type().0,
+        vendor: id.vendor(),
+        product: id.product(),
+        keys: dev
+            .supported_keys()
+            .map(|set| set.iter().map(|k| k.0).collect())
+            .unwrap_or_default(),
+        rel: dev
+            .supported_relative_axes()
+            .map(|set| set.iter().map(|a| a.0).collect())
+            .unwrap_or_default(),
+        abs: dev
+            .supported_absolute_axes()
+            .map(|set| set.iter().map(|a| a.0).collect())
+            .unwrap_or_default(),
+        props: dev.properties().iter().map(|p| p.0).collect(),
+        phys: dev.physical_path().unwrap_or_default().trim().to_string(),
+        uniq: dev.unique_name().unwrap_or_default().trim().to_string(),
+        synthetic: false,
+    }
+}
+
 fn identity(vendor: u16, product: u16, uniq: &str, phys: &str, name: &str) -> String {
     let place = if uniq.trim().is_empty() { phys } else { uniq };
     format!(
@@ -285,4 +327,56 @@ fn identity(vendor: u16, product: u16, uniq: &str, phys: &str, name: &str) -> St
         place.trim(),
         name.trim()
     )
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Candidate<'a> {
+    pub(super) handle: isize,
+    pub(super) path: &'a str,
+    pub(super) ids: (u16, u16),
+    pub(super) name: &'a str,
+    pub(super) virtual_source: bool,
+}
+
+impl<'a> Candidate<'a> {
+    pub(super) fn of(open: &'a Open) -> Self {
+        Self {
+            handle: open.handle,
+            path: &open.path,
+            ids: open.ids,
+            name: &open.name,
+            virtual_source: open.virtual_source,
+        }
+    }
+
+    fn found(&self) -> Found {
+        Found {
+            handle: self.handle,
+            path: self.path.to_string(),
+        }
+    }
+
+    fn same_model(&self, wanted: &str) -> bool {
+        if self.virtual_source {
+            return false;
+        }
+        identity_parts(wanted).is_some_and(|parts| {
+            let (vendor, product) = self.ids;
+            identity(vendor, product, "", parts.port, self.name).eq_ignore_ascii_case(wanted)
+        })
+    }
+}
+
+pub(super) fn find_selected(candidates: &[Candidate], wanted: &str) -> Option<Found> {
+    if let Some(exact) = candidates
+        .iter()
+        .find(|c| c.path.eq_ignore_ascii_case(wanted))
+    {
+        return Some(exact.found());
+    }
+    let mut moved = candidates.iter().filter(|c| c.same_model(wanted));
+    match (moved.next(), moved.next()) {
+        (Some(only), None) => Some(only.found()),
+        _ => None,
+    }
 }

@@ -21,6 +21,7 @@ pub(super) static TR: Strings = Strings {
     btn_setup_tool: "Kurulum komutlarını kopyala",
     btn_setup_link: "Linux kurulum rehberini aç",
     diag_registration: "Hiçbir fare okunamıyor; kurulum listesindeki “Fare erişimi” satırına bakın.",
+    diag_absolute: "Touchpad ya da tablet hareketi direksiyonu çevirmez: mutlak konumlu {n} olay yok sayıldı.",
     tip_gear_keys: "Yakalama açıkken bu tuşlar sanal direksiyonun 1. ve 2. butonuna gider.",
     ..BASE
 };
@@ -90,6 +91,8 @@ const BASE: Strings = Strings {
     det_no_pointer: "Fare girdisi okunamıyor (Raw Input kaydı başarısız); oyuna girdi gitmiyor. MouseDrive yeniden denemeye devam ediyor.",
     det_loop_stalled: "Kontrol döngüsü yanıt vermiyor; oyuna güncelleme gitmiyor. Sürerse MouseDrive'ı yeniden başlatın ve hata bildirimine günlük dosyasını ekleyin.",
     det_input_lost: "MouseDrive meşgulken bazı fare girdileri kaçtı; direksiyon merkezden kaymış olabilir. Ortalamak için farenin orta tuşuna basın.",
+    det_mouse_moved: "Seçili fare ({name}) yeni bir portta bulundu: {old} → {new}. Orada kullanmaya devam etmek için kaydedin.",
+    det_mouse_grabbed: "Başka bir araç (input-remapper, keyd, evsieve…) seçili fareyi yakaladı: yalnız onun sanal kopyası hareket ediyor, MouseDrive hiçbir şey almıyor. Fareyi o araçta hariç tutun ya da aracı kapatın.",
     reason_write_failures: "vJoy yazma hataları",
     reason_slow_loop: "kontrol döngüsü yavaş ({hz} Hz)",
     reason_clipped: "direksiyon hız sınırı hareketi geciktiriyor",
@@ -151,6 +154,8 @@ const BASE: Strings = Strings {
     mouse_access_none: "fare bulunamadı",
     #[cfg(target_os = "linux")]
     fix_mouse_access: "MouseDrive fareyi okuyamıyor. “Kurulum komutlarını kopyala” ile alınan komutları bir terminalde çalıştırın; değişiklik birkaç saniye içinde uygulanır.",
+    #[cfg(target_os = "linux")]
+    setup_devices: "Girdi cihazları ({n})",
 
     g_steering: "Direksiyon",
     g_throttle: "Gaz",
@@ -192,6 +197,22 @@ const BASE: Strings = Strings {
     diag_input_stopped: "Girdi okuma iş parçacığı durdu: fare ve tuşlar artık okunmuyor. MouseDrive'ı yeniden başlatın ve hata bildirimine günlük dosyasını ekleyin.",
     btn_copy_diag: "Tanılamayı kopyala",
     copied: "Panoya kopyalandı",
+    dev_classes: [
+        "fare",
+        "mutlak konumlu işaretçi",
+        "touchpad",
+        "klavye",
+        "diğer tuşlar",
+    ],
+    dev_in_use: "kullanılıyor",
+    dev_skip_own: "MouseDrive'ın kendi cihazı",
+    dev_skip_not_input: "fare ya da klavye değil",
+    dev_skip_gamepad: "oyun kolu",
+    dev_skip_gamepad_touchpad: "oyun kolunun touchpad'i",
+    dev_skip_denied: "izin yok",
+    dev_skip_open_failed: "açılamadı: {error}",
+    dev_list_columns: ["Cihaz", "VID:PID", "Veri yolu", "Sınıf", "Durum", "Ad"],
+    dev_list_empty: "Girdi cihazı bulunamadı.",
 
     profile: "Profil",
     btn_save: "Kaydet",
@@ -476,6 +497,7 @@ Seçenekler:
       --wayland         Linux: pencereyi Wayland üzerinden açar
       --test-counter    Eksenlere fare girdisi yerine test deseni yazar
       --allow-injected  Bir fare seçiliyken yazılımın ürettiği girdiyi de kabul eder
+      --list-devices    Girdi cihazlarını, sınıflarını ve kullanılmayanların nedenini listeler, sonra çıkar
       --allow-root      Linux: root olarak çalıştırıldığında da açılır (önerilmez)",
     cli_unknown_arg: "mousedrive: bilinmeyen seçenek yok sayıldı: {arg} (bkz. --help)",
     instance_running_title: "MouseDrive zaten çalışıyor",

@@ -26,7 +26,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{PCWSTR, w};
 
-use super::{MouseInfo, Report, STATE, disambiguate, label_for};
+use super::{
+    Class, DeviceReport, Found, MouseInfo, Report, STATE, disambiguate, label_for, parse_vid_pid,
+};
 
 const WM_APP_REGISTER: u32 = WM_APP + 1;
 const WM_APP_FILTER: u32 = WM_APP + 2;
@@ -97,6 +99,23 @@ pub(super) fn list_mice() -> Vec<MouseInfo> {
         .into_iter()
         .zip(disambiguate(labels))
         .map(|(path, label)| MouseInfo { path, label })
+        .collect()
+}
+
+pub(super) fn list_devices() -> Vec<DeviceReport> {
+    list_mice()
+        .into_iter()
+        .map(|mouse| {
+            let (vendor, product) = parse_vid_pid(&mouse.path).unwrap_or_default();
+            DeviceReport {
+                node: mouse.path,
+                name: mouse.label,
+                vendor,
+                product,
+                class: Some(Class::Mouse),
+                ..DeviceReport::default()
+            }
+        })
         .collect()
 }
 
@@ -191,7 +210,12 @@ unsafe extern "system" fn wnd_proc(
 ) -> LRESULT {
     match msg {
         WM_INPUT => read_raw_input(HRAWINPUT(lparam.0 as *mut c_void)),
-        WM_INPUT_DEVICE_CHANGE | WM_APP_FILTER => {
+        WM_INPUT_DEVICE_CHANGE => {
+            resolve_filter();
+            STATE.bump_generation();
+            return LRESULT(0);
+        }
+        WM_APP_FILTER => {
             resolve_filter();
             return LRESULT(0);
         }
@@ -251,10 +275,14 @@ pub(super) fn now_ns() -> u64 {
 
 fn resolve_filter() {
     STATE.resolve_filter(|path| {
-        mouse_handles()
-            .into_iter()
-            .find(|&h| handle_path(h).is_some_and(|p| p.eq_ignore_ascii_case(path)))
-            .map(|h| h.0 as isize)
+        mouse_handles().into_iter().find_map(|h| {
+            handle_path(h)
+                .filter(|p| p.eq_ignore_ascii_case(path))
+                .map(|p| Found {
+                    handle: h.0 as isize,
+                    path: p,
+                })
+        })
     });
 }
 

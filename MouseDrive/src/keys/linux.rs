@@ -1,7 +1,10 @@
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
+const KEY_CODES: usize = 0x300;
+
 static HOLDERS: [AtomicU8; 256] = [const { AtomicU8::new(0) }; 256];
 static APP_FOCUSED: AtomicBool = AtomicBool::new(false);
+static VK_BY_CODE: [Option<i32>; KEY_CODES] = vk_table();
 
 struct Key {
     code: u16,
@@ -97,9 +100,13 @@ const KEYS: &[Key] = &[
     key(81, 0x63, "Num 3"),
     key(82, 0x60, "Num 0"),
     key(83, 0x6E, "Num Del"),
+    key(85, 0xF3, "Zenkaku/Hankaku"),
     key(86, 0xE2, "<"),
     key(87, 0x7A, "F11"),
     key(88, 0x7B, "F12"),
+    key(89, 0xC1, "Ro"),
+    key(92, 0x1C, "Henkan"),
+    key(94, 0x1D, "Muhenkan"),
     key(96, 0x0D, "Enter"),
     key(97, 0xA3, "Right Ctrl"),
     key(98, 0x6F, "Num /"),
@@ -118,14 +125,26 @@ const KEYS: &[Key] = &[
     key(113, 0xAD, "Mute"),
     key(114, 0xAE, "Volume Down"),
     key(115, 0xAF, "Volume Up"),
+    key(117, 0x92, "Num ="),
     key(119, 0x13, "Pause"),
+    key(122, 0x15, "Hangul"),
+    key(123, 0x19, "Hanja"),
     key(125, 0x5B, "Left Super"),
     key(126, 0x5C, "Right Super"),
     key(127, 0x5D, "Menu"),
+    key(128, 0xA9, "Browser Stop"),
+    key(140, 0xB7, "Calculator"),
+    key(155, 0xB4, "Mail"),
+    key(156, 0xAB, "Browser Favorites"),
+    key(157, 0xB6, "My Computer"),
+    key(158, 0xA6, "Browser Back"),
+    key(159, 0xA7, "Browser Forward"),
     key(163, 0xB0, "Next Track"),
     key(164, 0xB3, "Play/Pause"),
     key(165, 0xB1, "Previous Track"),
     key(166, 0xB2, "Stop"),
+    key(172, 0xAC, "Browser Home"),
+    key(173, 0xA8, "Browser Refresh"),
     key(183, 0x7C, "F13"),
     key(184, 0x7D, "F14"),
     key(185, 0x7E, "F15"),
@@ -138,6 +157,8 @@ const KEYS: &[Key] = &[
     key(192, 0x85, "F22"),
     key(193, 0x86, "F23"),
     key(194, 0x87, "F24"),
+    key(217, 0xAA, "Browser Search"),
+    key(226, 0xB5, "Media Select"),
     key(0x110, 0x01, "Mouse 1"),
     key(0x111, 0x02, "Mouse 2"),
     key(0x112, 0x04, "Mouse 3"),
@@ -147,8 +168,19 @@ const KEYS: &[Key] = &[
     key(0x116, 0x05, "Mouse 4"),
 ];
 
+const fn vk_table() -> [Option<i32>; KEY_CODES] {
+    let mut table = [None; KEY_CODES];
+    let mut i = 0;
+    while i < KEYS.len() {
+        let key = &KEYS[i];
+        table[key.code as usize] = Some(key.vk);
+        i += 1;
+    }
+    table
+}
+
 pub(crate) fn vk_for_code(code: u16) -> Option<i32> {
-    KEYS.iter().find(|k| k.code == code).map(|k| k.vk)
+    VK_BY_CODE.get(usize::from(code)).copied().flatten()
 }
 
 fn holder(vk: i32) -> Option<&'static AtomicU8> {

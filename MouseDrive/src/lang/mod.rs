@@ -3,6 +3,8 @@
 mod en;
 mod tr;
 
+use mousedrive::input::{Class, Skip};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lang {
     Tr = 0,
@@ -121,6 +123,8 @@ pub struct Strings {
     pub det_no_pointer: &'static str,
     pub det_loop_stalled: &'static str,
     pub det_input_lost: &'static str,
+    pub det_mouse_moved: &'static str,
+    pub det_mouse_grabbed: &'static str,
     pub reason_write_failures: &'static str,
     pub reason_slow_loop: &'static str,
     pub reason_clipped: &'static str,
@@ -182,6 +186,8 @@ pub struct Strings {
     pub mouse_access_none: &'static str,
     #[cfg(target_os = "linux")]
     pub fix_mouse_access: &'static str,
+    #[cfg(target_os = "linux")]
+    pub setup_devices: &'static str,
 
     pub g_steering: &'static str,
     pub g_throttle: &'static str,
@@ -216,6 +222,16 @@ pub struct Strings {
     pub diag_input_stopped: &'static str,
     pub btn_copy_diag: &'static str,
     pub copied: &'static str,
+    pub dev_classes: [&'static str; 5],
+    pub dev_in_use: &'static str,
+    pub dev_skip_own: &'static str,
+    pub dev_skip_not_input: &'static str,
+    pub dev_skip_gamepad: &'static str,
+    pub dev_skip_gamepad_touchpad: &'static str,
+    pub dev_skip_denied: &'static str,
+    pub dev_skip_open_failed: &'static str,
+    pub dev_list_columns: [&'static str; 6],
+    pub dev_list_empty: &'static str,
 
     pub profile: &'static str,
     pub btn_save: &'static str,
@@ -490,4 +506,23 @@ pub struct Strings {
     pub upd_installed: &'static str,
     pub upd_restart_now: &'static str,
     pub upd_update_failed: &'static str,
+}
+
+impl Strings {
+    pub fn device_class(&self, class: Class) -> &'static str {
+        self.dev_classes[class.index()]
+    }
+
+    pub fn device_skip(&self, skip: Skip) -> String {
+        match skip {
+            Skip::OwnDevice => self.dev_skip_own.into(),
+            Skip::NotPointerNoKeys => self.dev_skip_not_input.into(),
+            Skip::Gamepad => self.dev_skip_gamepad.into(),
+            Skip::GamepadTouchpad => self.dev_skip_gamepad_touchpad.into(),
+            Skip::PermissionDenied => self.dev_skip_denied.into(),
+            Skip::OpenFailed(kind) => {
+                fill(self.dev_skip_open_failed, &[("error", &kind.to_string())])
+            }
+        }
+    }
 }

@@ -53,7 +53,7 @@ use self::notices::{Level, Notice, Notices};
 use self::pacing::FramePacer;
 use self::profiles::ProfilesUi;
 use self::setup::SetupUi;
-use self::status_bar::LoopWatch;
+use self::status_bar::{InputHints, LoopWatch};
 use self::theme::Palette;
 #[cfg(feature = "updater")]
 use self::update_ui::UpdaterUi;
@@ -107,6 +107,8 @@ pub struct App {
     view: Option<(i32, f64)>,
     close: CloseState,
     mice: Vec<MouseInfo>,
+    device_generation: u64,
+    hints: InputHints,
     start: Instant,
     #[cfg(feature = "updater")]
     updater: UpdaterUi,
@@ -139,6 +141,7 @@ impl App {
         #[cfg(feature = "updater")]
         let updater = UpdaterUi::new(session.config_mut());
         let profiles = ProfilesUi::new(store, s, &mut notices);
+        let device_generation = input::device_generation();
         Self {
             shared,
             session,
@@ -157,6 +160,8 @@ impl App {
             view: None,
             close: CloseState::default(),
             mice: input::list_mice(),
+            device_generation,
+            hints: InputHints::default(),
             start: Instant::now(),
             #[cfg(feature = "updater")]
             updater,
@@ -212,12 +217,22 @@ impl App {
         self.loop_stalled = self.loop_watch.stalled(self.snap.tick, interval_ms, now_ms);
         self.setup.pull(&self.shared);
         self.session.sync_in(&*self.shared);
+        self.pull_devices();
         self.brake.tick(&self.snap, now_ms);
         if self.tab == Tab::Monitor {
             self.monitor.pull(&self.shared);
         } else {
             self.monitor.release();
         }
+    }
+
+    fn pull_devices(&mut self) {
+        let generation = input::device_generation();
+        if generation != self.device_generation {
+            self.device_generation = generation;
+            self.mice = input::list_mice();
+        }
+        self.hints = InputHints::read(&self.session.config().mouse_device);
     }
 
     fn apply_view(&mut self, ctx: &Context) {
@@ -279,6 +294,7 @@ impl App {
                     &self.setup.info,
                     self.session.config(),
                     self.loop_stalled,
+                    &self.hints,
                 );
                 if let Some(action) = action {
                     self.run_status_action(action);
@@ -310,6 +326,11 @@ impl App {
             Action::EnableSink => self.session.config_mut().input_sink_enabled = true,
             Action::UseAllMice => self.session.config_mut().mouse_device.clear(),
             Action::Details => self.diag.open = !self.diag.open,
+            Action::SaveMovedMouse => {
+                if let Some(moved) = &self.hints.moved {
+                    self.session.config_mut().mouse_device = moved.new.clone();
+                }
+            }
         }
     }
 

@@ -4,11 +4,11 @@
 use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "linux")]
-use eframe::egui::Id;
+use eframe::egui::{CollapsingHeader, Id};
 use eframe::egui::{Context, DragValue, Grid, OpenUrl, RichText, Ui, Window};
 use mousedrive::control::{Command, SetupInfo, Shared, Snapshot};
 #[cfg(target_os = "linux")]
-use mousedrive::input;
+use mousedrive::input::{self, DeviceReport, Skip};
 use mousedrive::setup::{
     Check, CheckId, CheckState, DeviceState, OpenErrorKind, Owner, SetupReport, format_version,
 };
@@ -217,6 +217,57 @@ pub fn mouse_access_row(readable: bool, denied: &[String], s: &Strings) -> Row {
 }
 
 #[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeviceTone {
+    InUse,
+    Denied,
+    Unused,
+}
+
+#[cfg(target_os = "linux")]
+pub fn device_line(d: &DeviceReport, s: &Strings) -> (String, DeviceTone) {
+    let class = d.class.map(|c| s.device_class(c));
+    let status = d
+        .skip
+        .map_or_else(|| s.dev_in_use.to_string(), |skip| s.device_skip(skip));
+    let tone = match d.skip {
+        None => DeviceTone::InUse,
+        Some(Skip::PermissionDenied | Skip::OpenFailed(_)) => DeviceTone::Denied,
+        Some(_) => DeviceTone::Unused,
+    };
+    let text = match class {
+        Some(class) => format!("{} · {class} · {status}", d.name),
+        None => format!("{} · {status}", d.name),
+    };
+    (text, tone)
+}
+
+#[cfg(target_os = "linux")]
+fn device_list(ui: &mut Ui, cx: &Cx) {
+    let devices: Vec<DeviceReport> = input::devices()
+        .into_iter()
+        .filter(|d| d.class.is_some())
+        .collect();
+    let title = fill(cx.s.setup_devices, &[("n", &devices.len().to_string())]);
+    CollapsingHeader::new(title)
+        .id_salt("setup_devices")
+        .show(ui, |ui| {
+            for d in &devices {
+                let (text, tone) = device_line(d, cx.s);
+                let text = match tone {
+                    DeviceTone::InUse => RichText::new(text).color(cx.pal.ok),
+                    DeviceTone::Denied => RichText::new(text).color(ui.visuals().warn_fg_color),
+                    DeviceTone::Unused => RichText::new(text).weak(),
+                };
+                ui.label(text).on_hover_text(&d.node);
+            }
+        });
+}
+
+#[cfg(windows)]
+fn device_list(_ui: &mut Ui, _cx: &Cx) {}
+
+#[cfg(target_os = "linux")]
 fn live_rows(s: &Strings) -> Vec<Row> {
     vec![mouse_access_row(
         input::registration_ok(),
@@ -304,6 +355,7 @@ impl SetupUi {
                     .chain(live_rows(cx.s))
                     .collect();
                 rows_grid(ui, cx, &rows);
+                device_list(ui, cx);
                 ui.add_space(6.0);
                 actions(ui, cx, report, shared, notices);
                 device_number(ui, cx, device_id);

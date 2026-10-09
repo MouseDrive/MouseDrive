@@ -71,6 +71,10 @@ fn main() -> eframe::Result<()> {
     match args.action {
         Action::Help => return print_stdout(&cli::help_text(strings(cli_lang))),
         Action::Version => return print_stdout(&cli::version_line()),
+        Action::ListDevices => {
+            let devices = input::list_devices();
+            return print_stdout(&cli::device_list(&devices, strings(cli_lang)));
+        }
         Action::Run => {}
     }
     let Some(Prepared {

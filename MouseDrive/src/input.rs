@@ -15,7 +15,7 @@ use linux as sys;
 use win as sys;
 
 #[cfg(target_os = "linux")]
-pub use linux::denied_mice;
+pub use linux::{denied_keyboards, denied_mice, devices};
 
 const RI_MOUSE_LEFT_BUTTON_DOWN: u16 = 0x0001;
 const RI_MOUSE_LEFT_BUTTON_UP: u16 = 0x0002;
@@ -24,6 +24,9 @@ const RI_MOUSE_RIGHT_BUTTON_UP: u16 = 0x0008;
 const RI_MOUSE_MIDDLE_BUTTON_DOWN: u16 = 0x0010;
 
 const NO_MOUSE: isize = isize::MIN;
+const IDENTITY_PREFIX: &str = "evdev#";
+const SELECTED_SILENT_NS: u64 = 3_000_000_000;
+const TWIN_RECENT_NS: u64 = 1_000_000_000;
 
 const BUTTON_DOWN: u8 = 1;
 const BUTTON_PRESSED: u8 = 2;
@@ -96,6 +99,31 @@ struct Report {
     time_ns: u64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Found {
+    handle: isize,
+    path: String,
+}
+
+struct IdentityParts<'a> {
+    port: &'a str,
+    name: &'a str,
+}
+
+fn identity_parts(identity: &str) -> Option<IdentityParts<'_>> {
+    let rest = identity.strip_prefix(IDENTITY_PREFIX)?;
+    let (_ids, rest) = rest.split_once('#')?;
+    let (port, name) = rest.split_once('#')?;
+    Some(IdentityParts { port, name })
+}
+
+fn twin_moves_alone(now_ns: u64, selected_ns: u64, twin_ns: u64) -> bool {
+    twin_ns != 0
+        && twin_ns > selected_ns
+        && now_ns.saturating_sub(twin_ns) <= TWIN_RECENT_NS
+        && now_ns.saturating_sub(selected_ns) >= SELECTED_SILENT_NS
+}
+
 pub struct InputState {
     counts_x: AtomicI64,
     move_time_ns: AtomicU64,
@@ -113,6 +141,10 @@ pub struct InputState {
     allow_injected: AtomicBool,
     input_sink: AtomicBool,
     filter_path: Mutex<String>,
+    moved: Mutex<Option<MovedMouse>>,
+    selected_motion_ns: AtomicU64,
+    twin_motion_ns: AtomicU64,
+    device_generation: AtomicU64,
 }
 
 impl InputState {
@@ -134,6 +166,10 @@ impl InputState {
             allow_injected: AtomicBool::new(false),
             input_sink: AtomicBool::new(true),
             filter_path: Mutex::new(String::new()),
+            moved: Mutex::new(None),
+            selected_motion_ns: AtomicU64::new(0),
+            twin_motion_ns: AtomicU64::new(0),
+            device_generation: AtomicU64::new(0),
         }
     }
 
@@ -169,6 +205,35 @@ impl InputState {
             self.move_events.fetch_add(1, Ordering::Relaxed);
         }
         self.apply_buttons(report.buttons);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn note_selected_motion(&self, device: isize, time_ns: u64) {
+        if device != 0 && device == self.accepted_device.load(Ordering::Relaxed) {
+            self.selected_motion_ns
+                .store(time_ns.max(1), Ordering::Release);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn note_twin_motion(&self, time_ns: u64) {
+        self.twin_motion_ns
+            .fetch_max(time_ns.max(1), Ordering::AcqRel);
+    }
+
+    fn grab_suspected(&self, now_ns: u64) -> bool {
+        if self.filter() != DeviceFilter::Selected || self.allow_injected.load(Ordering::Relaxed) {
+            return false;
+        }
+        twin_moves_alone(
+            now_ns,
+            self.selected_motion_ns.load(Ordering::Acquire),
+            self.twin_motion_ns.load(Ordering::Acquire),
+        )
+    }
+
+    fn bump_generation(&self) {
+        self.device_generation.fetch_add(1, Ordering::AcqRel);
     }
 
     fn note_move_time(&self, time_ns: u64) {
@@ -208,22 +273,54 @@ impl InputState {
         }
     }
 
-    fn resolve_filter(&self, find: impl Fn(&str) -> Option<isize>) {
+    fn resolve_filter(&self, find: impl Fn(&str) -> Option<Found>) {
         let path = self
             .filter_path
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone();
+        let found = if path.is_empty() { None } else { find(&path) };
         let accepted = if path.is_empty() {
             0
         } else {
-            find(&path).unwrap_or(NO_MOUSE)
+            found.as_ref().map_or(NO_MOUSE, |f| f.handle)
         };
+        self.set_moved(
+            found
+                .filter(|f| !f.path.eq_ignore_ascii_case(&path))
+                .map(|f| MovedMouse {
+                    old: path,
+                    new: f.path,
+                }),
+        );
         let previous = self.accepted_device.swap(accepted, Ordering::AcqRel);
         if previous != accepted {
             self.left.clear();
             self.right.clear();
+            self.selected_motion_ns.store(now_ns(), Ordering::Release);
+            self.twin_motion_ns.store(0, Ordering::Release);
         }
+    }
+
+    fn set_moved(&self, moved: Option<MovedMouse>) {
+        let mut slot = self.moved.lock().unwrap_or_else(PoisonError::into_inner);
+        if *slot == moved {
+            return;
+        }
+        if let Some(m) = &moved {
+            crate::log::info(&format!(
+                "seçili fare yeni bir portta bulundu: {} → {}",
+                m.old, m.new
+            ));
+        }
+        *slot = moved;
+    }
+
+    fn moved(&self) -> Option<MovedMouse> {
+        self.moved
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     fn buttons(&self) -> (bool, bool) {
@@ -311,6 +408,80 @@ pub enum MouseButton {
 pub struct MouseInfo {
     pub path: String,
     pub label: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Class {
+    Mouse,
+    AbsolutePointer,
+    Touchpad,
+    Keyboard,
+    OtherKeys,
+}
+
+impl Class {
+    pub fn index(self) -> usize {
+        self as usize
+    }
+
+    pub fn is_pointer(self) -> bool {
+        matches!(
+            self,
+            Class::Mouse | Class::AbsolutePointer | Class::Touchpad
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Skip {
+    OwnDevice,
+    NotPointerNoKeys,
+    Gamepad,
+    GamepadTouchpad,
+    PermissionDenied,
+    OpenFailed(std::io::ErrorKind),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DeviceReport {
+    pub node: String,
+    pub name: String,
+    pub bus: u16,
+    pub vendor: u16,
+    pub product: u16,
+    pub uniq: String,
+    pub class: Option<Class>,
+    pub skip: Option<Skip>,
+}
+
+impl DeviceReport {
+    pub fn label(&self) -> String {
+        format!("{} ({})", self.name, self.node)
+    }
+
+    pub fn denied_as(&self, wanted: impl Fn(Class) -> bool) -> bool {
+        self.skip == Some(Skip::PermissionDenied) && self.class.is_some_and(wanted)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MovedMouse {
+    pub old: String,
+    pub new: String,
+}
+
+impl MovedMouse {
+    pub fn name(&self) -> &str {
+        identity_parts(&self.new).map_or(self.new.as_str(), |p| p.name.trim())
+    }
+
+    pub fn old_port(&self) -> &str {
+        identity_parts(&self.old).map_or(self.old.as_str(), |p| p.port)
+    }
+
+    pub fn new_port(&self) -> &str {
+        identity_parts(&self.new).map_or(self.new.as_str(), |p| p.port)
+    }
 }
 
 pub fn start(
@@ -402,6 +573,22 @@ pub fn last_moved_device() -> Option<String> {
 
 pub fn list_mice() -> Vec<MouseInfo> {
     sys::list_mice()
+}
+
+pub fn list_devices() -> Vec<DeviceReport> {
+    sys::list_devices()
+}
+
+pub fn moved_mouse() -> Option<MovedMouse> {
+    STATE.moved()
+}
+
+pub fn grab_suspected() -> bool {
+    STATE.grab_suspected(now_ns())
+}
+
+pub fn device_generation() -> u64 {
+    STATE.device_generation.load(Ordering::Acquire)
 }
 
 fn store_filter_path(path: &str) -> bool {
