@@ -3,7 +3,8 @@
 use eframe::egui::{RichText, ScrollArea, Ui};
 use mousedrive::config::Config;
 use mousedrive::control::{SetupInfo, Snapshot};
-use mousedrive::diagnostics::{DiagnosticsInfo, format_report};
+use mousedrive::diagnostics::{DiagnosticsInfo, Spread, format_report};
+use mousedrive::priority::ThreadPriority;
 use mousedrive::setup::format_version;
 
 use super::theme;
@@ -12,6 +13,7 @@ use crate::lang::{Lang, Strings, fill, strings};
 
 const COPIED_VISIBLE_MS: f64 = 2000.0;
 const DETAILS_MAX_HEIGHT: f32 = 160.0;
+const NO_SAMPLES: &str = "–";
 
 pub fn summary_line(snap: &Snapshot, s: &Strings, lang: Lang) -> String {
     let l = &snap.loop_summary;
@@ -28,6 +30,36 @@ pub fn summary_line(snap: &Snapshot, s: &Strings, lang: Lang) -> String {
     );
     let mouse = fill(s.diag_mouse, &[("hz", &lang.num(snap.mouse_hz, 0))]);
     format!("{line} · {mouse}")
+}
+
+pub fn detail_lines(snap: &Snapshot, s: &Strings, lang: Lang) -> [String; 2] {
+    let p = &snap.priorities;
+    let priority = fill(
+        s.diag_priority,
+        &[
+            ("control", &s.thread_priority(p.control)),
+            ("input", &s.thread_priority(p.input)),
+        ],
+    );
+    let l = &snap.latency;
+    let latency = fill(
+        s.diag_latency,
+        &[
+            ("wake", &spread_text(&l.wake_late, lang)),
+            ("work", &spread_text(&l.work, lang)),
+            ("age", &spread_text(&l.input_age, lang)),
+        ],
+    );
+    [priority, latency]
+}
+
+fn spread_text(spread: &Spread, lang: Lang) -> String {
+    if spread.samples == 0 {
+        return NO_SAMPLES.into();
+    }
+    [spread.p50_ms, spread.p99_ms, spread.max_ms]
+        .map(|ms| lang.num(ms, 2))
+        .join("/")
 }
 
 pub fn footer_line(snap: &Snapshot, cfg: &Config, s: &Strings, lang: Lang) -> String {
@@ -57,6 +89,10 @@ pub fn warnings(snap: &Snapshot, s: &Strings) -> Vec<String> {
     let stopped = snap.input_stopped.then(|| s.diag_input_stopped.to_string());
     let registration = (!snap.registration_ok && snap.loop_summary.samples > 0)
         .then(|| s.diag_registration.to_string());
+    let p = &snap.priorities;
+    let demoted = [p.control, p.input]
+        .contains(&ThreadPriority::Demoted)
+        .then(|| s.diag_demoted.to_string());
     [
         stopped,
         count(s.diag_dropped, snap.dropped_reports),
@@ -64,6 +100,7 @@ pub fn warnings(snap: &Snapshot, s: &Strings) -> Vec<String> {
         count(s.diag_absolute, snap.absolute_events),
         count(s.diag_stuck, snap.stuck_releases),
         registration,
+        demoted,
     ]
     .into_iter()
     .flatten()
@@ -136,6 +173,9 @@ impl DiagUi {
         }
         if self.open {
             ui.label(RichText::new(summary_line(snap, cx.s, cx.lang)).small());
+            for line in detail_lines(snap, cx.s, cx.lang) {
+                ui.label(RichText::new(line).small());
+            }
             let report = format_report(&report_info(snap, setup, cfg));
             ScrollArea::vertical()
                 .max_height(DETAILS_MAX_HEIGHT)

@@ -23,7 +23,7 @@ const BTN_RIGHT: u16 = 0x111;
 const BTN_MIDDLE: u16 = 0x112;
 const KEY_REPEAT: i32 = 2;
 
-pub(super) fn clock_ns(secs: u64, nanos: u64) -> u64 {
+fn clock_ns(secs: u64, nanos: u64) -> u64 {
     secs.saturating_mul(NANOS_PER_SEC).saturating_add(nanos)
 }
 

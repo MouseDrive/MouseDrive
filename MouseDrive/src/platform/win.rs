@@ -14,6 +14,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::PCWSTR;
 
+use crate::priority::{PrioritySlot, ThreadPriority, log_outcome, win32_error_code};
+
 const TIMERR_NOERROR: u32 = 0;
 
 pub struct TimerResolution {
@@ -65,9 +67,14 @@ pub fn raise_process_priority() -> bool {
     unsafe { SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS) }.is_ok()
 }
 
-pub fn raise_current_thread_priority() -> bool {
+pub fn raise_current_thread_priority(label: &'static str, slot: &'static PrioritySlot) {
     // SAFETY: yalnız çağıran thread'in önceliği.
-    unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST) }.is_ok()
+    let result = match unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST) } {
+        Ok(()) => ThreadPriority::High,
+        Err(e) => ThreadPriority::Failed(win32_error_code(e.code().0)),
+    };
+    slot.set(result);
+    log_outcome(label, result);
 }
 
 pub fn alert(title: &str, body: &str) {

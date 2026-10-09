@@ -4,6 +4,7 @@ mod en;
 mod tr;
 
 use mousedrive::input::{Class, Skip};
+use mousedrive::priority::ThreadPriority;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lang {
@@ -220,6 +221,15 @@ pub struct Strings {
     pub diag_dropped: &'static str,
     pub diag_reconciled: &'static str,
     pub diag_input_stopped: &'static str,
+    pub diag_demoted: &'static str,
+    pub diag_priority: &'static str,
+    pub diag_latency: &'static str,
+    pub prio_normal: &'static str,
+    pub prio_nice: &'static str,
+    pub prio_realtime: &'static str,
+    pub prio_high: &'static str,
+    pub prio_demoted: &'static str,
+    pub prio_failed: &'static str,
     pub btn_copy_diag: &'static str,
     pub copied: &'static str,
     pub dev_classes: [&'static str; 5],
@@ -511,6 +521,20 @@ pub struct Strings {
 impl Strings {
     pub fn device_class(&self, class: Class) -> &'static str {
         self.dev_classes[class.index()]
+    }
+
+    pub fn thread_priority(&self, priority: ThreadPriority) -> String {
+        match priority {
+            ThreadPriority::Normal => self.prio_normal.into(),
+            ThreadPriority::Nice(n) => fill(self.prio_nice, &[("n", &n.to_string())]),
+            ThreadPriority::Realtime(p) => fill(self.prio_realtime, &[("n", &p.to_string())]),
+            ThreadPriority::High => self.prio_high.into(),
+            ThreadPriority::Demoted => self.prio_demoted.into(),
+            ThreadPriority::Failed(code) => {
+                let error = std::io::Error::from_raw_os_error(code).to_string();
+                fill(self.prio_failed, &[("error", &error)])
+            }
+        }
     }
 
     pub fn device_skip(&self, skip: Skip) -> String {

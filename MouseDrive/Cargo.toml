@@ -43,6 +43,7 @@ windows = { version = "0.61", features = [
 evdev = "0.13"
 libc = "0.2"
 winit = { version = "0.30", default-features = false, features = ["wayland", "x11"] }
+zbus = { version = "4.4", default-features = false, features = ["async-io"] }
 
 [features]
 default = ["updater"]

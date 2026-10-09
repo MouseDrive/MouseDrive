@@ -47,10 +47,12 @@ pub fn watch_termination_signals(
 pub fn child_command(program: impl AsRef<OsStr>) -> Command {
     let mut command = Command::new(program);
     let empty = signal_set(&[]);
-    // SAFETY: kapanış fork ile exec arasında yalnız async-signal-safe olan
-    // sigprocmask'i çağırır; küme önceden hazırlanmıştır ve bellek ayrılmaz.
+    // SAFETY: kapanış fork ile exec arasında yalnız doğrudan sistem çağrısı olan
+    // getrlimit/setrlimit ve async-signal-safe sigprocmask'i çağırır; küme önceden
+    // hazırlanmıştır ve bellek ayrılmaz.
     unsafe {
         command.pre_exec(move || {
+            super::priority::restore_inherited_rttime();
             if libc::sigprocmask(libc::SIG_SETMASK, &empty, std::ptr::null_mut()) == 0 {
                 Ok(())
             } else {

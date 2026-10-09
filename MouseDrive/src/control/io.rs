@@ -1,6 +1,7 @@
-use crate::input::{self, DeviceFilter, InputCounters, MouseButton};
+use crate::input::{self, DeviceFilter, InputCounters, Motion, MouseButton};
 use crate::keys;
 use crate::output::OutputBackend;
+use crate::priority::Priorities;
 use crate::setup::SetupReport;
 use crate::sound::SoundPlayer;
 use crate::status::Cue;
@@ -11,7 +12,8 @@ use crate::uinput as backend;
 use crate::vjoy as backend;
 
 pub(crate) trait ControlIo {
-    fn take_counts(&mut self) -> i64;
+    fn take_motion(&mut self) -> Motion;
+    fn now_ns(&self) -> u64;
     fn buttons(&self) -> (bool, bool);
     fn take_buttons(&mut self) -> (bool, bool);
     fn take_middle_click(&mut self) -> bool;
@@ -28,6 +30,9 @@ pub(crate) trait ControlIo {
     fn buttons_swapped(&self) -> bool;
     fn app_foreground(&self) -> bool;
     fn input_desktop_active(&self) -> bool;
+
+    fn priorities(&self) -> Priorities;
+    fn keep_cpu_budget(&mut self);
 
     fn device_events(&self) -> (u64, u64);
     fn connect(
@@ -53,8 +58,12 @@ impl SystemIo {
 }
 
 impl ControlIo for SystemIo {
-    fn take_counts(&mut self) -> i64 {
-        input::take_counts()
+    fn take_motion(&mut self) -> Motion {
+        input::take_motion()
+    }
+
+    fn now_ns(&self) -> u64 {
+        input::now_ns()
     }
 
     fn buttons(&self) -> (bool, bool) {
@@ -116,6 +125,18 @@ impl ControlIo for SystemIo {
 
     fn input_desktop_active(&self) -> bool {
         keys::input_desktop_active()
+    }
+
+    fn priorities(&self) -> Priorities {
+        Priorities {
+            control: super::CONTROL_PRIORITY.get(),
+            input: input::thread_priority(),
+        }
+    }
+
+    fn keep_cpu_budget(&mut self) {
+        #[cfg(target_os = "linux")]
+        crate::platform::keep_cpu_budget();
     }
 
     fn device_events(&self) -> (u64, u64) {

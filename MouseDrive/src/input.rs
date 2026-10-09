@@ -3,6 +3,7 @@ use std::sync::{Mutex, PoisonError};
 use std::thread::JoinHandle;
 
 use crate::logic::{COUNT_ACCUM_LIMIT, accumulate_counts};
+use crate::priority::{PrioritySlot, ThreadPriority};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -145,6 +146,7 @@ pub struct InputState {
     selected_motion_ns: AtomicU64,
     twin_motion_ns: AtomicU64,
     device_generation: AtomicU64,
+    priority: PrioritySlot,
 }
 
 impl InputState {
@@ -170,6 +172,7 @@ impl InputState {
             selected_motion_ns: AtomicU64::new(0),
             twin_motion_ns: AtomicU64::new(0),
             device_generation: AtomicU64::new(0),
+            priority: PrioritySlot::new(),
         }
     }
 
@@ -501,10 +504,6 @@ pub fn stop() {
     sys::stop();
 }
 
-pub fn take_counts() -> i64 {
-    take_motion().counts
-}
-
 pub fn take_motion() -> Motion {
     STATE.take_motion()
 }
@@ -589,6 +588,10 @@ pub fn grab_suspected() -> bool {
 
 pub fn device_generation() -> u64 {
     STATE.device_generation.load(Ordering::Acquire)
+}
+
+pub fn thread_priority() -> ThreadPriority {
+    STATE.priority.get()
 }
 
 fn store_filter_path(path: &str) -> bool {

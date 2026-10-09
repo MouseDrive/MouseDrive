@@ -2,11 +2,12 @@ use std::sync::mpsc::Receiver;
 
 use crate::bind::{BindHelper, BindPhase, BindTarget};
 use crate::config::{Config, Tuning};
-use crate::diagnostics::{LoopStats, LoopSummary, RateMeter};
+use crate::diagnostics::{LatencyStats, LatencySummary, LoopStats, LoopSummary, RateMeter};
 use crate::input::{DeviceFilter, InputCounters, MouseButton};
 use crate::keys::{UNBOUND, VK_LBUTTON, VK_RBUTTON};
 use crate::logic::{MouseDriveState, STEERING_RANGE, TickInput};
 use crate::output::{BUTTON_GEAR_DOWN, BUTTON_GEAR_UP, OutputFrame};
+use crate::priority::{Priorities, ThreadPriority};
 use crate::setup::REQUIRED_BUTTONS;
 use crate::status::{AppStatus, Cue, CuePlanner, Health, StatusInputs, derive_status};
 use crate::telemetry::{Marker, Sample};
@@ -18,6 +19,7 @@ use super::{Command, Options, Shared, Snapshot};
 
 const HEALTH_WINDOW_MS: f64 = 1000.0;
 const LOOP_STATS_WINDOW: usize = 1000;
+const NANOS_PER_MS: f64 = 1_000_000.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AbSide {
@@ -73,6 +75,9 @@ pub(crate) struct Engine {
     published_setup_seq: u64,
     loop_stats: LoopStats,
     loop_summary: LoopSummary,
+    latency: LatencyStats,
+    latency_summary: LatencySummary,
+    priorities: Priorities,
     rate: RateMeter,
     counters: InputCounters,
     drops_at_center: u64,
@@ -140,6 +145,9 @@ impl Engine {
             published_setup_seq: 0,
             loop_stats: LoopStats::new(LOOP_STATS_WINDOW),
             loop_summary: LoopSummary::default(),
+            latency: LatencyStats::new(LOOP_STATS_WINDOW),
+            latency_summary: LatencySummary::default(),
+            priorities: Priorities::default(),
             rate: RateMeter::default(),
             counters: InputCounters::default(),
             drops_at_center: 0,
@@ -162,6 +170,14 @@ impl Engine {
         f64::from(self.config.thread_interval_ms.clamp(1, 20))
     }
 
+    pub(crate) fn record_wake_late(&mut self, late_ms: f64) {
+        self.latency.record_wake_late(late_ms);
+    }
+
+    pub(crate) fn record_work(&mut self, work_ms: f64) {
+        self.latency.record_work(work_ms);
+    }
+
     pub(crate) fn tick(
         &mut self,
         now_ms: f64,
@@ -170,6 +186,7 @@ impl Engine {
         commands: &Receiver<Command>,
     ) {
         let dt_ms = self.advance_clock(now_ms, io);
+        self.watch_priorities(io);
         self.pick_up_config(shared, io, now_ms);
         while let Ok(command) = commands.try_recv() {
             self.handle_command(command, io, now_ms);
@@ -221,8 +238,29 @@ impl Engine {
 
     fn reset_loop_stats(&mut self) {
         self.loop_stats.clear();
+        self.latency.clear();
         self.health_elapsed_ms = 0.0;
         self.loop_summary = LoopSummary::default();
+        self.latency_summary = LatencySummary::default();
+    }
+
+    fn watch_priorities(&mut self, io: &impl ControlIo) {
+        let now = io.priorities();
+        if now == self.priorities {
+            return;
+        }
+        let threads = [
+            ("kontrol", self.priorities.control, now.control),
+            ("girdi", self.priorities.input, now.input),
+        ];
+        for (label, before, after) in threads {
+            if after == ThreadPriority::Demoted && before != after {
+                crate::log::warn(&format!(
+                    "{label} thread'i ara vermeden çok uzun çalıştığı için (RLIMIT_RTTIME) gerçek zamanlı önceliği geri alındı"
+                ));
+            }
+        }
+        self.priorities = now;
     }
 
     fn apply_side_effects(&mut self, io: &mut impl ControlIo, now_ms: f64) {
@@ -376,7 +414,12 @@ impl Engine {
     }
 
     fn read_input(&mut self, dt_ms: f64, io: &mut impl ControlIo) -> TickInput {
-        let counts = io.take_counts();
+        let motion = io.take_motion();
+        if let Some(oldest_ns) = motion.oldest_ns {
+            let age_ns = io.now_ns().saturating_sub(oldest_ns);
+            self.latency.record_input_age(age_ns as f64 / NANOS_PER_MS);
+        }
+        let counts = motion.counts;
         self.counts_total = self.counts_total.wrapping_add(counts);
         if io.take_middle_click() {
             self.recenter(io);
@@ -504,6 +547,7 @@ impl Engine {
         }
         self.health_elapsed_ms = 0.0;
         self.loop_summary = self.loop_stats.summary();
+        self.latency_summary = self.latency.summary();
         let writes = self.conn.writes();
         let clipped = self.state.clipped_ticks;
         self.health = Health {
@@ -521,6 +565,9 @@ impl Engine {
         }
         if self.device_filter == DeviceFilter::SelectedMissing {
             io.refresh_filter();
+        }
+        if self.priorities.any_realtime() {
+            io.keep_cpu_budget();
         }
     }
 
@@ -610,6 +657,8 @@ impl Engine {
             brake_floor: s.brake_floor * self.config.tuning.brake_max_output,
             brake_phase: s.brake_phase(),
             loop_summary: self.loop_summary,
+            latency: self.latency_summary,
+            priorities: self.priorities,
             target_hz: 1000.0 / self.interval_ms(),
             writes: self.conn.writes(),
             reconnects: self.conn.reconnects(),

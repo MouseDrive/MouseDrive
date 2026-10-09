@@ -14,6 +14,7 @@ pub mod logic;
 pub mod output;
 pub mod platform;
 pub mod preview;
+pub mod priority;
 pub mod profiles;
 pub mod session;
 pub mod setup;

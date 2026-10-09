@@ -13,7 +13,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use self::classify::DeviceCaps;
-use self::decode::{Event, KeyChange, clock_ns};
+use self::decode::{Event, KeyChange};
 use self::device::{Candidate, Open, ReadOutcome, buttons_report, emit, find_selected};
 use self::scan::{NodeCache, Opened, Verdict, device_report, evaluate, event_nodes};
 use super::{
@@ -146,17 +146,7 @@ pub(super) fn list_devices() -> Vec<DeviceReport> {
 }
 
 pub(super) fn now_ns() -> u64 {
-    let mut ts = libc::timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-    // SAFETY: ts yazılabilir yerel bir timespec; saat kimliği sabit ve geçerli.
-    if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) } != 0 {
-        return 0;
-    }
-    let secs = u64::try_from(ts.tv_sec).unwrap_or(0);
-    let nanos = u64::try_from(ts.tv_nsec).unwrap_or(0);
-    clock_ns(secs, nanos)
+    platform::monotonic_ns()
 }
 
 struct ExitWatch {
@@ -204,7 +194,7 @@ impl Backoff {
 
 fn thread_main(wake: RawFd) {
     let mut exit = ExitWatch::new(&STATE);
-    let _ = crate::platform::raise_current_thread_priority();
+    crate::platform::raise_current_thread_priority("girdi", &STATE.priority);
     if !crate::platform::tighten_timer_slack() {
         crate::log::warn("girdi thread'i zamanlayıcı gevşekliği ayarlanamadı");
     }

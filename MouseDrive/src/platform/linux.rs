@@ -1,5 +1,7 @@
 mod alert;
 mod desktop;
+mod priority;
+mod rtkit;
 mod signals;
 
 use std::io;
@@ -8,13 +10,14 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 const TIMER_SLACK_NS: libc::c_ulong = 1_000;
-const RAISED_NICE: libc::c_int = -10;
+const NANOS_PER_SEC: u64 = 1_000_000_000;
 const OS_RELEASE_FILES: [&str; 2] = ["/etc/os-release", "/usr/lib/os-release"];
 
 pub use alert::alert;
 pub use desktop::{
     DisplayEnv, MissingLibs, WindowSystem, display_env, missing_runtime_libs, running_as_root,
 };
+pub use priority::{keep_cpu_budget, raise_current_thread_priority};
 pub use signals::{SignalEvent, child_command, signal_name, watch_termination_signals};
 
 pub(crate) struct Wake {
@@ -97,14 +100,41 @@ pub(crate) fn drain(fd: RawFd) {
 
 pub struct ProcessGuard;
 
-pub fn raise_current_thread_priority() -> bool {
-    // SAFETY: gettid yalnız çağıran thread'in kimliğini döner.
-    let tid = unsafe { libc::gettid() };
-    let Ok(tid) = libc::id_t::try_from(tid) else {
-        return false;
+pub fn monotonic_ns() -> u64 {
+    let mut ts = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
     };
-    // SAFETY: Linux'ta nice thread başınadır; yalnız çağıran thread değişir.
-    unsafe { libc::setpriority(libc::PRIO_PROCESS, tid, RAISED_NICE) == 0 }
+    // SAFETY: ts yazılabilir yerel bir timespec; saat kimliği sabit ve geçerli.
+    if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) } != 0 {
+        return 0;
+    }
+    let secs = u64::try_from(ts.tv_sec).unwrap_or(0);
+    let nanos = u64::try_from(ts.tv_nsec).unwrap_or(0);
+    secs.saturating_mul(NANOS_PER_SEC).saturating_add(nanos)
+}
+
+pub fn sleep_until_ns(deadline_ns: u64) -> io::Result<()> {
+    let deadline = libc::timespec {
+        tv_sec: libc::time_t::try_from(deadline_ns / NANOS_PER_SEC).unwrap_or(libc::time_t::MAX),
+        tv_nsec: libc::c_long::try_from(deadline_ns % NANOS_PER_SEC).unwrap_or(0),
+    };
+    loop {
+        // SAFETY: deadline geçerli bir mutlak CLOCK_MONOTONIC zamanı; kalan süre istenmez.
+        let rc = unsafe {
+            libc::clock_nanosleep(
+                libc::CLOCK_MONOTONIC,
+                libc::TIMER_ABSTIME,
+                &deadline,
+                std::ptr::null_mut(),
+            )
+        };
+        match rc {
+            0 => return Ok(()),
+            libc::EINTR => {}
+            e => return Err(io::Error::from_raw_os_error(e)),
+        }
+    }
 }
 
 pub fn tighten_timer_slack() -> bool {

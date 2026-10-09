@@ -1,3 +1,4 @@
+mod clock;
 mod connection;
 mod engine;
 pub mod guard;
@@ -7,23 +8,27 @@ use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
 
 use crate::bind::{BindPhase, BindTarget};
 use crate::config::{Config, Tuning};
-use crate::diagnostics::LoopSummary;
+use crate::diagnostics::{LatencySummary, LoopSummary};
 use crate::input::DeviceFilter;
 use crate::logic::BrakePhase;
 use crate::output::{OutputFrame, WriteHealth};
+use crate::priority::{Priorities, PrioritySlot};
 use crate::setup::SetupReport;
 use crate::status::{AppStatus, Connection, Cue, Health};
 use crate::telemetry::{DEFAULT_CAPACITY, Sample, TelemetryRing};
 
+use clock::LoopClock;
 pub use engine::AbSide;
 use engine::Engine;
+use io::ControlIo;
 
 pub const KEYBOARD_TEXT: u8 = 1;
 pub const KEYBOARD_BINDING: u8 = 2;
+
+static CONTROL_PRIORITY: PrioritySlot = PrioritySlot::new();
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Command {
@@ -61,6 +66,8 @@ pub struct Snapshot {
     pub brake_floor: f64,
     pub brake_phase: BrakePhase,
     pub loop_summary: LoopSummary,
+    pub latency: LatencySummary,
+    pub priorities: Priorities,
     pub target_hz: f64,
     pub writes: WriteHealth,
     pub reconnects: u32,
@@ -100,6 +107,8 @@ impl Default for Snapshot {
             brake_floor: 0.0,
             brake_phase: BrakePhase::Idle,
             loop_summary: LoopSummary::default(),
+            latency: LatencySummary::default(),
+            priorities: Priorities::default(),
             target_hz: 0.0,
             writes: WriteHealth::default(),
             reconnects: 0,
@@ -284,9 +293,7 @@ pub fn spawn(
         .name("control".into())
         .spawn(move || {
             let mut io = io::SystemIo::new();
-            if !crate::platform::raise_current_thread_priority() {
-                crate::log::warn("kontrol thread'i önceliği yükseltilemedi");
-            }
+            crate::platform::raise_current_thread_priority("kontrol", &CONTROL_PRIORITY);
             #[cfg(target_os = "linux")]
             if !crate::platform::tighten_timer_slack() {
                 crate::log::warn("kontrol thread'i zamanlayıcı gevşekliği ayarlanamadı");
@@ -297,17 +304,28 @@ pub fn spawn(
         })
 }
 
-fn run(shared: &Shared, commands: &Receiver<Command>, engine: &mut Engine, io: &mut io::SystemIo) {
-    let start = Instant::now();
+fn run(
+    shared: &Shared,
+    commands: &Receiver<Command>,
+    engine: &mut Engine,
+    io: &mut impl ControlIo,
+) {
+    let mut clock = LoopClock::start();
     let mut next_ms = 0.0;
+    let mut slept_until = None;
     while shared.running() {
-        let now_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let now_ms = clock.now_ms();
+        if let Some(deadline_ms) = slept_until.take() {
+            engine.record_wake_late(now_ms - deadline_ms);
+        }
         engine.tick(now_ms, io, shared, commands);
-        let after_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let after_ms = clock.now_ms();
+        engine.record_work(after_ms - now_ms);
         let (next, sleep_ms) = pace(next_ms, engine.interval_ms(), after_ms);
         next_ms = next;
         if sleep_ms > 0.0 {
-            std::thread::sleep(Duration::from_secs_f64(sleep_ms / 1000.0));
+            clock.sleep_until(next, sleep_ms);
+            slept_until = Some(next);
         }
     }
 }

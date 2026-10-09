@@ -44,27 +44,108 @@ impl LoopStats {
     }
 
     pub fn summary(&mut self) -> LoopSummary {
-        if self.filled == 0 {
+        let sorted = self.sorted();
+        let Some(spread) = spread_of(sorted) else {
             return LoopSummary::default();
+        };
+        let mean = sorted.iter().sum::<f64>() / sorted.len() as f64;
+        LoopSummary {
+            hz: if mean > 0.0 { 1000.0 / mean } else { 0.0 },
+            p50_ms: spread.p50_ms,
+            p99_ms: spread.p99_ms,
+            max_ms: spread.max_ms,
+            samples: spread.samples,
         }
+    }
+
+    pub fn spread(&mut self) -> Spread {
+        spread_of(self.sorted()).unwrap_or_default()
+    }
+
+    fn sorted(&mut self) -> &[f64] {
         self.scratch.clear();
         self.scratch.extend_from_slice(&self.periods[..self.filled]);
         self.scratch.sort_by(f64::total_cmp);
-        let n = self.scratch.len();
-        let mean = self.scratch.iter().sum::<f64>() / n as f64;
-        LoopSummary {
-            hz: if mean > 0.0 { 1000.0 / mean } else { 0.0 },
-            p50_ms: percentile(&self.scratch, 0.50),
-            p99_ms: percentile(&self.scratch, 0.99),
-            max_ms: self.scratch[n - 1],
-            samples: n,
-        }
+        &self.scratch
     }
+}
+
+fn spread_of(sorted: &[f64]) -> Option<Spread> {
+    let max_ms = *sorted.last()?;
+    Some(Spread {
+        p50_ms: percentile(sorted, 0.50),
+        p99_ms: percentile(sorted, 0.99),
+        max_ms,
+        samples: sorted.len(),
+    })
 }
 
 fn percentile(sorted: &[f64], q: f64) -> f64 {
     let idx = ((sorted.len() - 1) as f64 * q.clamp(0.0, 1.0)).round() as usize;
     sorted[idx]
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Spread {
+    pub p50_ms: f64,
+    pub p99_ms: f64,
+    pub max_ms: f64,
+    pub samples: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct LatencySummary {
+    pub wake_late: Spread,
+    pub work: Spread,
+    pub input_age: Spread,
+}
+
+pub struct LatencyStats {
+    wake_late: LoopStats,
+    work: LoopStats,
+    input_age: LoopStats,
+}
+
+impl LatencyStats {
+    pub fn new(window: usize) -> Self {
+        Self {
+            wake_late: LoopStats::new(window),
+            work: LoopStats::new(window),
+            input_age: LoopStats::new(window),
+        }
+    }
+
+    pub fn record_wake_late(&mut self, ms: f64) {
+        record_clamped(&mut self.wake_late, ms);
+    }
+
+    pub fn record_work(&mut self, ms: f64) {
+        record_clamped(&mut self.work, ms);
+    }
+
+    pub fn record_input_age(&mut self, ms: f64) {
+        record_clamped(&mut self.input_age, ms);
+    }
+
+    pub fn clear(&mut self) {
+        self.wake_late.clear();
+        self.work.clear();
+        self.input_age.clear();
+    }
+
+    pub fn summary(&mut self) -> LatencySummary {
+        LatencySummary {
+            wake_late: self.wake_late.spread(),
+            work: self.work.spread(),
+            input_age: self.input_age.spread(),
+        }
+    }
+}
+
+fn record_clamped(stats: &mut LoopStats, ms: f64) {
+    if ms.is_finite() {
+        stats.record(ms.max(0.0));
+    }
 }
 
 const RATE_WINDOW_MS: f64 = 250.0;
