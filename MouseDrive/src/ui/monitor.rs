@@ -1,10 +1,19 @@
 #![deny(unsafe_code)]
 
-use eframe::egui::{Color32, Ui};
-use egui_plot::{Legend, Line, LineStyle, Plot, PlotPoints, VLine};
-use mousedrive::control::Shared;
-use mousedrive::telemetry::{Marker, Sample, decimate_min_max};
+use std::fmt::Write as _;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
+use eframe::egui::{Button, Color32, RichText, Ui};
+use egui_plot::{Legend, Line, LineStyle, Plot, PlotPoints, VLine};
+use mousedrive::config::Tuning;
+use mousedrive::control::Shared;
+use mousedrive::disk::{DiskWriter, JobState, Pending};
+use mousedrive::telemetry::{Marker, Sample, decimate_min_max};
+use mousedrive::{fsutil, log};
+
+use super::profiles::open_in_file_manager;
 use super::widgets::Cx;
 use crate::lang::fill;
 
@@ -15,6 +24,23 @@ const PLOT_HEIGHT: f32 = 320.0;
 const COLUMNS: usize = 400;
 const LMB_Y: (f64, f64) = (-1.35, -1.15);
 const RMB_Y: (f64, f64) = (-1.65, -1.45);
+const CSV_COLUMNS: &str = "seq,t_ms,counts_x,steering_raw,steering_out,throttle_pressed,\
+throttle_target,throttle_out,brake_pressed,brake_floor,brake_out,brake_phase,capture,marker";
+const EXPORT_PREFIX: &str = "mousedrive-monitor-";
+
+struct CsvMeta<'a> {
+    version: &'a str,
+    profile: &'a str,
+    unsaved: bool,
+    tuning_toml: &'a str,
+}
+
+pub struct Export<'a> {
+    pub disk: &'a DiskWriter,
+    pub profile: &'a str,
+    pub unsaved: bool,
+    pub tuning: &'a Tuning,
+}
 
 pub struct Monitor {
     samples: Vec<Sample>,
@@ -23,6 +49,9 @@ pub struct Monitor {
     gap_end_seq: Option<u64>,
     frozen: bool,
     window_s: u32,
+    changed_at_ms: Option<f64>,
+    export: Option<Pending<io::Result<PathBuf>>>,
+    exported: Option<Result<PathBuf, String>>,
 }
 
 impl Default for Monitor {
@@ -34,8 +63,25 @@ impl Default for Monitor {
             gap_end_seq: None,
             frozen: false,
             window_s: DEFAULT_WINDOW_S,
+            changed_at_ms: None,
+            export: None,
+            exported: None,
         }
     }
+}
+
+type Plotted = (f32, f32, f32, f32, bool, bool, bool);
+
+fn plotted(s: &Sample) -> Plotted {
+    (
+        s.steering_raw,
+        s.steering_out,
+        s.throttle_out,
+        s.brake_out,
+        s.throttle_pressed,
+        s.brake_pressed,
+        s.marker != Marker::None,
+    )
 }
 
 impl Monitor {
@@ -59,6 +105,7 @@ impl Monitor {
     }
 
     fn settle(&mut self) {
+        self.note_changes();
         let Some(last) = self.samples.last() else {
             return;
         };
@@ -67,6 +114,29 @@ impl Monitor {
         let cut = self.samples.partition_point(|s| s.t_ms < oldest);
         self.samples.drain(..cut);
         self.forget_gap_out_of_view();
+    }
+
+    fn note_changes(&mut self) {
+        let seen = self.last_seq;
+        let first_new = self
+            .samples
+            .partition_point(|s| seen.is_some_and(|last| s.seq <= last));
+        let changed = self.samples[first_new.saturating_sub(1)..]
+            .windows(2)
+            .rev()
+            .find(|pair| plotted(&pair[0]) != plotted(&pair[1]))
+            .map(|pair| pair[1].t_ms);
+        if changed.is_some() {
+            self.changed_at_ms = changed;
+        }
+    }
+
+    pub fn moving(&self) -> bool {
+        let window_ms = f64::from(self.window_s) * 1000.0;
+        match (self.frozen, self.changed_at_ms, self.samples.last()) {
+            (false, Some(at), Some(last)) => last.t_ms - at <= window_ms,
+            _ => false,
+        }
     }
 
     fn forget_gap_out_of_view(&mut self) {
@@ -88,10 +158,12 @@ impl Monitor {
         self.last_seq = None;
         self.lost = 0;
         self.gap_end_seq = None;
+        self.changed_at_ms = None;
     }
 
-    pub fn show(&mut self, ui: &mut Ui, cx: &Cx) {
-        self.controls(ui, cx);
+    pub fn show(&mut self, ui: &mut Ui, cx: &Cx, export: &Export) {
+        self.controls(ui, cx, export);
+        self.export_result(ui, cx);
         let Some(latest) = self.samples.last().map(|s| s.t_ms) else {
             super::theme::hint(ui, cx.s.monitor_empty);
             return;
@@ -123,7 +195,7 @@ impl Monitor {
             });
     }
 
-    fn controls(&mut self, ui: &mut Ui, cx: &Cx) {
+    fn controls(&mut self, ui: &mut Ui, cx: &Cx, export: &Export) {
         ui.horizontal_wrapped(|ui| {
             let label = if self.frozen {
                 cx.s.resume
@@ -137,12 +209,159 @@ impl Monitor {
             for w in WINDOWS_S {
                 ui.selectable_value(&mut self.window_s, w, format!("{w} {}", cx.s.axis_seconds));
             }
+            let ready = !self.samples.is_empty() && self.export.is_none();
+            let save = ui
+                .add_enabled(ready, Button::new(cx.s.btn_save_csv))
+                .on_hover_text(cx.s.tip_save_csv);
+            if save.clicked() {
+                self.start_export(export);
+            }
+            if self.export.is_some() {
+                ui.spinner();
+                ui.label(RichText::new(cx.s.saving).weak());
+            }
         });
         if self.lost > 0 {
             let text = fill(cx.s.monitor_lost, &[("n", &self.lost.to_string())]);
             super::theme::hint(ui, &text);
         }
     }
+
+    pub fn exporting(&self) -> bool {
+        self.export.is_some()
+    }
+
+    fn start_export(&mut self, export: &Export) {
+        let tuning_toml = export.tuning.to_toml().unwrap_or_else(|e| {
+            log::warn(&format!("profil ayarları CSV başlığına yazılamadı: {e}"));
+            String::new()
+        });
+        let meta = CsvMeta {
+            version: env!("CARGO_PKG_VERSION"),
+            profile: export.profile,
+            unsaved: export.unsaved,
+            tuning_toml: &tuning_toml,
+        };
+        let text = csv_text(&self.samples, &meta);
+        let name = export_file_name(&log::timestamp(SystemTime::now()));
+        self.exported = None;
+        self.export = Some(export.disk.submit(move || write_export(&name, &text)));
+    }
+
+    pub fn collect_export(&mut self) {
+        let Some(pending) = &self.export else {
+            return;
+        };
+        self.exported = match pending.state() {
+            JobState::Running => return,
+            JobState::Done(result) => Some(result.map_err(|e| e.to_string())),
+            JobState::Lost => Some(Err(io::Error::from(io::ErrorKind::Interrupted).to_string())),
+        };
+        self.export = None;
+    }
+
+    fn export_result(&self, ui: &mut Ui, cx: &Cx) {
+        match &self.exported {
+            None => {}
+            Some(Ok(path)) => saved_line(ui, cx, path),
+            Some(Err(error)) => {
+                let text = fill(cx.s.csv_failed, &[("error", error)]);
+                ui.label(RichText::new(text).color(ui.visuals().error_fg_color));
+            }
+        }
+    }
+}
+
+fn saved_line(ui: &mut Ui, cx: &Cx, path: &Path) {
+    ui.horizontal_wrapped(|ui| {
+        let shown = path.display().to_string();
+        ui.label(RichText::new(fill(cx.s.csv_saved, &[("path", &shown)])).weak());
+        if let Some(dir) = path.parent()
+            && ui.small_button(cx.s.btn_open_folder_short).clicked()
+            && let Err(e) = open_in_file_manager(dir)
+        {
+            log::warn(&format!("klasör açılamadı ({}): {e}", dir.display()));
+        }
+    });
+}
+
+fn write_export(name: &str, text: &str) -> io::Result<PathBuf> {
+    let dir = log::log_dir().ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(name);
+    match fsutil::write_new(&path, text.as_bytes(), None) {
+        Ok(()) => {
+            log::info(&format!(
+                "input monitor CSV olarak kaydedildi: {}",
+                path.display()
+            ));
+            Ok(path)
+        }
+        Err(e) => {
+            log::error(&format!(
+                "input monitor CSV kaydedilemedi ({}): {e}",
+                path.display()
+            ));
+            Err(e)
+        }
+    }
+}
+
+fn export_file_name(timestamp: &str) -> String {
+    let safe: String = timestamp
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    format!("{EXPORT_PREFIX}{safe}.csv")
+}
+
+fn flag(value: bool) -> u8 {
+    u8::from(value)
+}
+
+fn marker_label(marker: Marker) -> String {
+    match marker {
+        Marker::None => String::new(),
+        other => format!("{other:?}"),
+    }
+}
+
+fn csv_text(samples: &[Sample], meta: &CsvMeta) -> String {
+    let unsaved = if meta.unsaved {
+        " (unsaved changes)"
+    } else {
+        ""
+    };
+    let mut out = format!(
+        "# MouseDrive v{} input monitor\n# profile: {}{unsaved}\n# profile settings:\n",
+        meta.version, meta.profile
+    );
+    for line in meta.tuning_toml.lines() {
+        let _ = writeln!(out, "# {line}");
+    }
+    out.push_str(CSV_COLUMNS);
+    out.push('\n');
+    for s in samples {
+        let _ = writeln!(
+            out,
+            "{},{},{},{},{},{},{},{},{},{},{},{:?},{},{}",
+            s.seq,
+            s.t_ms,
+            s.counts_x,
+            s.steering_raw,
+            s.steering_out,
+            flag(s.throttle_pressed),
+            s.throttle_target,
+            s.throttle_out,
+            flag(s.brake_pressed),
+            s.brake_floor,
+            s.brake_out,
+            s.brake_phase,
+            flag(s.capture),
+            marker_label(s.marker)
+        );
+    }
+    out
 }
 
 pub fn envelope_points(cols: &[Option<(f32, f32)>], t0: f64, t1: f64) -> Vec<[f64; 2]> {

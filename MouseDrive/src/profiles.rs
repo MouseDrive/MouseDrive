@@ -93,6 +93,7 @@ pub struct DeadzoneReset {
     pub failed: Vec<(String, ProfileError)>,
 }
 
+#[derive(Clone, Debug)]
 pub struct ProfileStore {
     dir: PathBuf,
 }

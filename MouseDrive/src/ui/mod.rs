@@ -14,6 +14,7 @@ mod notices;
 mod overview;
 mod pacing;
 mod profiles;
+mod repaint;
 mod setup;
 mod startup;
 mod status_bar;
@@ -24,10 +25,11 @@ mod throttle_tab;
 mod update_ui;
 mod widgets;
 
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use eframe::egui::{
     Align, CentralPanel, Context, Frame, Key, Layout, Margin, Modifiers, RichText, ScrollArea,
@@ -35,7 +37,9 @@ use eframe::egui::{
 };
 #[cfg(target_os = "linux")]
 use eframe::egui::{OpenUrl, OutputCommand};
+use mousedrive::config::{Config, ConfigError};
 use mousedrive::control::{Command, KEYBOARD_BINDING, KEYBOARD_TEXT, Shared, Snapshot};
+use mousedrive::disk::{DiskWriter, JobState, Pending};
 use mousedrive::input::{self, MouseInfo};
 use mousedrive::keys::{self, VK_ESCAPE};
 use mousedrive::log;
@@ -47,11 +51,12 @@ use self::brake_tab::BrakeTab;
 use self::calibration::Calibration;
 use self::closing::CloseState;
 use self::diag::DiagUi;
-use self::keybind::{KeyBinder, Outcome};
-use self::monitor::Monitor;
+use self::keybind::{KeyBinder, KeyInput, Outcome};
+use self::monitor::{Export, Monitor};
 use self::notices::{Level, Notice, Notices};
 use self::pacing::FramePacer;
 use self::profiles::ProfilesUi;
+use self::repaint::{Load, RepaintPlan, Shown};
 use self::setup::SetupUi;
 use self::status_bar::{InputHints, LoopWatch};
 use self::theme::Palette;
@@ -64,8 +69,6 @@ use crate::lifecycle::ExitRequest;
 pub use self::startup::Startup;
 use self::startup::{crashed_notice, rolled_back_notice, updated_notice};
 
-const FAST_REPAINT: Duration = Duration::from_millis(16);
-const SLOW_REPAINT: Duration = Duration::from_millis(250);
 const NAV_WIDTH: f32 = 176.0;
 const WIDE_LAYOUT: f32 = 980.0;
 const LIVE_PANEL_WIDTH: f32 = 260.0;
@@ -89,8 +92,19 @@ enum Tab {
     Monitor,
 }
 
+struct ConfigWrite {
+    config: Config,
+    pending: Pending<Result<(), ConfigError>>,
+}
+
+fn lost_write() -> ConfigError {
+    ConfigError::Io(io::Error::from(io::ErrorKind::Interrupted))
+}
+
 pub struct App {
     shared: Arc<Shared>,
+    disk: Arc<DiskWriter>,
+    config_write: Option<ConfigWrite>,
     session: Session,
     config_path: Option<PathBuf>,
     snap: Snapshot,
@@ -115,6 +129,7 @@ pub struct App {
     restart: Arc<AtomicBool>,
     exit_request: Arc<ExitRequest>,
     pacer: FramePacer,
+    repaint: RepaintPlan,
     loop_watch: LoopWatch,
     loop_stalled: bool,
 }
@@ -124,12 +139,13 @@ impl App {
     pub fn new(
         startup: Startup,
         shared: Arc<Shared>,
+        disk: Arc<DiskWriter>,
         restart: Arc<AtomicBool>,
         exit_request: Arc<ExitRequest>,
     ) -> Self {
         let Startup {
             config,
-            disk,
+            disk: on_disk,
             config_path,
             store,
             notices: startup_notices,
@@ -137,13 +153,15 @@ impl App {
         let s = strings(Lang::from_i32(config.language));
         let mut notices = Notices::default();
         startup_notices.into_iter().for_each(|n| notices.push(n));
-        let mut session = Session::new(config, shared.config_epoch(), disk);
+        let mut session = Session::new(config, shared.config_epoch(), on_disk);
         #[cfg(feature = "updater")]
         let updater = UpdaterUi::new(session.config_mut());
-        let profiles = ProfilesUi::new(store, s, &mut notices);
+        let profiles = ProfilesUi::new(store, Arc::clone(&disk), s, &mut notices);
         let device_generation = input::device_generation();
         Self {
             shared,
+            disk,
+            config_write: None,
             session,
             config_path,
             snap: Snapshot::default(),
@@ -168,13 +186,14 @@ impl App {
             restart,
             exit_request,
             pacer: FramePacer::default(),
+            repaint: RepaintPlan::default(),
             loop_watch: LoopWatch::default(),
             loop_stalled: false,
         }
     }
 
     pub fn limit_frame_rate(&mut self) {
-        self.pacer = FramePacer::new(FAST_REPAINT);
+        self.pacer = FramePacer::new(repaint::FAST);
     }
 
     pub fn report_launch_error(&mut self, error: &str) {
@@ -247,25 +266,46 @@ impl App {
         if self.view == Some(wanted) || (dragging && self.view.is_some()) {
             return;
         }
+        #[cfg(target_os = "linux")]
+        if self.view.is_none() {
+            theme::match_window_theme(ctx);
+        }
         theme::apply(ctx, wanted.1);
         self.view = Some(wanted);
     }
 
-    fn poll_keybind(&mut self) {
+    fn poll_keybind(&mut self, ctx: &Context) {
         if !self.keybind.listening() {
             return;
         }
-        let pressed = keys::first_pressed_key();
-        let escape = keys::is_key_down(VK_ESCAPE);
-        if let Some(Outcome::Bound(field, vk)) = self.keybind.poll(pressed, escape) {
+        let (window_escape, now_s) = ctx.input(|i| {
+            let escape = i.key_pressed(Key::Escape) || i.key_down(Key::Escape);
+            (escape, i.time)
+        });
+        let input = KeyInput {
+            pressed: keys::first_pressed_key(),
+            escape: window_escape || keys::is_key_down(VK_ESCAPE),
+            now_s,
+        };
+        if let Some(Outcome::Bound(field, vk)) = self.keybind.poll(input) {
             *field.slot(self.session.config_mut()) = vk;
         }
+    }
+
+    fn zoom_keys(&mut self, ctx: &Context) {
+        let Some(key) = theme::zoom_shortcut(ctx) else {
+            return;
+        };
+        let cfg = self.session.config_mut();
+        cfg.ui_zoom = theme::zoomed(cfg.ui_zoom, key);
+        ctx.request_repaint();
     }
 
     fn shortcuts(&mut self, ctx: &Context, cx: &Cx) {
         if ctx.wants_keyboard_input() || self.keybind.listening() {
             return;
         }
+        self.zoom_keys(ctx);
         let redo = ctx.input_mut(|i| {
             i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::Z)
                 || i.consume_key(Modifiers::COMMAND, Key::Y)
@@ -280,11 +320,11 @@ impl App {
         }
         if save && self.session.is_dirty() {
             self.profiles
-                .save_active(cx.s, &mut self.session, &mut self.notices);
+                .save_active(cx.s, &self.session, &mut self.notices);
         }
     }
 
-    fn top_panel(&mut self, ctx: &Context, cx: &Cx) {
+    fn top_panel(&mut self, ctx: &Context, cx: &Cx, now_ms: f64) {
         TopBottomPanel::top("top")
             .frame(
                 Frame::new()
@@ -303,6 +343,10 @@ impl App {
                 );
                 if let Some(action) = action {
                     self.run_status_action(action);
+                }
+                if self.close.second_close_armed(now_ms) {
+                    let warn = ui.visuals().warn_fg_color;
+                    ui.label(RichText::new(cx.s.close_again_hint).color(warn));
                 }
                 ui.add_space(2.0);
                 ui.horizontal_wrapped(|ui| {
@@ -426,7 +470,14 @@ impl App {
         match self.tab {
             Tab::Overview => self.overview(ui, cx),
             Tab::Monitor => {
-                theme::card(ui, |ui| self.monitor.show(ui, cx));
+                let cfg = self.session.config();
+                let export = Export {
+                    disk: &self.disk,
+                    profile: &cfg.active_profile,
+                    unsaved: self.session.is_dirty(),
+                    tuning: &cfg.tuning,
+                };
+                theme::card(ui, |ui| self.monitor.show(ui, cx, &export));
             }
             Tab::Steering => steering_tab::show(ui, cx, self.session.config_mut()),
             Tab::Throttle => {
@@ -486,7 +537,7 @@ impl App {
     }
 
     fn render_panels(&mut self, ctx: &Context, cx: &Cx, now_ms: f64) {
-        self.top_panel(ctx, cx);
+        self.top_panel(ctx, cx, now_ms);
         self.bottom_panel(ctx, cx, now_ms);
         self.side_panel(ctx, cx);
         self.central_panel(ctx, cx, now_ms);
@@ -536,30 +587,82 @@ impl App {
         self.profiles.dialogs(ctx, cx, &mut env);
     }
 
-    fn push(&mut self, ctx: &Context, cx: &Cx, now_ms: f64) {
+    fn push(&mut self, ctx: &Context, now_ms: f64) {
         let text = ctx.wants_keyboard_input();
         self.shared
             .set_gui_keyboard(keyboard_flags(text, self.keybind.listening()));
         let interacting = text || ctx.input(|i| i.pointer.any_down());
         self.session.sync_out(&*self.shared, interacting);
-        self.write_disk(cx, now_ms, interacting);
+        self.write_disk(now_ms, interacting);
     }
 
-    fn write_disk(&mut self, cx: &Cx, now_ms: f64, interacting: bool) {
-        let Some(path) = &self.config_path else {
+    fn write_disk(&mut self, now_ms: f64, interacting: bool) {
+        if self.config_write.is_some() {
+            return;
+        }
+        let Some(path) = self.config_path.clone() else {
             return;
         };
         let Some(config) = self.session.disk_write_due(now_ms, interacting) else {
             return;
         };
-        match config.save_to_file(path) {
-            Ok(()) => self.session.disk_written(config),
+        let written = config.clone();
+        let pending = self.disk.submit(move || {
+            let result = written.save_to_file(&path);
+            if let Err(e) = &result {
+                log::error(&format!("config yazılamadı: {e}"));
+            }
+            result
+        });
+        self.config_write = Some(ConfigWrite { config, pending });
+    }
+
+    fn collect_writes(&mut self, cx: &Cx, now_ms: f64) {
+        self.profiles
+            .poll(cx.s, &mut self.session, &mut self.notices);
+        self.monitor.collect_export();
+        let Some(write) = self.config_write.take() else {
+            return;
+        };
+        let result = match write.pending.state() {
+            JobState::Running => {
+                self.config_write = Some(write);
+                return;
+            }
+            JobState::Done(result) => result,
+            JobState::Lost => Err(lost_write()),
+        };
+        match result {
+            Ok(()) => self.session.disk_written(write.config),
             Err(e) => {
                 self.session.disk_write_failed(now_ms);
                 self.notices
                     .error(fill(cx.s.err_config_save, &[("error", &e.to_string())]));
             }
         }
+    }
+
+    fn finish_writes(&mut self) {
+        let s = self.cx().s;
+        self.profiles
+            .settle(s, &mut self.session, &mut self.notices);
+        if let Some(write) = self.config_write.take() {
+            match write.pending.wait().unwrap_or_else(|| Err(lost_write())) {
+                Ok(()) => self.session.disk_written(write.config),
+                Err(e) => log::error(&format!("çıkışta bekleyen config yazımı başarısız: {e}")),
+            }
+        }
+        if let (Some(path), Some(config)) =
+            (self.config_path.clone(), self.session.disk_write_needed())
+        {
+            let written = config.clone();
+            match self.disk.run(move || config.save_to_file(&path)) {
+                Some(Ok(())) => self.session.disk_written(written),
+                Some(Err(e)) => log::error(&format!("çıkışta config yazılamadı: {e}")),
+                None => log::error("çıkışta config yazılamadı: disk işi yarıda kaldı"),
+            }
+        }
+        self.disk.flush();
     }
 
     fn busy(&self) -> bool {
@@ -571,15 +674,26 @@ impl App {
             || self.keybind.listening()
             || self.snap.binding.is_some()
             || self.calibration.is_measuring()
+            || self.profiles.is_saving()
+            || self.config_write.is_some()
+            || self.monitor.exporting()
     }
 
-    fn schedule_repaint(&self, ctx: &Context) {
-        let focused = ctx.input(|i| i.viewport().focused).unwrap_or(true);
-        let after = if focused || self.busy() {
-            FAST_REPAINT
-        } else {
-            SLOW_REPAINT
+    fn animating(&self) -> bool {
+        match self.tab {
+            Tab::Monitor => self.monitor.moving(),
+            Tab::Brake => self.snap.brake_pressed,
+            _ => false,
+        }
+    }
+
+    fn schedule_repaint(&mut self, ctx: &Context, now_ms: f64) {
+        let load = Load {
+            focused: ctx.input(|i| i.viewport().focused).unwrap_or(true),
+            busy: self.busy(),
+            animating: self.animating(),
         };
+        let after = self.repaint.next(Shown::of(&self.snap), now_ms, load);
         ctx.request_repaint_after(after);
     }
 }
@@ -634,26 +748,21 @@ impl eframe::App for App {
         self.pull(now_ms);
         self.apply_view(ctx);
         let cx = self.cx();
-        self.poll_keybind();
+        self.collect_writes(&cx, now_ms);
+        self.poll_keybind(ctx);
         self.shortcuts(ctx, &cx);
         self.render_panels(ctx, &cx, now_ms);
         self.windows(ctx, &cx, now_ms);
-        self.push(ctx, &cx, now_ms);
-        self.handle_close(ctx, &cx);
+        self.push(ctx, now_ms);
+        self.handle_close(ctx, &cx, now_ms);
         #[cfg(feature = "updater")]
         self.handle_restart(ctx);
         #[cfg(target_os = "linux")]
         open_requested_urls(ctx, URL_OPENER);
-        self.schedule_repaint(ctx);
+        self.schedule_repaint(ctx, now_ms);
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        let (Some(path), Some(config)) = (&self.config_path, self.session.disk_write_needed())
-        else {
-            return;
-        };
-        if let Err(e) = config.save_to_file(path) {
-            log::error(&format!("çıkışta config yazılamadı: {e}"));
-        }
+        self.finish_writes();
     }
 }

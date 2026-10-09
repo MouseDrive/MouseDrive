@@ -1,10 +1,14 @@
 #![deny(unsafe_code)]
 
+use eframe::egui::gui_zoom::kb_shortcuts;
 use eframe::egui::style::HandleShape;
 use eframe::egui::{
-    Button, Color32, Context, CornerRadius, FontId, Frame, Margin, Response, RichText, Stroke,
-    Style, TextStyle, Ui, Vec2, Visuals, pos2, vec2,
+    Button, Color32, Context, CornerRadius, FontId, Frame, KeyboardShortcut, Margin, Response,
+    RichText, Stroke, Style, TextStyle, Theme, Ui, Vec2, Visuals, pos2, vec2,
 };
+#[cfg(target_os = "linux")]
+use eframe::egui::{SystemTheme, ViewportCommand};
+use mousedrive::config::{Config, UI_ZOOM_RANGE};
 use mousedrive::status::{AppStatus, status_rgb};
 
 pub const ACCENT: Color32 = Color32::from_rgb(255, 40, 0);
@@ -34,6 +38,21 @@ const TEXT_SIZES: [(TextStyle, f32); 4] = [
     (TextStyle::Heading, 25.0),
 ];
 const ANIMATION_S: f32 = 0.12;
+const APP_THEME: Theme = Theme::Dark;
+const ZOOM_STEP: f64 = 0.1;
+const ZOOM_KEYS: [(KeyboardShortcut, ZoomKey); 4] = [
+    (kb_shortcuts::ZOOM_RESET, ZoomKey::Reset),
+    (kb_shortcuts::ZOOM_IN, ZoomKey::In),
+    (kb_shortcuts::ZOOM_IN_SECONDARY, ZoomKey::In),
+    (kb_shortcuts::ZOOM_OUT, ZoomKey::Out),
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ZoomKey {
+    In,
+    Out,
+    Reset,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Palette {
@@ -70,9 +89,42 @@ pub fn status_color(status: AppStatus) -> Color32 {
 }
 
 pub fn apply(ctx: &Context, zoom: f64) {
+    ctx.options_mut(|o| o.zoom_with_keyboard = false);
+    ctx.set_theme(APP_THEME);
     ctx.set_visuals(visuals());
     ctx.style_mut(spacing_and_text);
     ctx.set_zoom_factor(zoom as f32);
+}
+
+#[cfg(target_os = "linux")]
+fn window_theme(theme: Theme) -> SystemTheme {
+    match theme {
+        Theme::Dark => SystemTheme::Dark,
+        Theme::Light => SystemTheme::Light,
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn match_window_theme(ctx: &Context) {
+    ctx.send_viewport_cmd(ViewportCommand::SetTheme(window_theme(APP_THEME)));
+}
+
+pub fn zoom_shortcut(ctx: &Context) -> Option<ZoomKey> {
+    ctx.input_mut(|i| {
+        ZOOM_KEYS
+            .iter()
+            .find(|(shortcut, _)| i.consume_shortcut(shortcut))
+            .map(|(_, key)| *key)
+    })
+}
+
+pub fn zoomed(current: f64, key: ZoomKey) -> f64 {
+    let next = match key {
+        ZoomKey::In => current + ZOOM_STEP,
+        ZoomKey::Out => current - ZOOM_STEP,
+        ZoomKey::Reset => Config::default().ui_zoom,
+    };
+    ((next * 100.0).round() / 100.0).clamp(*UI_ZOOM_RANGE.start(), *UI_ZOOM_RANGE.end())
 }
 
 fn visuals() -> Visuals {

@@ -1,7 +1,7 @@
 #![deny(unsafe_code)]
 
 use eframe::egui::{ComboBox, DragValue, OpenUrl, RichText, Ui};
-use mousedrive::config::{Config, MOUSE_DPI_RANGE};
+use mousedrive::config::{Config, MOUSE_DPI_RANGE, UI_ZOOM_RANGE};
 use mousedrive::control::{Command, Shared, Snapshot};
 use mousedrive::input::{self, DeviceFilter, MouseInfo};
 use mousedrive::status::Cue;
@@ -16,7 +16,10 @@ use super::widgets::{
 };
 use crate::lang::{Lang, fill};
 
+#[cfg(windows)]
 const GAME_GUIDE_URL: &str = "https://github.com/MouseDrive/MouseDrive#in-game-settings";
+#[cfg(target_os = "linux")]
+const GAME_GUIDE_URL: &str = "https://github.com/MouseDrive/MouseDrive/tree/linux#in-game-settings";
 pub const LOOP_INTERVALS_MS: [i32; 6] = [1, 2, 4, 5, 8, 10];
 const MOUSE_COMBO_WIDTH: f32 = 220.0;
 const SHOW_VJOY_DEVICE: bool = cfg!(windows);
@@ -256,6 +259,9 @@ fn keys(ui: &mut Ui, cx: &Cx, cfg: &mut Config, binder: &mut KeyBinder) {
             true,
         );
     });
+    if binder.timed_out() {
+        ui.label(RichText::new(s.key_timed_out).color(ui.visuals().warn_fg_color));
+    }
 }
 
 fn feedback(ui: &mut Ui, cx: &Cx, cfg: &mut Config, shared: &Shared) {
@@ -306,7 +312,7 @@ fn view(ui: &mut Ui, cx: &Cx, cfg: &mut Config) {
             &mut cfg.colorblind_palette,
             d.colorblind_palette,
         );
-        let zoom = Param::new(s.ui_zoom, s.ui_zoom, d.ui_zoom, 0.75..=2.0, Fmt::PCT0);
+        let zoom = Param::new(s.ui_zoom, s.ui_zoom, d.ui_zoom, UI_ZOOM_RANGE, Fmt::PCT0);
         param_row(ui, cx, &zoom, &mut cfg.ui_zoom);
         let exit = (s.exit_on_close, s.tip_exit_on_close);
         check_row(ui, cx, exit, &mut cfg.exit_on_close, d.exit_on_close);

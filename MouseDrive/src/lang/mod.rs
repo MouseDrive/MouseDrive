@@ -611,6 +611,15 @@ pub struct Strings {
     pub upd_fail_other: &'static str,
     pub upd_fail_tip: &'static str,
     pub upd_fail_restore_tip: &'static str,
+
+    pub saving: &'static str,
+    pub key_timed_out: &'static str,
+    pub close_again_hint: &'static str,
+    pub btn_save_csv: &'static str,
+    pub tip_save_csv: &'static str,
+    pub csv_saved: &'static str,
+    pub csv_failed: &'static str,
+    pub btn_open_folder_short: &'static str,
 }
 
 impl Strings {

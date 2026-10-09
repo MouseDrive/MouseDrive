@@ -197,7 +197,7 @@ pub(super) fn format_record(out: &mut String, record: &Record) {
     }
 }
 
-pub(crate) fn timestamp(at: SystemTime) -> String {
+pub fn timestamp(at: SystemTime) -> String {
     let since_epoch = at.duration_since(UNIX_EPOCH).unwrap_or_default();
     let secs = since_epoch.as_secs();
     let days = i64::try_from(secs / SECS_PER_DAY).unwrap_or(0);

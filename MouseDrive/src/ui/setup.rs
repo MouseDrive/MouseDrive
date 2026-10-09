@@ -33,6 +33,11 @@ const SETUP_LINK_URL: &str = "https://github.com/MouseDrive/MouseDrive/tree/linu
 const SHOW_VERSIONS: bool = cfg!(windows);
 const SHOW_DEVICE_NUMBER: bool = cfg!(windows);
 
+#[cfg(target_os = "linux")]
+type LiveRows = linux::LiveRows;
+#[cfg(windows)]
+type LiveRows = ();
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
     pub state: CheckState,
@@ -236,17 +241,25 @@ impl SetupUi {
     }
 
     pub fn show(&mut self, ctx: &Context, cx: &Cx, env: Env) {
+        #[cfg(target_os = "linux")]
+        {
+            let live = self.linux_rows(ctx, cx.s, env.keyboard_keys);
+            self.window(ctx, cx, env, &live);
+        }
+        #[cfg(windows)]
+        self.window(ctx, cx, env, &());
+    }
+
+    #[cfg_attr(windows, allow(unused_variables))]
+    fn window(&mut self, ctx: &Context, cx: &Cx, env: Env, live: &LiveRows) {
         let Env {
             shared,
             snap,
-            #[cfg(target_os = "linux")]
-            keyboard_keys,
             device_id,
             notices,
             open_bind_helper,
+            ..
         } = env;
-        #[cfg(target_os = "linux")]
-        let live = self.linux_rows(ctx, cx.s, keyboard_keys);
         let report = &self.info.report;
         let mut open = self.open;
         Window::new(cx.s.setup_title)
@@ -269,7 +282,7 @@ impl SetupUi {
                 ui.add_space(6.0);
                 actions(ui, cx, report, shared, notices);
                 #[cfg(target_os = "linux")]
-                linux::commands(ui, cx, &live);
+                linux::commands(ui, cx, live);
                 device_number(ui, cx, device_id);
                 ui.separator();
                 live_test(ui, cx, snap);

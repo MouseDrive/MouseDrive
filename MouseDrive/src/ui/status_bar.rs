@@ -1,6 +1,7 @@
 #![deny(unsafe_code)]
 
-use eframe::egui::{RichText, Ui};
+use eframe::egui::accesskit::Live;
+use eframe::egui::{Color32, RichText, Ui};
 use mousedrive::config::Config;
 use mousedrive::control::{SetupInfo, Snapshot};
 use mousedrive::input::{self, DeviceFilter, MovedMouse};
@@ -15,6 +16,7 @@ use crate::lang::{Lang, Strings, fill};
 const STALL_INTERVALS: f64 = 5.0;
 const STALL_MIN_MS: f64 = 250.0;
 const STALL_STARTUP_MS: f64 = 3000.0;
+const DETAIL_ID: &str = "status_detail";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
@@ -128,6 +130,22 @@ impl LoopWatch {
     }
 }
 
+fn live_level(status: AppStatus, stalled: bool) -> Live {
+    match status {
+        _ if stalled => Live::Assertive,
+        AppStatus::SetupRequired | AppStatus::Lost => Live::Assertive,
+        _ => Live::Polite,
+    }
+}
+
+fn detail_label(ui: &mut Ui, text: &str, color: Color32, live: Live) {
+    ui.push_id(DETAIL_ID, |ui| {
+        let response = ui.label(RichText::new(text).color(color));
+        ui.ctx()
+            .accesskit_node_builder(response.id, |node| node.set_live(live));
+    });
+}
+
 fn action_label(action: Action, s: &Strings, key: &str) -> String {
     match action {
         Action::OpenSetup => s.act_open_setup.into(),
@@ -220,11 +238,12 @@ pub fn show(
         chips(ui, cx, snap, cfg);
     });
     let warn = ui.visuals().warn_fg_color;
-    if stalled {
-        ui.label(RichText::new(cx.s.det_loop_stalled).color(warn));
+    let (text, color) = if stalled {
+        (cx.s.det_loop_stalled.to_string(), warn)
     } else {
-        theme::hint(ui, &detail(snap, setup, cfg, cx.s, cx.lang));
-    }
+        (detail(snap, setup, cfg, cx.s, cx.lang), theme::MUTED)
+    };
+    detail_label(ui, &text, color, live_level(status, stalled));
     if let Some(text) = input_lost_hint(snap, cx.s) {
         ui.label(RichText::new(text).color(warn));
     }

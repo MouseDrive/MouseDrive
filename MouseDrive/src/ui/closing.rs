@@ -9,6 +9,7 @@ use super::widgets::Cx;
 use crate::lang::{Strings, fill};
 
 const CLOSE_DIALOG_WIDTH: f32 = 400.0;
+const SECOND_CLOSE_MS: f64 = 3000.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CloseDecision {
@@ -25,6 +26,14 @@ fn close_decision(exit_on_close: bool, dirty: bool, waiting: bool) -> CloseDecis
         (false, true, true) => CloseDecision::Confirm,
         (false, true, false) => CloseDecision::Quit,
     }
+}
+
+fn quits_on_close(exit_on_close: bool, minimized_at: Option<f64>, now_ms: f64) -> bool {
+    exit_on_close || within_second_close(minimized_at, now_ms)
+}
+
+fn within_second_close(minimized_at: Option<f64>, now_ms: f64) -> bool {
+    minimized_at.is_some_and(|at| (0.0..=SECOND_CLOSE_MS).contains(&(now_ms - at)))
 }
 
 fn external_quit(requested: bool, allowed: bool, waiting: bool) -> bool {
@@ -87,21 +96,32 @@ pub(super) struct CloseState {
     allowed: bool,
     confirm: Option<CloseReason>,
     after_install: Option<CloseReason>,
+    minimized_at: Option<f64>,
+}
+
+impl CloseState {
+    pub(super) fn second_close_armed(&self, now_ms: f64) -> bool {
+        within_second_close(self.minimized_at, now_ms)
+    }
 }
 
 impl App {
-    pub(super) fn handle_close(&mut self, ctx: &Context, cx: &Cx) {
+    pub(super) fn handle_close(&mut self, ctx: &Context, cx: &Cx, now_ms: f64) {
         let requested = ctx.input(|i| i.viewport().close_requested());
         let waiting = self.close.after_install.is_some();
         if external_quit(self.exit_request.requested(), self.close.allowed, waiting) {
             self.quit(ctx, CloseReason::Quit);
         } else if requested && !self.close.allowed {
+            self.settle_profile_saves(cx.s);
             let cfg = self.session.config();
-            match close_decision(cfg.exit_on_close, self.session.is_dirty(), waiting) {
+            let exit = quits_on_close(cfg.exit_on_close, self.close.minimized_at, now_ms);
+            match close_decision(exit, self.session.is_dirty(), waiting) {
                 CloseDecision::Quit => self.quit(ctx, CloseReason::Quit),
                 CloseDecision::Minimize => {
                     ctx.send_viewport_cmd(ViewportCommand::CancelClose);
                     ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+                    self.close.minimized_at = Some(now_ms);
+                    ctx.request_repaint();
                 }
                 CloseDecision::Confirm => {
                     ctx.send_viewport_cmd(ViewportCommand::CancelClose);
@@ -149,7 +169,7 @@ impl App {
             Some(CloseChoice::SaveAndQuit) => {
                 if self
                     .profiles
-                    .save_active(s, &mut self.session, &mut self.notices)
+                    .save_active_now(s, &mut self.session, &mut self.notices)
                 {
                     self.quit(ctx, reason);
                 } else {
@@ -183,6 +203,11 @@ impl App {
         } else if keep_open || response.should_close() {
             self.cancel_close();
         }
+    }
+
+    fn settle_profile_saves(&mut self, s: &Strings) {
+        self.profiles
+            .settle(s, &mut self.session, &mut self.notices);
     }
 
     fn cancel_close(&mut self) {
@@ -222,6 +247,9 @@ impl App {
             || self.close.confirm.is_some()
             || self.close.after_install.is_some()
             || ctx.input(|i| i.viewport().close_requested());
+        if self.updater.restart_due() {
+            self.settle_profile_saves(self.cx().s);
+        }
         let dirty = self.session.is_dirty();
         let asked = self.updater.take_restart_request();
         let focused = asked || ctx.input(|i| i.viewport().focused).unwrap_or(true);

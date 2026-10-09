@@ -6,6 +6,8 @@ use mousedrive::keys::UNBOUND;
 
 use super::widgets::{Cx, key_text};
 
+const LISTEN_TIMEOUT_S: f64 = 10.0;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeyField {
     Capture,
@@ -35,40 +37,82 @@ enum Phase {
 pub enum Outcome {
     Bound(KeyField, i32),
     Cancelled,
+    TimedOut,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct KeyInput {
+    pub pressed: Option<i32>,
+    pub escape: bool,
+    pub now_s: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Listening {
+    field: KeyField,
+    phase: Phase,
+    since_s: f64,
 }
 
 #[derive(Default)]
 pub struct KeyBinder {
-    state: Option<(KeyField, Phase)>,
+    state: Option<Listening>,
+    timed_out: bool,
 }
 
 impl KeyBinder {
-    pub fn start(&mut self, field: KeyField) {
-        self.state = Some((field, Phase::WaitRelease));
+    fn start(&mut self, field: KeyField, now_s: f64) {
+        self.timed_out = false;
+        self.state = Some(Listening {
+            field,
+            phase: Phase::WaitRelease,
+            since_s: now_s,
+        });
+    }
+
+    pub fn click(&mut self, field: KeyField, now_s: f64) -> Option<Outcome> {
+        if self.active() == Some(field) {
+            self.state = None;
+            return Some(Outcome::Cancelled);
+        }
+        self.start(field, now_s);
+        None
     }
 
     pub fn listening(&self) -> bool {
         self.state.is_some()
     }
 
-    fn active(&self) -> Option<KeyField> {
-        self.state.map(|(field, _)| field)
+    pub fn timed_out(&self) -> bool {
+        self.timed_out
     }
 
-    pub fn poll(&mut self, pressed: Option<i32>, escape: bool) -> Option<Outcome> {
-        let (field, phase) = self.state?;
-        if escape {
+    fn active(&self) -> Option<KeyField> {
+        self.state.map(|listening| listening.field)
+    }
+
+    pub fn poll(&mut self, input: KeyInput) -> Option<Outcome> {
+        let listening = self.state?;
+        if input.escape {
             self.state = None;
             return Some(Outcome::Cancelled);
         }
-        match (phase, pressed) {
+        if input.now_s - listening.since_s >= LISTEN_TIMEOUT_S {
+            self.state = None;
+            self.timed_out = true;
+            return Some(Outcome::TimedOut);
+        }
+        match (listening.phase, input.pressed) {
             (Phase::WaitRelease, None) => {
-                self.state = Some((field, Phase::Listen));
+                self.state = Some(Listening {
+                    phase: Phase::Listen,
+                    ..listening
+                });
                 None
             }
             (Phase::Listen, Some(vk)) => {
                 self.state = None;
-                Some(Outcome::Bound(field, vk))
+                Some(Outcome::Bound(listening.field, vk))
             }
             _ => None,
         }
@@ -93,8 +137,8 @@ pub fn key_row(
     let button = ui
         .add(Button::new(text).selected(listening))
         .labelled_by(l.id);
-    if button.on_hover_text(cx.s.tip_key).clicked() && !listening {
-        binder.start(field);
+    if button.on_hover_text(cx.s.tip_key).clicked() {
+        binder.click(field, ui.input(|i| i.time));
     }
     if clearable && *value != UNBOUND {
         if ui.small_button(cx.s.key_clear).clicked() {

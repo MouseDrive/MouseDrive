@@ -208,6 +208,10 @@ impl Session {
         self.saved_tuning = self.config.tuning.clone();
     }
 
+    pub fn mark_saved_as(&mut self, written: Tuning) {
+        self.saved_tuning = written;
+    }
+
     pub fn disk_content(&self) -> Config {
         self.config.with_tuning(self.saved_tuning.clone())
     }

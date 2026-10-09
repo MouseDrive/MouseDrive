@@ -56,7 +56,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 
 - **One clear status** — ACTIVE, PAUSED, SETUP REQUIRED, DEVICE BUSY, CONNECTION LOST, MOUSE NOT READ, DEGRADED or BINDING, each with a sentence and a one-click action. Derived on the control thread, so it is correct even while minimised.
 - **Status sounds** — Distinct tones for capture on/off, warnings, connection lost/restored, profile change. Work in exclusive fullscreen and VR.
-- **Input monitor** — Scrolling 5/10/30 s chart of mouse input against the values sent to the game, with capture and profile markers and a freeze button.
+- **Input monitor** — Scrolling 5/10/30 s chart of mouse input against the values sent to the game, with capture and profile markers and a freeze button. *Save last 30 s as CSV* writes every sample to a file in the log folder, headed by the app version and the active profile settings.
 - **Setup and health check** — ✔/⚠/✖ list (Windows: DLL, driver, version match, device, axes, buttons; Linux: uinput, permissions, virtual wheel, whether games can read it, mouse access, keyboard access) with a "how to fix" for every failure, a live axis test and next steps. On Linux it also shows the setup commands, each step explained in one sentence.
 - **Axis bind helper** — Countdown, then only the chosen axis or button moves, so the game binds the right one.
 - **Automatic reconnect** — Retries when the virtual device is fixed or re-plugged; a vJoy removal notice or repeated write failures switch to CONNECTION LOST and it recovers on its own.
@@ -67,8 +67,8 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 **App**
 
 - **Decoupled control loop** — A dedicated high-priority 250 Hz thread owns the virtual device and writes all axes in **one report per tick** (no torn frames); the window can be minimised or stall without affecting the output.
-- **Safe config** — Config and profile saves are atomic (`.tmp` then rename), out-of-range values corrected and reported by name, unreadable files backed up (a plain copy) instead of overwritten.
-- **Accessibility** — Colour-blind palette (Okabe-Ito), brake always dashed in charts, screen-reader labels on custom widgets, rebindable hotkeys (including mouse side buttons), interface scale 75–200 %.
+- **Safe config** — Config and profile saves are atomic (`.tmp` then rename) and run in order on a background thread, so a slow disk never freezes the window; whatever is still waiting is written before MouseDrive quits. Out-of-range values are corrected and reported by name, unreadable files backed up (a plain copy) instead of overwritten.
+- **Accessibility** — Colour-blind palette (Okabe-Ito), brake always dashed in charts, screen-reader labels on custom widgets, status changes announced by screen readers (urgently for SETUP REQUIRED and CONNECTION LOST), rebindable hotkeys (including mouse side buttons; click the key button again or press Esc to cancel, listening stops after 10 s), interface scale 75–200 % (also Ctrl+Plus, Ctrl+Minus and Ctrl+0, saved like the slider).
 - **Auto-update** — Background check against GitHub releases with one-click self-update for the matching OS and CPU (download → SHA-256 check, plus the minisign signature once releases are signed → test run with `--version` → replace, keeping the previous binary as `mousedrive.old` (`mousedrive.exe.old` on Windows) until the new version has started → restart; if the new version does not start, the previous one is put back). Package-manager installs (under `/usr` except `/usr/local`, or `/nix/store`) and AppImages only get a link to the release page; a folder MouseDrive cannot write to is reported before anything is downloaded. HTTPS goes through the HTTP proxy named in `https_proxy`, `all_proxy` or `http_proxy` (SOCKS proxies are not supported; hosts in `no_proxy` are reached directly) and, on Linux, also trusts the system certificates. The restart asks first about unsaved profile changes and never happens while another window, such as the game, is in front.
 - **Languages** — Turkish and English.
 
@@ -166,8 +166,10 @@ services.udev.packages = [
 - **Run it as your normal user, never with `sudo`:** as root it would create settings and log files your user cannot change later, so it refuses to start unless `--allow-root` is given. Mouse access comes from the setup commands above.
 - **One instance per user:** a second start shows *MouseDrive is already running* and exits (lock file `$XDG_RUNTIME_DIR/mousedrive.lock`, or the config folder without it). After an update the new version waits a few seconds for the old one to let go.
 - **Closing from outside:** `SIGTERM`, `SIGINT` (Ctrl+C) and `SIGHUP` quit MouseDrive cleanly, even when the close button only minimizes it: app settings are saved and the virtual wheel is removed; unsaved profile changes are not saved. A second signal, or a quit that takes longer than 5 s, ends it at once.
+- **Close button without minimize:** with *Exit on close* off, × minimizes the window. Compositors that cannot minimize (sway, Hyprland) leave it open; press × a second time within 3 s to quit.
+- **Window identity:** the window uses `io.github.MouseDrive.MouseDrive` as its app ID (Wayland) and `WM_CLASS` class (X11), and asks for a dark title bar to match the app.
 - **Sounds** use ALSA (`libasound.so.2`, also routed through PipeWire or PulseAudio). Without it MouseDrive runs silently.
-- **Check what the game receives:** `evtest` (pick *MouseDrive Virtual Wheel*) or `jstest-gtk` shows the raw axes.
+- **Check what the game receives:** `evtest` (pick *MouseDrive Virtual Wheel*) or `jstest-gtk` shows the raw axes; step by step in [In-game settings](#in-game-settings).
 
 ## In-game settings
 
@@ -184,14 +186,20 @@ MouseDrive already shapes the input (steering mode, smoothing, throttle cut, bra
 | Axis direction | **0 = released** | If a pedal reads inverted, toggle the game's *invert* option for that axis. |
 
 - **Binding:** use the **Axis bind helper** (*Overview → Bind your game controls*, or the *Setup* window). Pick the axis, switch to the game during the 5 s countdown and click the binding row; for the next 4 s only that axis (or gear button) moves.
-- **Check what the game receives:** *Set up USB game controllers* (`joy.cpl`) → vJoy Device → *Properties* shows the raw axes (Linux: `evtest` or `jstest-gtk`). If they are right but the car is not, the problem is a game setting.
+- **Check what the game receives:** *Set up USB game controllers* (`joy.cpl`) → vJoy Device → *Properties* shows the raw axes. If they are right but the car is not, the problem is a game setting.
+- **Check what the game receives on Linux:**
+  1. Start MouseDrive and turn capture on.
+  2. Run `evtest` in a terminal (package `evtest`) and type the number shown next to **MouseDrive Virtual Wheel**. Steering moves `ABS_X`, throttle `ABS_Y` and brake `ABS_RZ`; gear up presses `BTN_TRIGGER` and gear down `BTN_THUMB`. Stop it with Ctrl+C.
+  3. For a graphical view, install `jstest-gtk`, double-click **MouseDrive Virtual Wheel** and watch the axis bars while you steer, accelerate and brake.
+  4. Under Proton or Wine, `protontricks -c 'wine control joy.cpl' <appid>` (plain Wine: `wine control joy.cpl`) shows what the Windows game sees; the brake axis is listed as **Z** there.
+  5. If the values are right but the car is not, the problem is a game setting.
 - Prefer the game's *wheel* input mode over *gamepad* mode: gamepad modes often add their own steering assist and filtering.
 
 ## How it works
 
 - **Input thread** — On Windows a hidden window receives `WM_INPUT` for mouse counts and buttons (also while the game has focus); on Linux one thread polls every evdev mouse and keyboard node and follows hotplug through inotify. Counts are accumulated losslessly; scaling happens later in floating point.
 - **Control thread** — A dedicated high-priority loop (250 Hz by default) owns the virtual device. Each tick runs the pure driving logic on a logical clock and writes one complete report. Status, sounds, telemetry and the stuck-button guard live here too.
-- **GUI thread** — eframe/egui reads a snapshot at the start of each frame and publishes config changes with an epoch counter at the end; it never waits for the control thread. Repaint is lazy (~60 Hz focused, ~4 Hz backgrounded).
+- **GUI thread** — eframe/egui reads a snapshot at the start of each frame and publishes config changes with an epoch counter at the end; it never waits for the control thread. Repaint follows the data: ~60 Hz while the shown values change, ~7 Hz when they stand still, ~4 Hz in the background.
 - **Output backend** — The logic produces a normalised frame; the backend (vJoy on Windows, uinput on Linux) maps it to its axis range. This keeps a future own driver or USB dongle a drop-in replacement.
 
 ## Requirements
@@ -299,6 +307,7 @@ MouseDrive/
     ├── platform.rs, platform/ # Thread priority, timer resolution or slack, signals, alerts, child processes
     ├── instance.rs        # Single-instance lock
     ├── fsutil.rs          # Atomic writes, timestamped backups
+    ├── disk.rs            # Background writer thread: config, profile and CSV writes in order, flushed on exit
     ├── crash.rs           # Panic hook: crash report next to the log, notice on the next start
     └── log.rs, log/       # Event log: background writer, repeat folding, bridge for the `log` crate
 ```

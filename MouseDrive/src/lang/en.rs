@@ -24,6 +24,7 @@ pub(super) static EN: Strings = Strings {
     diag_absolute: "Touchpad/tablet movement does not steer: {n} absolute-position events were ignored.",
     tip_gear_keys: "While capture is on, these keys press virtual wheel buttons 1 and 2.",
     copied: "Copied to the clipboard (if your desktop allows it)",
+    key_timed_out: "Nothing was pressed within 10 s, so listening stopped. If a keyboard key was not detected, MouseDrive cannot read the keyboard: see “Keyboard access” in Setup, or use a mouse side button.",
     ..BASE
 };
 
@@ -491,7 +492,7 @@ const BASE: Strings = Strings {
     key_gear_down: "Gear down",
     key_ab: "A/B switch",
     key_none: "none",
-    key_press: "Press a key… (Esc: cancel)",
+    key_press: "Press a key… (Esc or click again: cancel)",
     key_clear: "Clear",
     tip_key: "Click, then press the key or mouse side button you want to assign.",
     mouse_button: "Mouse button {n}",
@@ -505,7 +506,7 @@ const BASE: Strings = Strings {
     tip_colorblind: "Throttle blue, brake orange. Brake is always drawn dashed in charts.",
     ui_zoom: "Interface scale (%)",
     exit_on_close: "Exit on close",
-    tip_exit_on_close: "When off, the × button minimises the window; MouseDrive keeps running.",
+    tip_exit_on_close: "When off, the × button minimises the window; MouseDrive keeps running. Press × twice within 3 s to quit.",
     sec_game: "In-game settings",
     game_checklist: [
         "Deadzone: 0",
@@ -626,4 +627,13 @@ Arch: sudo pacman -S {arch}",
     upd_fail_other: "unexpected error",
     upd_fail_tip: "Nothing was changed; this version keeps running. The log has the details. You can download the update from the release page.",
     upd_fail_restore_tip: "This version keeps running, but its program file now ends in \".old\". Remove \".old\" from the file name before you start MouseDrive again. The log has the details.",
+
+    saving: "Saving…",
+    key_timed_out: "Nothing was pressed within 10 s, so listening stopped.",
+    close_again_hint: "MouseDrive keeps running. Press × again within 3 s to quit.",
+    btn_save_csv: "Save last 30 s as CSV",
+    tip_save_csv: "Saves the samples the chart keeps (up to 30 s) as a CSV file. The app version and the active profile settings are written at the top.",
+    csv_saved: "Saved: {path}",
+    csv_failed: "The CSV file could not be saved: {error}",
+    btn_open_folder_short: "Open folder",
 };

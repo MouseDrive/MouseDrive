@@ -1,15 +1,25 @@
 #![deny(unsafe_code)]
 
+use std::collections::VecDeque;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 use eframe::egui::{
     Button, ComboBox, Context, Id, Key, Modal, RichText, TextEdit, Ui, WidgetInfo, WidgetType,
 };
+use mousedrive::config::Tuning;
 use mousedrive::control::{AbSide, Command, Shared, Snapshot};
+use mousedrive::disk::{DiskWriter, JobState, Pending};
+use mousedrive::log;
 use mousedrive::platform;
-use mousedrive::profiles::{MAX_NAME_LEN, NameError, ProfileError, ProfileStore, validate_name};
+use mousedrive::profiles::{
+    LoadedProfile, MAX_NAME_LEN, NameError, ProfileError, ProfileStore, validate_name,
+};
 use mousedrive::session::Session;
 
 use super::notices::{Level, Notice, Notices};
-use super::startup::{backup_notice, profile_corrected_notice};
+use super::startup::{backup_result_notice_for, profile_corrected_notice};
 use super::widgets::Cx;
 use crate::lang::{Strings, fill};
 
@@ -47,25 +57,66 @@ pub struct Env<'a> {
     pub notices: &'a mut Notices,
 }
 
+type ProfileResult<T> = Result<T, ProfileError>;
+type LoadResult = (ProfileResult<LoadedProfile>, Option<ProfileResult<PathBuf>>);
+
+struct Saving {
+    name: String,
+    tuning: Tuning,
+    pending: Pending<ProfileResult<()>>,
+}
+
 pub struct ProfilesUi {
     store: Option<ProfileStore>,
+    disk: Arc<DiskWriter>,
     names: Vec<String>,
     dialog: Option<Dialog>,
     input: String,
     focus_input: bool,
+    saving: VecDeque<Saving>,
+}
+
+fn lost_job() -> ProfileError {
+    ProfileError::Io(io::Error::from(io::ErrorKind::Interrupted))
 }
 
 impl ProfilesUi {
-    pub fn new(store: Option<ProfileStore>, s: &Strings, notices: &mut Notices) -> Self {
+    pub fn new(
+        store: Option<ProfileStore>,
+        disk: Arc<DiskWriter>,
+        s: &Strings,
+        notices: &mut Notices,
+    ) -> Self {
         let mut profiles = Self {
             store,
+            disk,
             names: Vec::new(),
             dialog: None,
             input: String::new(),
             focus_input: false,
+            saving: VecDeque::new(),
         };
         profiles.refresh(s, notices);
         profiles
+    }
+
+    fn run_on_disk<T, F>(&self, job: F) -> ProfileResult<T>
+    where
+        T: Send + 'static,
+        F: FnOnce() -> ProfileResult<T> + Send + 'static,
+    {
+        self.disk.run(job).unwrap_or_else(|| Err(lost_job()))
+    }
+
+    pub fn is_saving(&self) -> bool {
+        !self.saving.is_empty()
+    }
+
+    fn saving_current(&self, session: &Session) -> bool {
+        let cfg = session.config();
+        self.saving
+            .back()
+            .is_some_and(|last| last.name == cfg.active_profile && last.tuning == cfg.tuning)
     }
 
     pub fn refresh(&mut self, s: &Strings, notices: &mut Notices) {
@@ -83,7 +134,8 @@ impl ProfilesUi {
             return;
         }
         self.combo(ui, cx, env);
-        let dirty = env.session.is_dirty();
+        let saving = self.saving_current(env.session);
+        let dirty = env.session.is_dirty() && !saving;
         if ui
             .add_enabled(
                 dirty,
@@ -103,20 +155,19 @@ impl ProfilesUi {
         {
             self.save_active(cx.s, env.session, env.notices);
         }
-        ui.label(
-            RichText::new(if dirty {
-                cx.s.profile_unsaved
-            } else {
-                cx.s.profile_saved
-            })
-            .small()
-            .color(if dirty {
-                ui.visuals().warn_fg_color
-            } else {
-                super::theme::MUTED
-            }),
-        )
-        .on_hover_text(if dirty {
+        let state = if saving {
+            cx.s.saving
+        } else if dirty {
+            cx.s.profile_unsaved
+        } else {
+            cx.s.profile_saved
+        };
+        ui.label(RichText::new(state).small().color(if dirty {
+            ui.visuals().warn_fg_color
+        } else {
+            super::theme::MUTED
+        }))
+        .on_hover_text(if saving || dirty {
             cx.s.tip_unsaved
         } else {
             cx.s.profile_saved
@@ -206,38 +257,95 @@ impl ProfilesUi {
         let Some(store) = &self.store else {
             return;
         };
-        let result = std::fs::create_dir_all(store.dir()).and_then(|()| {
-            platform::spawn_reaped(platform::child_command(FILE_MANAGER).arg(store.dir()))
-        });
+        let result =
+            std::fs::create_dir_all(store.dir()).and_then(|()| open_in_file_manager(store.dir()));
         if let Err(e) = result {
             notices.error(fill(s.err_launch, &[("error", &e.to_string())]));
         }
     }
 
-    pub fn save_active(
+    pub fn save_active(&mut self, s: &Strings, session: &Session, notices: &mut Notices) -> bool {
+        let Some(store) = self.store.clone() else {
+            notices.error(s.err_no_config_dir);
+            return false;
+        };
+        if self.saving_current(session) {
+            return true;
+        }
+        let name = session.config().active_profile.clone();
+        let tuning = session.config().tuning.clone();
+        let (job_name, job_tuning) = (name.clone(), tuning.clone());
+        let pending = self.disk.submit(move || {
+            let result = store.save(&job_name, &job_tuning);
+            if let Err(e) = &result {
+                log::error(&format!("profil kaydedilemedi ({job_name}): {e}"));
+            }
+            result
+        });
+        self.saving.push_back(Saving {
+            name,
+            tuning,
+            pending,
+        });
+        true
+    }
+
+    pub fn save_active_now(
         &mut self,
         s: &Strings,
         session: &mut Session,
         notices: &mut Notices,
     ) -> bool {
-        let Some(store) = &self.store else {
-            notices.error(s.err_no_config_dir);
-            return false;
-        };
-        let name = session.config().active_profile.clone();
-        match store.save(&name, &session.config().tuning) {
+        self.save_active(s, session, notices) && self.settle(s, session, notices)
+    }
+
+    pub fn poll(&mut self, s: &Strings, session: &mut Session, notices: &mut Notices) {
+        while let Some(first) = self.saving.front() {
+            let result = match first.pending.state() {
+                JobState::Running => return,
+                JobState::Done(result) => result,
+                JobState::Lost => Err(lost_job()),
+            };
+            if let Some(done) = self.saving.pop_front() {
+                self.saved((done.name, done.tuning), result, s, session, notices);
+            }
+        }
+    }
+
+    pub fn settle(&mut self, s: &Strings, session: &mut Session, notices: &mut Notices) -> bool {
+        let mut all_ok = true;
+        while let Some(done) = self.saving.pop_front() {
+            let Saving {
+                name,
+                tuning,
+                pending,
+            } = done;
+            let result = pending.wait().unwrap_or_else(|| Err(lost_job()));
+            all_ok &= result.is_ok();
+            self.saved((name, tuning), result, s, session, notices);
+        }
+        all_ok
+    }
+
+    fn saved(
+        &mut self,
+        (name, tuning): (String, Tuning),
+        result: ProfileResult<()>,
+        s: &Strings,
+        session: &mut Session,
+        notices: &mut Notices,
+    ) {
+        match result {
             Ok(()) => {
-                session.mark_saved();
+                if session.config().active_profile == name {
+                    session.mark_saved_as(tuning);
+                }
                 self.refresh(s, notices);
-                true
             }
-            Err(e) => {
-                notices.error(fill(
-                    s.err_profile_save,
-                    &[("error", &profile_error_text(&e, s))],
-                ));
-                false
-            }
+            Err(e) => notices.error(fill(
+                s.err_profile_save,
+                &[("error", &profile_error_text(&e, s))],
+            )),
         }
     }
 
@@ -245,6 +353,7 @@ impl ProfilesUi {
         if name == env.session.config().active_profile {
             return;
         }
+        self.settle(s, env.session, env.notices);
         if env.session.is_dirty() {
             self.dialog = Some(Dialog::Switch(name));
         } else {
@@ -252,12 +361,24 @@ impl ProfilesUi {
         }
     }
 
+    fn load(&mut self, name: &str, s: &Strings, env: &mut Env) -> Option<LoadResult> {
+        let store = self.store.clone()?;
+        self.settle(s, env.session, env.notices);
+        let interval = f64::from(env.session.config().thread_interval_ms);
+        let wanted = name.to_string();
+        let result = self.disk.run(move || {
+            let loaded = store.load(&wanted, interval);
+            let backup = loaded.is_err().then(|| store.backup(&wanted));
+            (loaded, backup)
+        });
+        Some(result.unwrap_or_else(|| (Err(lost_job()), None)))
+    }
+
     fn switch_to(&mut self, name: &str, s: &Strings, env: &mut Env) -> bool {
-        let Some(store) = &self.store else {
+        let Some((loaded, backup)) = self.load(name, s, env) else {
             return false;
         };
-        let interval = f64::from(env.session.config().thread_interval_ms);
-        match store.load(name, interval) {
+        match loaded {
             Ok(loaded) => {
                 if !loaded.corrected.is_empty() {
                     env.notices
@@ -271,7 +392,7 @@ impl ProfilesUi {
                 true
             }
             Err(e) => {
-                for notice in load_failed_notices(store, name, &e, s) {
+                for notice in load_failed_notices(&e, backup, s) {
                     env.notices.push(notice);
                 }
                 false
@@ -339,16 +460,20 @@ impl ProfilesUi {
         s: &Strings,
         env: &mut Env,
     ) -> bool {
-        let Some(store) = &self.store else {
+        let Some(store) = self.store.clone() else {
             return true;
         };
         let active = env.session.config().active_profile.clone();
-        let result = match action {
-            NameAction::SaveAs => store.save_new(name, &env.session.config().tuning),
-            NameAction::Duplicate => store.duplicate(&active, name),
-            NameAction::Rename if name == active => return true,
-            NameAction::Rename => store.rename(&active, name),
-        };
+        if action == NameAction::Rename && name == active {
+            return true;
+        }
+        self.settle(s, env.session, env.notices);
+        let (wanted, tuning) = (name.to_string(), env.session.config().tuning.clone());
+        let result = self.run_on_disk(move || match action {
+            NameAction::SaveAs => store.save_new(&wanted, &tuning),
+            NameAction::Duplicate => store.duplicate(&active, &wanted),
+            NameAction::Rename => store.rename(&active, &wanted),
+        });
         if let Err(e) = result {
             env.notices.error(fill(
                 s.err_profile_save,
@@ -379,7 +504,7 @@ impl ProfilesUi {
         match close_choice(choice, response.should_close()) {
             None => false,
             Some(Choice::Primary) => {
-                if self.save_active(s, env.session, env.notices) {
+                if self.save_active_now(s, env.session, env.notices) {
                     self.switch_to(name, s, env);
                 }
                 true
@@ -416,10 +541,11 @@ impl ProfilesUi {
         if !self.switch_to(&next, s, env) {
             return;
         }
-        let Some(store) = &self.store else {
+        let Some(store) = self.store.clone() else {
             return;
         };
-        match store.delete(active) {
+        let name = active.to_string();
+        match self.run_on_disk(move || store.delete(&name)) {
             Ok(()) => self.refresh(s, env.notices),
             Err(e) => {
                 env.notices.error(fill(
@@ -429,6 +555,10 @@ impl ProfilesUi {
             }
         }
     }
+}
+
+pub fn open_in_file_manager(dir: &Path) -> io::Result<u32> {
+    platform::spawn_reaped(platform::child_command(FILE_MANAGER).arg(dir))
 }
 
 fn two_buttons(
@@ -523,14 +653,13 @@ pub fn name_error_text(e: &NameError, s: &Strings) -> String {
 }
 
 fn load_failed_notices(
-    store: &ProfileStore,
-    name: &str,
     e: &ProfileError,
+    backup: Option<ProfileResult<PathBuf>>,
     s: &Strings,
 ) -> Vec<Notice> {
     let text = fill(s.err_profile_load, &[("error", &profile_error_text(e, s))]);
     std::iter::once(Notice::new(Level::Error, text))
-        .chain(backup_notice(store, name, s))
+        .chain(backup.and_then(|b| backup_result_notice_for(b, s)))
         .collect()
 }
 

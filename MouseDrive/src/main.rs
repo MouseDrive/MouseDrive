@@ -17,6 +17,7 @@ use std::thread::JoinHandle;
 
 use eframe::egui::{IconData, ViewportBuilder};
 use mousedrive::control::{self, Options, Shared};
+use mousedrive::disk::DiskWriter;
 use mousedrive::instance::InstanceLock;
 use mousedrive::{config, crash, input, log, platform};
 
@@ -51,6 +52,7 @@ struct Launch {
     previous_crash: Option<PathBuf>,
     backend: Option<Backend>,
     exit_request: Arc<ExitRequest>,
+    disk: Arc<DiskWriter>,
 }
 
 fn started(
@@ -114,6 +116,7 @@ fn main() -> eframe::Result<()> {
     };
 
     let restart = Arc::new(AtomicBool::new(false));
+    let disk = Arc::new(DiskWriter::start());
     let launch = Launch {
         errors,
         updated_from: args.updated_from,
@@ -121,8 +124,10 @@ fn main() -> eframe::Result<()> {
         previous_crash,
         backend: args.backend,
         exit_request: Arc::clone(&exit_request),
+        disk: Arc::clone(&disk),
     };
     let result = run_window(startup, Arc::clone(&shared), Arc::clone(&restart), launch);
+    disk.finish();
     shutdown(&shared, threads);
     drop(instance);
     if restart.load(Ordering::Acquire) {
@@ -226,6 +231,7 @@ fn run_window(
 ) -> eframe::Result<()> {
     let wayland = wayland_window(launch.backend);
     let viewport = ViewportBuilder::default()
+        .with_app_id(platform::APP_ID)
         .with_inner_size(WINDOW_SIZE)
         .with_min_inner_size(WINDOW_MIN_SIZE)
         .with_title(TITLE);
@@ -243,7 +249,13 @@ fn run_window(
         options,
         Box::new(move |cc| {
             launch.exit_request.attach(&cc.egui_ctx);
-            let mut app = App::new(startup, shared, restart, Arc::clone(&launch.exit_request));
+            let mut app = App::new(
+                startup,
+                shared,
+                Arc::clone(&launch.disk),
+                restart,
+                Arc::clone(&launch.exit_request),
+            );
             if wayland {
                 app.limit_frame_rate();
             }

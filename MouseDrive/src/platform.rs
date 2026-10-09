@@ -21,6 +21,8 @@ pub use win::{
     raise_current_thread_priority, setup_process,
 };
 
+pub const APP_ID: &str = "io.github.MouseDrive.MouseDrive";
+
 pub fn spawn_reaped(command: &mut Command) -> io::Result<u32> {
     let child = command.spawn()?;
     let id = child.id();

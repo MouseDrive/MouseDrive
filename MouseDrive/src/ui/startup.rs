@@ -237,8 +237,15 @@ fn activate_profile(store: &ProfileStore, config: Config, s: &Strings) -> (Confi
     }
 }
 
-pub(super) fn backup_notice(store: &ProfileStore, name: &str, s: &Strings) -> Option<Notice> {
-    match store.backup(name) {
+fn backup_notice(store: &ProfileStore, name: &str, s: &Strings) -> Option<Notice> {
+    backup_result_notice_for(store.backup(name), s)
+}
+
+pub(super) fn backup_result_notice_for(
+    result: Result<PathBuf, ProfileError>,
+    s: &Strings,
+) -> Option<Notice> {
+    match result {
         Ok(path) => {
             let text = fill(s.notice_backup, &[("path", &path.display().to_string())]);
             Some(Notice::new(Level::Info, text))

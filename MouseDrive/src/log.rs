@@ -10,7 +10,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError
 use std::time::{Duration, Instant, SystemTime};
 
 pub use self::bridge::install_bridge;
-pub(crate) use self::writer::timestamp;
+pub use self::writer::timestamp;
 use self::writer::{Record, Writer};
 
 const MAX_LOG_BYTES: u64 = 1024 * 1024;

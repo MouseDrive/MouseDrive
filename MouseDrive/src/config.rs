@@ -33,6 +33,7 @@ const LEGACY_DEFAULT_DEADZONE: f64 = 0.02;
 pub const DEFAULT_PROFILE: &str = "Default";
 
 pub const MOUSE_DPI_RANGE: std::ops::RangeInclusive<i32> = 100..=32000;
+pub const UI_ZOOM_RANGE: std::ops::RangeInclusive<f64> = 0.75..=2.0;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -294,7 +295,14 @@ impl Config {
         clamp_i!(self, out, ab_toggle_key, 0, 255);
 
         clamp_i!(self, out, sound_volume, 0, 100);
-        clamp_f!(self, d, out, ui_zoom, 0.75, 2.0);
+        clamp_f!(
+            self,
+            d,
+            out,
+            ui_zoom,
+            *UI_ZOOM_RANGE.start(),
+            *UI_ZOOM_RANGE.end()
+        );
 
         if self.last_update_check < 0 {
             self.last_update_check = 0;

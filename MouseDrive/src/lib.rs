@@ -4,6 +4,7 @@ pub mod control;
 pub mod crash;
 pub mod curve;
 pub mod diagnostics;
+pub mod disk;
 pub mod ergonomics;
 pub mod fsutil;
 pub mod input;

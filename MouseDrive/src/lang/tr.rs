@@ -24,6 +24,7 @@ pub(super) static TR: Strings = Strings {
     diag_absolute: "Touchpad ya da tablet hareketi direksiyonu çevirmez: mutlak konumlu {n} olay yok sayıldı.",
     tip_gear_keys: "Yakalama açıkken bu tuşlar sanal direksiyonun 1. ve 2. butonuna gider.",
     copied: "Panoya kopyalandı (masaüstünüz izin veriyorsa)",
+    key_timed_out: "10 s içinde hiçbir tuşa basılmadı; dinleme durduruldu. Bir klavye tuşu algılanmadıysa MouseDrive klavyeyi okuyamıyor: Kurulum'daki “Klavye erişimi” satırına bakın ya da bir fare yan tuşu kullanın.",
     ..BASE
 };
 
@@ -497,7 +498,7 @@ const BASE: Strings = Strings {
     key_gear_down: "Vites aşağı",
     key_ab: "A/B geçişi",
     key_none: "yok",
-    key_press: "Bir tuşa basın… (Esc: iptal)",
+    key_press: "Bir tuşa basın… (Esc ya da yeniden tıklama: iptal)",
     key_clear: "Kaldır",
     tip_key: "Tıklayın, sonra atamak istediğiniz tuşa ya da fare yan tuşuna basın.",
     mouse_button: "Fare tuşu {n}",
@@ -511,7 +512,7 @@ const BASE: Strings = Strings {
     tip_colorblind: "Gaz mavi, fren turuncu. Grafiklerde fren her zaman kesikli çizilir.",
     ui_zoom: "Arayüz ölçeği (%)",
     exit_on_close: "Kapatınca çık",
-    tip_exit_on_close: "Kapalıyken × düğmesi pencereyi simge durumuna küçültür; MouseDrive çalışmaya devam eder.",
+    tip_exit_on_close: "Kapalıyken × düğmesi pencereyi simge durumuna küçültür; MouseDrive çalışmaya devam eder. Çıkmak için 3 s içinde × düğmesine iki kez basın.",
     sec_game: "Oyun içi ayarlar",
     game_checklist: [
         "Ölü bölge (deadzone): 0",
@@ -631,4 +632,13 @@ Arch: sudo pacman -S {arch}",
     upd_fail_other: "beklenmeyen hata",
     upd_fail_tip: "Hiçbir şey değiştirilmedi; bu sürüm çalışmaya devam ediyor. Ayrıntılar günlükte. Güncellemeyi sürüm sayfasından indirebilirsiniz.",
     upd_fail_restore_tip: "Bu sürüm çalışmaya devam ediyor, ancak program dosyasının adı artık \".old\" ile bitiyor. MouseDrive'ı yeniden başlatmadan önce dosya adının sonundaki \".old\" kısmını silin. Ayrıntılar günlükte.",
+
+    saving: "Kaydediliyor…",
+    key_timed_out: "10 s içinde hiçbir tuşa basılmadı; dinleme durduruldu.",
+    close_again_hint: "MouseDrive çalışmaya devam ediyor. Çıkmak için 3 s içinde × düğmesine yeniden basın.",
+    btn_save_csv: "Son 30 s'yi CSV olarak kaydet",
+    tip_save_csv: "Grafiğin tuttuğu örnekleri (en fazla 30 s) CSV dosyası olarak kaydeder. Dosyanın başına uygulama sürümü ve etkin profil ayarları yazılır.",
+    csv_saved: "Kaydedildi: {path}",
+    csv_failed: "CSV dosyası kaydedilemedi: {error}",
+    btn_open_folder_short: "Klasörü aç",
 };
