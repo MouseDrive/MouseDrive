@@ -500,6 +500,8 @@ impl App {
             let env = setup::Env {
                 shared: &self.shared,
                 snap: &self.snap,
+                #[cfg(target_os = "linux")]
+                keyboard_keys: setup::binds_keyboard_keys(self.session.config()),
                 device_id: &mut self.session.config_mut().vjoy_device_id,
                 notices: &mut self.notices,
                 open_bind_helper: &mut self.bind_helper_open,

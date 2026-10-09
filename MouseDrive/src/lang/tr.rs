@@ -13,8 +13,8 @@ pub(super) static TR: Strings = Strings {
     chk_dll: "uinput kullanılabilir",
     chk_driver: "Sanal direksiyon oluşturma izni",
     chk_device: "Sanal direksiyon",
-    fix_dll: "uinput çekirdek modülü kullanılamıyor (/dev/uinput yok ya da sürücüsü yüklü değil). “Kurulum komutlarını kopyala” ile alınan komutları bir terminalde çalıştırın, sonra “Tekrar kontrol et”e basın.",
-    fix_driver: "MouseDrive /dev/uinput'u açamıyor. “Kurulum komutlarını kopyala” ile alınan komutları bir terminalde çalıştırın, sonra “Tekrar kontrol et”e basın.",
+    fix_dll: "uinput çekirdek modülü kullanılamıyor (/dev/uinput yok ya da sürücüsü yüklü değil). Aşağıdaki kurulum komutlarını bir terminalde çalıştırın, sonra “Tekrar kontrol et”e basın.",
+    fix_driver: "MouseDrive /dev/uinput'u açamıyor. Aşağıdaki kurulum komutlarını bir terminalde çalıştırın, sonra “Tekrar kontrol et”e basın.",
     fix_device_acquire: "Sanal direksiyon oluşturulamadı; nedeni yukarıda yazıyor. “Tekrar kontrol et”e basın.",
     fix_read_only: "/dev/uinput salt okunur bir dosya sisteminde; sanal direksiyon oluşturulamıyor. Bu genellikle bir korumalı alan ya da kapsayıcı demektir; MouseDrive'ı onun dışında çalıştırın.",
     det_no_pointer: "Hiçbir fare okunamıyor: izin yok ya da bağlı fare yok. Kurulumu açıp “Fare erişimi” satırına bakın.",
@@ -23,6 +23,7 @@ pub(super) static TR: Strings = Strings {
     diag_registration: "Hiçbir fare okunamıyor; kurulum listesindeki “Fare erişimi” satırına bakın.",
     diag_absolute: "Touchpad ya da tablet hareketi direksiyonu çevirmez: mutlak konumlu {n} olay yok sayıldı.",
     tip_gear_keys: "Yakalama açıkken bu tuşlar sanal direksiyonun 1. ve 2. butonuna gider.",
+    copied: "Panoya kopyalandı (masaüstünüz izin veriyorsa)",
     ..BASE
 };
 
@@ -155,9 +156,75 @@ const BASE: Strings = Strings {
     #[cfg(target_os = "linux")]
     mouse_access_none: "fare bulunamadı",
     #[cfg(target_os = "linux")]
-    fix_mouse_access: "MouseDrive fareyi okuyamıyor. “Kurulum komutlarını kopyala” ile alınan komutları bir terminalde çalıştırın; değişiklik birkaç saniye içinde uygulanır.",
+    fix_mouse_access: "MouseDrive fareyi okuyamıyor. Aşağıdaki kurulum komutlarını bir terminalde çalıştırın; değişiklik birkaç saniye içinde uygulanır.",
     #[cfg(target_os = "linux")]
     setup_devices: "Girdi cihazları ({n})",
+    #[cfg(target_os = "linux")]
+    chk_wheel_access: "Oyunlar sanal direksiyonu okuyabiliyor",
+    #[cfg(target_os = "linux")]
+    wheel_ready: "oturumunuzun okuyabildiği bir oyun kumandası ({node})",
+    #[cfg(target_os = "linux")]
+    wheel_pending: "udev'de {node} için henüz kayıt yok; oyun kumandalarını udev üzerinden arayan oyunlar (SDL, Proton) onu göremeyebilir.",
+    #[cfg(target_os = "linux")]
+    wheel_not_joystick: "udev {node} cihazını oyun kumandası (ID_INPUT_JOYSTICK) olarak işaretlemiyor; oyunlar onu yok sayabilir.",
+    #[cfg(target_os = "linux")]
+    wheel_no_seat: "udev {node} cihazını oturumunuz için etiketledi ama erişim verilmedi: bu oturumun koltuğu (seat) yok ya da etkin oturum değil (örneğin SSH ya da bir kapsayıcı).",
+    #[cfg(target_os = "linux")]
+    wheel_no_tag: "Oturumunuz {node} cihazını okuyamıyor: udev ona oturum erişimi (uaccess etiketi) vermedi.",
+    #[cfg(target_os = "linux")]
+    fix_wheel_access: "MouseDrive'ı ve oyunu masaüstü oturumunuzdan başlatın. systemd-logind yoksa kullanıcınızı “input” grubuna ekleyin (Linux kurulum rehberine bakın).",
+    #[cfg(target_os = "linux")]
+    mouse_access_touchpad_only: "yalnız touchpad bulundu: {touchpads}",
+    #[cfg(target_os = "linux")]
+    mouse_access_touchpad_skipped: "touchpad'ler okunmuyor: hareketleri direksiyonu çevirmez",
+    #[cfg(target_os = "linux")]
+    fix_touchpad_only: "Touchpad hareketi direksiyonu çevirmez. Bir fare bağlayın.",
+    #[cfg(target_os = "linux")]
+    chk_keyboard_access: "Klavye erişimi",
+    #[cfg(target_os = "linux")]
+    keyboard_access_denied: "izin yok: {keyboards}",
+    #[cfg(target_os = "linux")]
+    keyboard_access_none: "klavye bulunamadı",
+    #[cfg(target_os = "linux")]
+    keyboard_not_needed: "gerekmiyor: klavyeye bağlı tuş yok",
+    #[cfg(target_os = "linux")]
+    fix_keyboard_access: "Klavye erişimi olmadan yakalama tuşu, A/B tuşu ve vites tuşları çalışmaz (farenin yan tuşları çalışır). Aşağıdaki “İsteğe bağlı: klavye erişimi” bölümüne bakın; bu izin oturumunuzdaki her programın tüm tuş vuruşlarını okumasını sağlar.",
+    #[cfg(target_os = "linux")]
+    chk_setup_rule: "Kurulum kuralı",
+    #[cfg(target_os = "linux")]
+    setup_rule_broad: "Eski bir sürümden kalan 70-mousedrive.rules, oturumunuza klavyeler dahil tüm girdi cihazlarına erişim veriyor.",
+    #[cfg(target_os = "linux")]
+    fix_setup_rule_broad: "Bu izinle oturumunuzdaki her program tuş vuruşlarını okuyabilir, sahte olay ekleyebilir ve cihazı yakalayabilir. Daha dar kurala geçmek için aşağıdaki kurulum komutlarını yeniden çalıştırın, ardından eski erişimin bitmesi için bilgisayarı yeniden başlatın.",
+    #[cfg(target_os = "linux")]
+    uinput_via_rules: "/dev/uinput, MouseDrive'ın kendi kuralı sayesinde değil {rules} sayesinde kullanılabiliyor. Fare erişimi için kurulum komutları yine gerekli; o paket kaldırılırsa sanal direksiyon da çalışmaz.",
+    #[cfg(target_os = "linux")]
+    setup_commands: "Kurulum komutları",
+    #[cfg(target_os = "linux")]
+    setup_commands_intro: "Bunları bir terminalde bir kez çalıştırın (bash, zsh ya da fish); sudo parolanızı sorar. Metni seçerek de kopyalayabilirsiniz.",
+    #[cfg(target_os = "linux")]
+    step_uinput: "uinput çekirdek modülünü şimdi ve her açılışta yükler.",
+    #[cfg(target_os = "linux")]
+    step_rule: "Oturumunuzun sanal direksiyonu oluşturmasına ve fareleri okumasına izin verir; klavyeler, touchpad'ler ve oyun kumandaları dahil değildir.",
+    #[cfg(target_os = "linux")]
+    step_apply: "Kuralı oturumu kapatmadan hemen uygular.",
+    #[cfg(target_os = "linux")]
+    keyboard_tier: "İsteğe bağlı: klavye erişimi",
+    #[cfg(target_os = "linux")]
+    keyboard_tier_warning: "Bu adım MouseDrive'ın — ve oturumunuzdaki her programın — parolalar dahil tüm tuş vuruşlarını okumasına izin verir.",
+    #[cfg(target_os = "linux")]
+    keyboard_tier_why: "MouseDrive yakalama tuşunu, A/B tuşunu ve vites tuşlarını klavyeden okur; bu adım olmadan bunlar çalışmaz (farenin yan tuşları çalışır). Klavye tuşu kullanmıyorsanız bu adımı atlayın.",
+    #[cfg(target_os = "linux")]
+    step_keyboard_rule: "Oturumunuzun klavyeleri okumasına izin verir.",
+    #[cfg(target_os = "linux")]
+    step_keyboard_apply: "Hemen uygular. Daha sonra geri almak için dosyayı silin, bu iki komutu yeniden çalıştırın ve bilgisayarı yeniden başlatın.",
+    #[cfg(target_os = "linux")]
+    btn_copy_keyboard: "Klavye komutlarını kopyala",
+    #[cfg(target_os = "linux")]
+    nixos_title: "NixOS",
+    #[cfg(target_os = "linux")]
+    nixos_note: "NixOS'ta bunun yerine şunu configuration.nix dosyasına ekleyip “sudo nixos-rebuild switch” çalıştırın. services.udev.extraRules bu kural için işe yaramaz: oturum erişimini veren adımdan sonra uygulanır.",
+    #[cfg(target_os = "linux")]
+    setup_proton_axes: "Proton ya da Wine altında fren Rz değil Z ekseni olarak görünür; bu yüzden Windows'ta kaydedilmiş bağlar taşınmaz, eksenleri yeniden bağlayın.",
 
     g_steering: "Direksiyon",
     g_throttle: "Gaz",

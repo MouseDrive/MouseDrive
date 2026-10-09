@@ -57,7 +57,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 - **One clear status** — ACTIVE, PAUSED, SETUP REQUIRED, DEVICE BUSY, CONNECTION LOST, MOUSE NOT READ, DEGRADED or BINDING, each with a sentence and a one-click action. Derived on the control thread, so it is correct even while minimised.
 - **Status sounds** — Distinct tones for capture on/off, warnings, connection lost/restored, profile change. Work in exclusive fullscreen and VR.
 - **Input monitor** — Scrolling 5/10/30 s chart of mouse input against the values sent to the game, with capture and profile markers and a freeze button.
-- **Setup and health check** — ✔/⚠/✖ list (Windows: DLL, driver, version match, device, axes, buttons; Linux: uinput, permissions, virtual wheel, mouse access) with a "how to fix" for every failure, a live axis test and next steps.
+- **Setup and health check** — ✔/⚠/✖ list (Windows: DLL, driver, version match, device, axes, buttons; Linux: uinput, permissions, virtual wheel, whether games can read it, mouse access, keyboard access) with a "how to fix" for every failure, a live axis test and next steps. On Linux it also shows the setup commands, each step explained in one sentence.
 - **Axis bind helper** — Countdown, then only the chosen axis or button moves, so the game binds the right one.
 - **Automatic reconnect** — Retries when the virtual device is fixed or re-plugged; a vJoy removal notice or repeated write failures switch to CONNECTION LOST and it recovers on its own.
 - **Stuck-button guard** — If Windows swallows a button release (UAC prompt, Ctrl+Alt+Del, lock screen), the pedal is released automatically.
@@ -78,7 +78,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 |-------|------------------|---------|
 | Mouse X movement | X Axis | Steering |
 | Left mouse button (held) | Y Axis | Throttle |
-| Right mouse button (held) | Rz Axis | Brake |
+| Right mouse button (held) | Rz Axis (Z under Proton/Wine) | Brake |
 | Gear up key (default W) | Button 1 | Gear up |
 | Gear down key (default S) | Button 2 | Gear down |
 | Middle click | — | Reset steering |
@@ -100,21 +100,68 @@ All keys can be reassigned in **App settings → Keys**.
 
 MouseDrive runs natively on x86-64 Linux. It reads mice and keyboards through **evdev** and creates a virtual joystick, **MouseDrive Virtual Wheel**, through **uinput**, so no extra driver is needed. Games see it like any other wheel, including Windows games under Proton or Wine.
 
-One-time setup: load `uinput` and give your login session access to `/dev/uinput` and the input devices. **Setup → Copy setup commands** puts these commands on the clipboard:
+### One-time setup
 
-```bash
+MouseDrive needs two permissions: to create the virtual wheel through `/dev/uinput` and to read your mouse. The **Setup** window shows these commands with a one-sentence explanation for each step; **Copy setup commands** puts them on the clipboard. They work in bash, zsh and fish:
+
+```sh
 sudo modprobe uinput
 echo uinput | sudo tee /etc/modules-load.d/mousedrive.conf
-sudo tee /etc/udev/rules.d/70-mousedrive.rules <<'EOF'
-KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"
-SUBSYSTEM=="input", KERNEL=="event*", TAG+="uaccess"
-EOF
+printf '%s\n' \
+  'KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"' \
+  'SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_MOUSE}=="1", TAG+="uaccess"' \
+  | sudo tee /etc/udev/rules.d/70-mousedrive.rules
 sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=misc --subsystem-match=input
 ```
 
-- The `uaccess` tag grants access only to the user at the local seat (systemd-logind) and applies at once, without logging out. Reading input devices lets a program see every key press, which is why access is limited to the local session. Steam uses the same rule for `/dev/uinput`.
-- Without systemd-logind, use `KERNEL=="uinput", GROUP="input", MODE="0660"` for the first rule, add yourself to the `input` group (`sudo usermod -aG input "$USER"`) and log in again.
+1. Load the `uinput` kernel module now and at every start.
+2. Write `/etc/udev/rules.d/70-mousedrive.rules`: one line for `/dev/uinput`, one for mice (`ID_INPUT_MOUSE`, which also covers the absolute pointers of virtual machines). Keyboards, touchpads and game controllers are not included; touchpad movement does not steer anyway.
+3. Apply the rule at once, without logging out.
+
+**What the rule allows.** `TAG+="uaccess"` gives the user of the active local session (systemd-logind) read and write access to the tagged device nodes — for every program that user runs, not only MouseDrive. On a tagged mouse a program can **read** every movement and click, **inject** events of its own and **grab** the device (`EVIOCGRAB`) so that no other program receives its input. On `/dev/uinput` it can create virtual input devices, which is why Steam ships the same uinput line for Steam Input. The access follows the session: it applies at once, moves to whoever uses the local seat and is never given to remote (SSH) sessions.
+
+### Optional: keyboard access
+
+MouseDrive reads the capture key, the A/B key and the gear keys from the keyboard. Without keyboard access those keys do nothing; mouse side buttons still work, so you can bind the capture key to one of them instead. The **Keyboard access** row in Setup shows the state. This step lets MouseDrive **and every program in your session read all keystrokes, passwords included**, inject key presses and grab the keyboard. Add it only if you use keyboard keys:
+
+```sh
+printf '%s\n' \
+  'SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEYBOARD}=="1", TAG+="uaccess"' \
+  | sudo tee /etc/udev/rules.d/71-mousedrive-keyboard.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=input
+```
+
+To remove it, delete `/etc/udev/rules.d/71-mousedrive-keyboard.rules`, run the last two commands again and restart the computer: a keyboard that already got access keeps it until it is unplugged or the computer restarts.
+
+**Upgrading from an earlier version:** the earlier rule tagged every input device (`SUBSYSTEM=="input", KERNEL=="event*", TAG+="uaccess"`), keyboards and game controllers included. While it is installed, Setup shows a **Setup rule** warning. Run the setup commands again (they overwrite `70-mousedrive.rules`), add the keyboard step only if you need it, and restart the computer so the old access ends.
+
+### Other systems
+
+**NixOS:** the files in `/etc/udev/rules.d` come from the system configuration, and `services.udev.extraRules` does not work for this rule: it ends up in `99-local.rules`, which udev applies after the step that grants session access (`73-seat-late.rules`). Add the rule as an early rules package in `configuration.nix` instead and run `sudo nixos-rebuild switch`:
+
+```nix
+boot.kernelModules = [ "uinput" ];
+services.udev.packages = [
+  (pkgs.writeTextFile {
+    name = "mousedrive-udev-rules";
+    destination = "/lib/udev/rules.d/70-mousedrive.rules";
+    text = ''
+      KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"
+      SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_MOUSE}=="1", TAG+="uaccess"
+    '';
+  })
+];
+```
+
+- **Without systemd-logind:** use `KERNEL=="uinput", GROUP="input", MODE="0660"` for the first rule, add yourself to the `input` group (`sudo usermod -aG input "$USER"`) and log in again. Note that the `input` group can read every input device, keyboards included.
+- **Steam Deck and SteamOS:** set a password with `passwd` first so that `sudo` works; rules in `/etc/udev/rules.d` survive system updates. Steam's own `60-steam-input.rules` already opens `/dev/uinput`, so the virtual wheel can work before you run the setup — Setup then names the rule that allows it, and mouse access still needs the commands above.
+
+### Using it
+
+- **Proton and Wine:** the brake shows up as the **Z** axis, not Rz. Wine hands a joystick's axes to the game in order (X, Y, Z, …) and the wheel has three; native Linux games see the third axis, `ABS_RZ`. Controls a game saved on Windows therefore do not carry over axis by axis — bind the axes again with the **Axis bind helper**.
+- **Games can read the virtual wheel:** this Setup row checks that udev marks the wheel as a joystick (`ID_INPUT_JOYSTICK`) and that your session may read it. Without a seat (SSH, some containers) games cannot open it.
 - **Wayland:** reading the mouse and the virtual wheel work on X11 and Wayland alike. If the window cannot open through Wayland (for example NVIDIA without `egl-wayland`) while `DISPLAY` is set, MouseDrive restarts itself once through XWayland; start it with `--x11` to use X11 every time.
 - **Run it as your normal user, never with `sudo`:** as root it would create settings and log files your user cannot change later, so it refuses to start unless `--allow-root` is given. Mouse access comes from the setup commands above.
 - **One instance per user:** a second start shows *MouseDrive is already running* and exits (lock file `$XDG_RUNTIME_DIR/mousedrive.lock`, or the config folder without it). After an update the new version waits a few seconds for the old one to let go.
@@ -133,7 +180,7 @@ MouseDrive already shapes the input (steering mode, smoothing, throttle cut, bra
 | Filtering / smoothing | **off** | MouseDrive's filters are time-based; a game filter adds lag on top. |
 | Speed-sensitive steering | **off** | It reduces steering with speed — mouse steering is already precise. |
 | Steering rotation / lock | **as the game recommends for the car** | Full mouse travel maps to the game's full lock; *cm per full lock* tells you how far that is. |
-| Axis mapping | **separate axes** | Throttle = vJoy **Y**, brake = vJoy **Rz**; do not use a "combined pedals" axis. |
+| Axis mapping | **separate axes** | Throttle = vJoy **Y**, brake = vJoy **Rz** (Linux under Proton/Wine: **Z**); do not use a "combined pedals" axis. |
 | Axis direction | **0 = released** | If a pedal reads inverted, toggle the game's *invert* option for that axis. |
 
 - **Binding:** use the **Axis bind helper** (*Overview → Bind your game controls*, or the *Setup* window). Pick the axis, switch to the game during the 5 s countdown and click the binding row; for the next 4 s only that axis (or gear button) moves.
@@ -270,7 +317,9 @@ Start with the **Setup** window: it checks every requirement and says how to fix
 | DEVICE BUSY | Another feeder (Joystick Gremlin, SimHub, UCR…) owns the device — close it or choose another vJoy device in **App settings → Output** |
 | CONNECTION LOST | MouseDrive retries every second on its own; after 15 s the status becomes SETUP REQUIRED and it keeps retrying every 2 s. **Reconnect** forces a retry |
 | MOUSE NOT READ | Turn on **Read mouse while the game has focus** in **App settings → Mouse**. If the selected mouse is not found, plug it back in, pick it again or click **Use all mice**. On Linux, check **Mouse access** in the Setup window |
-| Linux: uinput, permission or mouse access row fails | Run the commands from **Setup → Copy setup commands** ([Linux setup](#linux)); they apply within seconds |
+| Linux: uinput, permission or mouse access row fails | Run the setup commands shown in the **Setup** window ([Linux setup](#one-time-setup)); they apply within seconds |
+| Linux: the capture key or the gear keys do nothing | Keyboard access is optional; see [keyboard access](#optional-keyboard-access), or bind the capture key to a mouse side button |
+| Linux: the game does not list the wheel or binds the wrong brake axis | Check *Games can read the virtual wheel* in the Setup window. Under Proton/Wine the brake is the **Z** axis |
 | Linux: the window does not open | MouseDrive names missing system libraries in a notification and on stderr ([requirements](#requirements)). If the Wayland window fails, MouseDrive retries once through XWayland; `mousedrive --x11` forces X11. The log (`~/.local/state/mousedrive/mousedrive.log`) has the error |
 | "MouseDrive is already running" | Only one MouseDrive runs per user. Use the open window (it may be minimized) or close it first |
 | PAUSED | Press the capture key (default **F8**) |

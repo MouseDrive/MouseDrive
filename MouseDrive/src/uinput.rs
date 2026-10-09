@@ -51,6 +51,7 @@ pub fn probe(device_id: u32, buttons_required: i32) -> (SetupReport, Option<Uinp
             });
             report.buttons = Some(i32::from(BUTTON_COUNT));
             report.acquired = true;
+            report.device_node = device.node.clone();
             (report, Some(device))
         }
         Err(e) => {

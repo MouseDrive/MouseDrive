@@ -1,14 +1,13 @@
 #![deny(unsafe_code)]
 
+#[cfg(target_os = "linux")]
+mod linux;
+
 #[cfg(windows)]
 use std::path::{Path, PathBuf};
 
-#[cfg(target_os = "linux")]
-use eframe::egui::{CollapsingHeader, Id};
 use eframe::egui::{Context, DragValue, Grid, OpenUrl, RichText, Ui, Window};
 use mousedrive::control::{Command, SetupInfo, Shared, Snapshot};
-#[cfg(target_os = "linux")]
-use mousedrive::input::{self, DeviceReport, Skip};
 use mousedrive::setup::{
     Check, CheckId, CheckState, DeviceState, OpenErrorKind, Owner, SetupReport, format_version,
 };
@@ -16,6 +15,10 @@ use mousedrive::setup::{
 use super::notices::Notices;
 use super::widgets::{Cx, bar, steering_bar};
 use crate::lang::{Strings, fill};
+#[cfg(target_os = "linux")]
+pub use linux::binds_keyboard_keys;
+#[cfg(target_os = "linux")]
+use linux::mouse_blocked;
 
 #[cfg(windows)]
 const SETUP_LINK_URL: &str = "https://github.com/jshafer817/vJoy/releases";
@@ -26,18 +29,6 @@ const VJOY_DEFAULT_DIR: &str = r"C:\Program Files\vJoy\x64";
 
 #[cfg(target_os = "linux")]
 const SETUP_LINK_URL: &str = "https://github.com/MouseDrive/MouseDrive/tree/linux#linux";
-#[cfg(target_os = "linux")]
-const SETUP_COMMANDS: &str = r#"sudo modprobe uinput
-echo uinput | sudo tee /etc/modules-load.d/mousedrive.conf
-sudo tee /etc/udev/rules.d/70-mousedrive.rules <<'EOF'
-KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"
-SUBSYSTEM=="input", KERNEL=="event*", TAG+="uaccess"
-EOF
-sudo udevadm control --reload-rules
-sudo udevadm trigger --subsystem-match=misc --subsystem-match=input
-"#;
-#[cfg(target_os = "linux")]
-const COPIED_VISIBLE_S: f64 = 2.0;
 
 const SHOW_VERSIONS: bool = cfg!(windows);
 const SHOW_DEVICE_NUMBER: bool = cfg!(windows);
@@ -194,98 +185,6 @@ fn buttons_parts(r: &SetupReport, failed: bool, s: &Strings) -> Parts {
     )
 }
 
-#[cfg(target_os = "linux")]
-pub fn mouse_access_row(readable: bool, denied: &[String], s: &Strings) -> Row {
-    let state = match (readable, denied.is_empty()) {
-        (true, true) => CheckState::Pass,
-        (true, false) => CheckState::Warn,
-        (false, _) => CheckState::Fail,
-    };
-    let detail = if !denied.is_empty() {
-        fill(s.mouse_access_denied, &[("mice", &denied.join(", "))])
-    } else if readable {
-        String::new()
-    } else {
-        s.mouse_access_none.to_string()
-    };
-    Row {
-        state,
-        title: s.chk_mouse_access.into(),
-        detail,
-        fix: (!denied.is_empty()).then(|| s.fix_mouse_access.into()),
-    }
-}
-
-#[cfg(target_os = "linux")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DeviceTone {
-    InUse,
-    Denied,
-    Unused,
-}
-
-#[cfg(target_os = "linux")]
-pub fn device_line(d: &DeviceReport, s: &Strings) -> (String, DeviceTone) {
-    let class = d.class.map(|c| s.device_class(c));
-    let status = d
-        .skip
-        .map_or_else(|| s.dev_in_use.to_string(), |skip| s.device_skip(skip));
-    let tone = match d.skip {
-        None => DeviceTone::InUse,
-        Some(Skip::PermissionDenied | Skip::OpenFailed(_)) => DeviceTone::Denied,
-        Some(_) => DeviceTone::Unused,
-    };
-    let text = match class {
-        Some(class) => format!("{} · {class} · {status}", d.name),
-        None => format!("{} · {status}", d.name),
-    };
-    (text, tone)
-}
-
-#[cfg(target_os = "linux")]
-fn device_list(ui: &mut Ui, cx: &Cx) {
-    let devices: Vec<DeviceReport> = input::devices()
-        .into_iter()
-        .filter(|d| d.class.is_some())
-        .collect();
-    let title = fill(cx.s.setup_devices, &[("n", &devices.len().to_string())]);
-    CollapsingHeader::new(title)
-        .id_salt("setup_devices")
-        .show(ui, |ui| {
-            for d in &devices {
-                let (text, tone) = device_line(d, cx.s);
-                let text = match tone {
-                    DeviceTone::InUse => RichText::new(text).color(cx.pal.ok),
-                    DeviceTone::Denied => RichText::new(text).color(ui.visuals().warn_fg_color),
-                    DeviceTone::Unused => RichText::new(text).weak(),
-                };
-                ui.label(text).on_hover_text(&d.node);
-            }
-        });
-}
-
-#[cfg(windows)]
-fn device_list(_ui: &mut Ui, _cx: &Cx) {}
-
-#[cfg(target_os = "linux")]
-fn live_rows(s: &Strings) -> Vec<Row> {
-    vec![mouse_access_row(
-        input::registration_ok(),
-        &input::denied_mice(),
-        s,
-    )]
-}
-
-#[cfg(windows)]
-fn live_rows(_s: &Strings) -> Vec<Row> {
-    Vec::new()
-}
-
-#[cfg(target_os = "linux")]
-fn mouse_blocked() -> bool {
-    !input::registration_ok() && !input::denied_mice().is_empty()
-}
-
 #[cfg(windows)]
 fn mouse_blocked() -> bool {
     false
@@ -302,6 +201,8 @@ fn vjoy_conf_path(dll: Option<&Path>) -> PathBuf {
 pub struct Env<'a> {
     pub shared: &'a Shared,
     pub snap: &'a Snapshot,
+    #[cfg(target_os = "linux")]
+    pub keyboard_keys: bool,
     pub device_id: &'a mut i32,
     pub notices: &'a mut Notices,
     pub open_bind_helper: &'a mut bool,
@@ -313,6 +214,8 @@ pub struct SetupUi {
     pub info: SetupInfo,
     seen_seq: u64,
     auto_opened: bool,
+    #[cfg(target_os = "linux")]
+    live: linux::Live,
 }
 
 impl SetupUi {
@@ -336,10 +239,14 @@ impl SetupUi {
         let Env {
             shared,
             snap,
+            #[cfg(target_os = "linux")]
+            keyboard_keys,
             device_id,
             notices,
             open_bind_helper,
         } = env;
+        #[cfg(target_os = "linux")]
+        let live = self.linux_rows(ctx, cx.s, keyboard_keys);
         let report = &self.info.report;
         let mut open = self.open;
         Window::new(cx.s.setup_title)
@@ -350,20 +257,38 @@ impl SetupUi {
             .show(ctx, |ui| {
                 ui.label(cx.s.setup_intro);
                 ui.add_space(6.0);
-                let rows: Vec<Row> = check_rows(report, cx.s)
-                    .into_iter()
-                    .chain(live_rows(cx.s))
-                    .collect();
+                let rows = check_rows(report, cx.s);
+                #[cfg(target_os = "linux")]
+                let rows: Vec<Row> = rows.into_iter().chain(live.rows.clone()).collect();
                 rows_grid(ui, cx, &rows);
-                device_list(ui, cx);
+                #[cfg(target_os = "linux")]
+                {
+                    linux::note(ui, live.note.as_deref());
+                    linux::device_list(ui, cx);
+                }
                 ui.add_space(6.0);
                 actions(ui, cx, report, shared, notices);
+                #[cfg(target_os = "linux")]
+                linux::commands(ui, cx, &live);
                 device_number(ui, cx, device_id);
                 ui.separator();
                 live_test(ui, cx, snap);
                 next_steps(ui, cx, open_bind_helper);
             });
         self.open = open;
+        #[cfg(target_os = "linux")]
+        if !open {
+            self.live = linux::Live::default();
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn linux_rows(&mut self, ctx: &Context, s: &Strings, keyboard_keys: bool) -> linux::LiveRows {
+        let report = &self.info.report;
+        let node = report.device_node.as_deref().filter(|_| report.acquired);
+        self.live.refresh(ctx.input(|i| i.time), node);
+        let facts = linux::Facts::read(report, &self.live, keyboard_keys);
+        linux::live_rows(&facts, s)
     }
 }
 
@@ -405,16 +330,22 @@ fn actions(ui: &mut Ui, cx: &Cx, report: &SetupReport, shared: &Shared, notices:
         if ui.button(cx.s.btn_recheck).clicked() {
             shared.send(Command::Reconnect);
         }
-        if ui.button(cx.s.btn_setup_tool).clicked() {
-            setup_tool(ui, cx, report, notices);
-        }
+        tool_button(ui, cx, report, notices);
         if ui.button(cx.s.btn_setup_link).clicked() {
             ui.ctx().open_url(OpenUrl::new_tab(SETUP_LINK_URL));
         }
-        #[cfg(target_os = "linux")]
-        copied_hint(ui, cx);
     });
 }
+
+#[cfg(windows)]
+fn tool_button(ui: &mut Ui, cx: &Cx, report: &SetupReport, notices: &mut Notices) {
+    if ui.button(cx.s.btn_setup_tool).clicked() {
+        setup_tool(ui, cx, report, notices);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn tool_button(_ui: &mut Ui, _cx: &Cx, _report: &SetupReport, _notices: &mut Notices) {}
 
 #[cfg(windows)]
 fn setup_tool(_ui: &Ui, cx: &Cx, report: &SetupReport, notices: &mut Notices) {
@@ -424,27 +355,6 @@ fn setup_tool(_ui: &Ui, cx: &Cx, report: &SetupReport, notices: &mut Notices) {
             cx.s.err_launch,
             &[("error", &format!("{}: {e}", exe.display()))],
         ));
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn setup_tool(ui: &Ui, _cx: &Cx, _report: &SetupReport, _notices: &mut Notices) {
-    ui.ctx().copy_text(SETUP_COMMANDS.to_string());
-    let now = ui.input(|i| i.time);
-    ui.ctx().data_mut(|d| d.insert_temp(copied_id(), now));
-}
-
-#[cfg(target_os = "linux")]
-fn copied_id() -> Id {
-    Id::new("setup_commands_copied")
-}
-
-#[cfg(target_os = "linux")]
-fn copied_hint(ui: &mut Ui, cx: &Cx) {
-    let now = ui.input(|i| i.time);
-    let copied_at: Option<f64> = ui.ctx().data(|d| d.get_temp(copied_id()));
-    if copied_at.is_some_and(|t| now - t < COPIED_VISIBLE_S) {
-        ui.label(RichText::new(cx.s.copied).weak());
     }
 }
 
@@ -484,4 +394,6 @@ fn next_steps(ui: &mut Ui, cx: &Cx, open_bind_helper: &mut bool) {
         }
     });
     ui.label(RichText::new(cx.s.setup_next_game).weak());
+    #[cfg(target_os = "linux")]
+    ui.label(RichText::new(cx.s.setup_proton_axes).weak());
 }

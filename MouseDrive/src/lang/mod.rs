@@ -191,6 +191,72 @@ pub struct Strings {
     pub fix_mouse_access: &'static str,
     #[cfg(target_os = "linux")]
     pub setup_devices: &'static str,
+    #[cfg(target_os = "linux")]
+    pub chk_wheel_access: &'static str,
+    #[cfg(target_os = "linux")]
+    pub wheel_ready: &'static str,
+    #[cfg(target_os = "linux")]
+    pub wheel_pending: &'static str,
+    #[cfg(target_os = "linux")]
+    pub wheel_not_joystick: &'static str,
+    #[cfg(target_os = "linux")]
+    pub wheel_no_seat: &'static str,
+    #[cfg(target_os = "linux")]
+    pub wheel_no_tag: &'static str,
+    #[cfg(target_os = "linux")]
+    pub fix_wheel_access: &'static str,
+    #[cfg(target_os = "linux")]
+    pub mouse_access_touchpad_only: &'static str,
+    #[cfg(target_os = "linux")]
+    pub mouse_access_touchpad_skipped: &'static str,
+    #[cfg(target_os = "linux")]
+    pub fix_touchpad_only: &'static str,
+    #[cfg(target_os = "linux")]
+    pub chk_keyboard_access: &'static str,
+    #[cfg(target_os = "linux")]
+    pub keyboard_access_denied: &'static str,
+    #[cfg(target_os = "linux")]
+    pub keyboard_access_none: &'static str,
+    #[cfg(target_os = "linux")]
+    pub keyboard_not_needed: &'static str,
+    #[cfg(target_os = "linux")]
+    pub fix_keyboard_access: &'static str,
+    #[cfg(target_os = "linux")]
+    pub chk_setup_rule: &'static str,
+    #[cfg(target_os = "linux")]
+    pub setup_rule_broad: &'static str,
+    #[cfg(target_os = "linux")]
+    pub fix_setup_rule_broad: &'static str,
+    #[cfg(target_os = "linux")]
+    pub uinput_via_rules: &'static str,
+    #[cfg(target_os = "linux")]
+    pub setup_commands: &'static str,
+    #[cfg(target_os = "linux")]
+    pub setup_commands_intro: &'static str,
+    #[cfg(target_os = "linux")]
+    pub step_uinput: &'static str,
+    #[cfg(target_os = "linux")]
+    pub step_rule: &'static str,
+    #[cfg(target_os = "linux")]
+    pub step_apply: &'static str,
+    #[cfg(target_os = "linux")]
+    pub keyboard_tier: &'static str,
+    #[cfg(target_os = "linux")]
+    pub keyboard_tier_warning: &'static str,
+    #[cfg(target_os = "linux")]
+    pub keyboard_tier_why: &'static str,
+    #[cfg(target_os = "linux")]
+    pub step_keyboard_rule: &'static str,
+    #[cfg(target_os = "linux")]
+    pub step_keyboard_apply: &'static str,
+    #[cfg(target_os = "linux")]
+    pub btn_copy_keyboard: &'static str,
+    #[cfg(target_os = "linux")]
+    pub nixos_title: &'static str,
+    #[cfg(target_os = "linux")]
+    pub nixos_note: &'static str,
+    #[cfg(target_os = "linux")]
+    pub setup_proton_axes: &'static str,
 
     pub g_steering: &'static str,
     pub g_throttle: &'static str,

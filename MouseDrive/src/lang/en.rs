@@ -13,8 +13,8 @@ pub(super) static EN: Strings = Strings {
     chk_dll: "uinput available",
     chk_driver: "Permission to create the virtual wheel",
     chk_device: "Virtual wheel",
-    fix_dll: "The uinput kernel module is not available (/dev/uinput is missing or has no driver). Run the commands from “Copy setup commands” in a terminal, then press “Check again”.",
-    fix_driver: "MouseDrive may not open /dev/uinput. Run the commands from “Copy setup commands” in a terminal, then press “Check again”.",
+    fix_dll: "The uinput kernel module is not available (/dev/uinput is missing or has no driver). Run the setup commands below in a terminal, then press “Check again”.",
+    fix_driver: "MouseDrive may not open /dev/uinput. Run the setup commands below in a terminal, then press “Check again”.",
     fix_device_acquire: "The virtual wheel could not be created; the reason is shown above. Press “Check again”.",
     fix_read_only: "/dev/uinput is on a read-only file system, so the virtual wheel cannot be created. This usually means a sandbox or container; run MouseDrive outside it.",
     det_no_pointer: "No mouse can be read: there is no permission or no mouse is connected. Open setup and check “Mouse access”.",
@@ -23,6 +23,7 @@ pub(super) static EN: Strings = Strings {
     diag_registration: "No mouse can be read; see “Mouse access” in the setup list.",
     diag_absolute: "Touchpad/tablet movement does not steer: {n} absolute-position events were ignored.",
     tip_gear_keys: "While capture is on, these keys press virtual wheel buttons 1 and 2.",
+    copied: "Copied to the clipboard (if your desktop allows it)",
     ..BASE
 };
 
@@ -155,9 +156,75 @@ const BASE: Strings = Strings {
     #[cfg(target_os = "linux")]
     mouse_access_none: "no mouse found",
     #[cfg(target_os = "linux")]
-    fix_mouse_access: "MouseDrive may not read the mouse. Run the commands from “Copy setup commands” in a terminal; the change applies within a few seconds.",
+    fix_mouse_access: "MouseDrive may not read the mouse. Run the setup commands below in a terminal; the change applies within a few seconds.",
     #[cfg(target_os = "linux")]
     setup_devices: "Input devices ({n})",
+    #[cfg(target_os = "linux")]
+    chk_wheel_access: "Games can read the virtual wheel",
+    #[cfg(target_os = "linux")]
+    wheel_ready: "a joystick your session can read ({node})",
+    #[cfg(target_os = "linux")]
+    wheel_pending: "udev has no record of {node} yet; games that look for joysticks through udev (SDL, Proton) may not see it.",
+    #[cfg(target_os = "linux")]
+    wheel_not_joystick: "udev does not mark {node} as a joystick (ID_INPUT_JOYSTICK), so games may ignore it.",
+    #[cfg(target_os = "linux")]
+    wheel_no_seat: "udev tagged {node} for your session, but access was not granted: this session has no seat or is not the active one (for example SSH or a container).",
+    #[cfg(target_os = "linux")]
+    wheel_no_tag: "Your session may not read {node}: udev gave it no session access (uaccess tag).",
+    #[cfg(target_os = "linux")]
+    fix_wheel_access: "Start MouseDrive and the game from your desktop session. Without systemd-logind, add your user to the “input” group (see the Linux setup guide).",
+    #[cfg(target_os = "linux")]
+    mouse_access_touchpad_only: "only a touchpad was found: {touchpads}",
+    #[cfg(target_os = "linux")]
+    mouse_access_touchpad_skipped: "touchpads are not read: their movement does not steer",
+    #[cfg(target_os = "linux")]
+    fix_touchpad_only: "Touchpad movement does not steer the wheel. Connect a mouse.",
+    #[cfg(target_os = "linux")]
+    chk_keyboard_access: "Keyboard access",
+    #[cfg(target_os = "linux")]
+    keyboard_access_denied: "no permission: {keyboards}",
+    #[cfg(target_os = "linux")]
+    keyboard_access_none: "no keyboard found",
+    #[cfg(target_os = "linux")]
+    keyboard_not_needed: "not needed: no keyboard key is bound",
+    #[cfg(target_os = "linux")]
+    fix_keyboard_access: "The capture key, the A/B key and the gear keys do not work without keyboard access (mouse side buttons still do). See “Optional: keyboard access” below; it lets every program in your session read all keystrokes.",
+    #[cfg(target_os = "linux")]
+    chk_setup_rule: "Setup rule",
+    #[cfg(target_os = "linux")]
+    setup_rule_broad: "70-mousedrive.rules from an earlier version gives your session access to every input device, keyboards included.",
+    #[cfg(target_os = "linux")]
+    fix_setup_rule_broad: "Through it any program in your session can read, inject and grab keystrokes. Run the setup commands below again to replace it with the narrower rule, then restart the computer so the old access ends.",
+    #[cfg(target_os = "linux")]
+    uinput_via_rules: "/dev/uinput is usable thanks to {rules}, not MouseDrive's own rule. Mouse access still needs the setup commands, and the virtual wheel stops working if that package is removed.",
+    #[cfg(target_os = "linux")]
+    setup_commands: "Setup commands",
+    #[cfg(target_os = "linux")]
+    setup_commands_intro: "Run them once in a terminal (bash, zsh or fish); sudo asks for your password. You can also select the text.",
+    #[cfg(target_os = "linux")]
+    step_uinput: "Load the uinput kernel module now and at every start.",
+    #[cfg(target_os = "linux")]
+    step_rule: "Let your login session create the virtual wheel and read mice; keyboards, touchpads and game controllers are not included.",
+    #[cfg(target_os = "linux")]
+    step_apply: "Apply the rule at once, without logging out.",
+    #[cfg(target_os = "linux")]
+    keyboard_tier: "Optional: keyboard access",
+    #[cfg(target_os = "linux")]
+    keyboard_tier_warning: "This lets MouseDrive — and every program in your session — read all keystrokes, passwords included.",
+    #[cfg(target_os = "linux")]
+    keyboard_tier_why: "MouseDrive reads the capture key, the A/B key and the gear keys from the keyboard; without this step they do not work (mouse side buttons still do). Skip it if you do not use keyboard keys.",
+    #[cfg(target_os = "linux")]
+    step_keyboard_rule: "Let your login session read keyboards.",
+    #[cfg(target_os = "linux")]
+    step_keyboard_apply: "Apply it at once. To undo it later, delete the file, run these two commands again and restart the computer.",
+    #[cfg(target_os = "linux")]
+    btn_copy_keyboard: "Copy keyboard commands",
+    #[cfg(target_os = "linux")]
+    nixos_title: "NixOS",
+    #[cfg(target_os = "linux")]
+    nixos_note: "On NixOS, add this to configuration.nix instead and run “sudo nixos-rebuild switch”. services.udev.extraRules does not work for this rule: it is applied after the step that grants session access.",
+    #[cfg(target_os = "linux")]
+    setup_proton_axes: "Under Proton or Wine the brake shows up as the Z axis, not Rz, so bindings saved on Windows do not carry over; bind the axes again.",
 
     g_steering: "Steering",
     g_throttle: "Throttle",

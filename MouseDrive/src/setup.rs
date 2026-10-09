@@ -1,5 +1,8 @@
 #![deny(unsafe_code)]
 
+#[cfg(target_os = "linux")]
+pub mod udev;
+
 use std::path::PathBuf;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,6 +87,7 @@ pub struct SetupReport {
     pub buttons: Option<i32>,
     pub acquired: bool,
     pub open_error: Option<OpenError>,
+    pub device_node: Option<PathBuf>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
