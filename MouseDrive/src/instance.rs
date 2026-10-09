@@ -4,10 +4,13 @@ use std::fmt;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 const LOCK_FILE: &str = "mousedrive.lock";
 const RETRY_STEP: Duration = Duration::from_millis(100);
+
+static ACQUIRED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug)]
 pub struct InstanceLock {
@@ -40,7 +43,13 @@ impl fmt::Display for LockError {
 
 pub fn acquire(wait: Duration) -> Result<InstanceLock, LockError> {
     let dir = lock_dir().ok_or(LockError::NoDirectory)?;
-    acquire_at(&dir.join(LOCK_FILE), wait)
+    let lock = acquire_at(&dir.join(LOCK_FILE), wait)?;
+    ACQUIRED.store(true, Ordering::Release);
+    Ok(lock)
+}
+
+pub fn lock_acquired() -> bool {
+    ACQUIRED.load(Ordering::Acquire)
 }
 
 fn acquire_at(path: &Path, wait: Duration) -> Result<InstanceLock, LockError> {

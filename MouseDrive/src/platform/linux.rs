@@ -146,22 +146,65 @@ pub fn setup_process() -> ProcessGuard {
     ProcessGuard
 }
 
-pub fn environment_summary() -> String {
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Environment {
+    pub distro: Option<String>,
+    pub kernel: Option<String>,
+    pub session: Option<String>,
+    pub desktop: Option<String>,
+    pub glibc: Option<String>,
+    pub wayland: bool,
+    pub x11: bool,
+}
+
+pub fn environment() -> &'static Environment {
+    static ENVIRONMENT: OnceLock<Environment> = OnceLock::new();
+    ENVIRONMENT.get_or_init(read_environment)
+}
+
+fn read_environment() -> Environment {
     let distro = OS_RELEASE_FILES
         .iter()
         .find_map(|path| std::fs::read_to_string(path).ok())
         .and_then(|text| os_release_name(&text));
     let kernel = std::fs::read_to_string("/proc/sys/kernel/osrelease").ok();
-    let session = std::env::var("XDG_SESSION_TYPE").ok();
-    let desktop = std::env::var("XDG_CURRENT_DESKTOP").ok();
-    describe_environment(
-        distro.as_deref(),
-        kernel.as_deref().map(str::trim),
-        session.as_deref(),
-        desktop.as_deref(),
-        env_set("WAYLAND_DISPLAY") || env_set("WAYLAND_SOCKET"),
-        env_set("DISPLAY"),
-    )
+    Environment {
+        distro,
+        kernel: non_empty(kernel.as_deref()),
+        session: non_empty(std::env::var("XDG_SESSION_TYPE").ok().as_deref()),
+        desktop: non_empty(std::env::var("XDG_CURRENT_DESKTOP").ok().as_deref()),
+        glibc: glibc_version(),
+        wayland: env_set("WAYLAND_DISPLAY") || env_set("WAYLAND_SOCKET"),
+        x11: env_set("DISPLAY"),
+    }
+}
+
+fn non_empty(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_owned)
+}
+
+#[cfg(target_env = "gnu")]
+fn glibc_version() -> Option<String> {
+    // SAFETY: gnu_get_libc_version glibc'nin statik, NUL ile biten sürüm dizgesini döndürür.
+    let raw = unsafe { libc::gnu_get_libc_version() };
+    if raw.is_null() {
+        return None;
+    }
+    // SAFETY: raw boş değil ve süreç boyunca geçerli, NUL ile biten bir dizge.
+    let version = unsafe { std::ffi::CStr::from_ptr(raw) };
+    non_empty(Some(&version.to_string_lossy()))
+}
+
+#[cfg(not(target_env = "gnu"))]
+fn glibc_version() -> Option<String> {
+    None
+}
+
+pub fn environment_summary() -> String {
+    describe_environment(environment())
 }
 
 fn env_set(name: &str) -> bool {
@@ -178,24 +221,18 @@ fn os_release_name(text: &str) -> Option<String> {
     field("PRETTY_NAME").or_else(|| field("NAME"))
 }
 
-fn describe_environment(
-    distro: Option<&str>,
-    kernel: Option<&str>,
-    session: Option<&str>,
-    desktop: Option<&str>,
-    wayland: bool,
-    x11: bool,
-) -> String {
-    let known = |v: Option<&str>| v.filter(|s| !s.is_empty()).unwrap_or("?").to_owned();
+fn describe_environment(env: &Environment) -> String {
+    let known = |v: &Option<String>| v.as_deref().unwrap_or("?").to_owned();
     let present = |set: bool| if set { "var" } else { "yok" };
     format!(
-        "linux {}, dağıtım {}, çekirdek {}, oturum {}, masaüstü {}, wayland {}, x11 {}",
+        "linux {}, dağıtım {}, çekirdek {}, glibc {}, oturum {}, masaüstü {}, wayland {}, x11 {}",
         std::env::consts::ARCH,
-        known(distro),
-        known(kernel),
-        known(session),
-        known(desktop),
-        present(wayland),
-        present(x11)
+        known(&env.distro),
+        known(&env.kernel),
+        known(&env.glibc),
+        known(&env.session),
+        known(&env.desktop),
+        present(env.wayland),
+        present(env.x11)
     )
 }

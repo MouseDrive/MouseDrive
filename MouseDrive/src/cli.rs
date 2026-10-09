@@ -114,7 +114,7 @@ pub fn device_list(devices: &[DeviceReport], s: &Strings) -> String {
         .join("\n")
 }
 
-fn device_row(d: &DeviceReport, s: &Strings) -> [String; 6] {
+pub fn device_row(d: &DeviceReport, s: &Strings) -> [String; 6] {
     [
         d.node.clone(),
         format!("{:04X}:{:04X}", d.vendor, d.product),

@@ -553,6 +553,10 @@ pub fn device_filter() -> DeviceFilter {
     STATE.filter()
 }
 
+pub fn allow_injected() -> bool {
+    STATE.allow_injected.load(Ordering::Acquire)
+}
+
 pub fn refresh_filter() {
     sys::refresh_filter();
 }

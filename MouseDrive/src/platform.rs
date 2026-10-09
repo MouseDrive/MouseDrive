@@ -8,10 +8,10 @@ use std::process::{Child, Command};
 
 #[cfg(target_os = "linux")]
 pub use linux::{
-    DisplayEnv, MissingLibs, ProcessGuard, SignalEvent, WindowSystem, alert, child_command,
-    display_env, environment_summary, keep_cpu_budget, missing_runtime_libs, monotonic_ns,
-    raise_current_thread_priority, running_as_root, setup_process, signal_name, sleep_until_ns,
-    tighten_timer_slack, watch_termination_signals,
+    DisplayEnv, Environment, MissingLibs, ProcessGuard, SignalEvent, WindowSystem, alert,
+    child_command, display_env, environment, environment_summary, keep_cpu_budget,
+    missing_runtime_libs, monotonic_ns, raise_current_thread_priority, running_as_root,
+    setup_process, signal_name, sleep_until_ns, tighten_timer_slack, watch_termination_signals,
 };
 #[cfg(target_os = "linux")]
 pub(crate) use linux::{Wake, drain, poll, pollfd};

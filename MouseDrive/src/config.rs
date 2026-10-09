@@ -19,7 +19,7 @@ pub const CONFIG_FILE: &str = "config.toml";
 
 pub const PORTABLE_MARKER: &str = "mousedrive.portable";
 
-const VERSION_KEY: &str = "config_version";
+pub(crate) const VERSION_KEY: &str = "config_version";
 
 const LEGACY_KEYS: [&str; 4] = [
     "steering_filter_alpha",

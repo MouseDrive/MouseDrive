@@ -1,11 +1,18 @@
 #![deny(unsafe_code)]
 
 use eframe::egui::{RichText, ScrollArea, Ui};
-use mousedrive::config::Config;
+use mousedrive::config::{self, Config};
 use mousedrive::control::{SetupInfo, Snapshot};
+#[cfg(target_os = "linux")]
+use mousedrive::diagnostics::{DeviceLine, LinuxInfo};
 use mousedrive::diagnostics::{DiagnosticsInfo, Spread, format_report};
+#[cfg(target_os = "linux")]
+use mousedrive::input::{Class, DeviceReport};
+#[cfg(target_os = "linux")]
+use mousedrive::platform::{self, Environment};
 use mousedrive::priority::ThreadPriority;
 use mousedrive::setup::format_version;
+use mousedrive::{input, instance};
 
 use super::theme;
 use super::widgets::{Cx, output_name};
@@ -109,16 +116,20 @@ pub fn warnings(snap: &Snapshot, s: &Strings) -> Vec<String> {
 
 pub fn report_info(snap: &Snapshot, setup: &SetupInfo, cfg: &Config) -> DiagnosticsInfo {
     let r = &setup.report;
+    let en = strings(Lang::En);
     DiagnosticsInfo {
         app_version: env!("CARGO_PKG_VERSION").into(),
         os: format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
-        status: strings(Lang::En).status_labels[snap.status.index()].into(),
+        status: en.status_labels[snap.status.index()].into(),
         backend: setup.backend.clone().unwrap_or_else(|| "-".into()),
         dll_path: r.dll_path.as_ref().map(|p| p.display().to_string()),
         dll_version: r.versions.map(|v| format_version(v.dll)),
         driver_version: r.versions.map(|v| format_version(v.driver)),
         target_hz: snap.target_hz,
         loop_summary: snap.loop_summary,
+        latency: snap.latency,
+        control_priority: en.thread_priority(snap.priorities.control),
+        input_priority: en.thread_priority(snap.priorities.input),
         ok_writes: snap.writes.ok_writes,
         failed_writes: snap.writes.failed_writes,
         reconnects: snap.reconnects,
@@ -126,8 +137,48 @@ pub fn report_info(snap: &Snapshot, setup: &SetupInfo, cfg: &Config) -> Diagnost
         telemetry_dropped: snap.telemetry_dropped,
         mouse_rate_hz: snap.mouse_hz,
         absolute_events: snap.absolute_events,
-        mouse_filter: format!("{:?}", snap.device_filter),
+        ignored_events: snap.ignored_events,
+        stuck_releases: snap.stuck_releases,
+        device_filter: snap.device_filter,
+        selected_device: cfg.mouse_device.clone(),
         input_sink: cfg.input_sink_enabled,
+        test_counter: snap.test_counter,
+        allow_injected: input::allow_injected(),
+        instance_lock: instance::lock_acquired(),
+        portable: config::portable_mode(),
+        #[cfg(target_os = "linux")]
+        linux: linux_info(snap, &input::devices(), platform::environment()),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_info(snap: &Snapshot, devices: &[DeviceReport], environment: &Environment) -> LinuxInfo {
+    let en = strings(Lang::En);
+    LinuxInfo {
+        environment: environment.clone(),
+        pointer_readable: snap.registration_ok,
+        denied_pointers: devices
+            .iter()
+            .filter(|d| d.denied_as(Class::is_pointer))
+            .count(),
+        dropped_reports: snap.dropped_reports,
+        reconcile_releases: snap.reconcile_releases,
+        input_stopped: snap.input_stopped,
+        devices: devices.iter().map(|d| device_line(d, en)).collect(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn device_line(d: &DeviceReport, s: &Strings) -> DeviceLine {
+    let [node, ids, bus, class, state, name] = crate::cli::device_row(d, s);
+    DeviceLine {
+        node,
+        ids,
+        bus,
+        class,
+        state,
+        uniq: d.uniq.clone(),
+        name,
     }
 }
 

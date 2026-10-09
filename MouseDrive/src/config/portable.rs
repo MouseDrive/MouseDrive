@@ -5,12 +5,15 @@ use std::sync::OnceLock;
 
 use super::{CONFIG_FILE, PORTABLE_MARKER, VERSION_KEY, is_foreign, is_known_key, schema};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Portable {
+    #[default]
     Off,
     Marker,
     VersionKey,
-    IgnoredForeign { marked: bool },
+    IgnoredForeign {
+        marked: bool,
+    },
     IgnoredUnmarked,
 }
 
