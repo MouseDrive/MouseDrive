@@ -10,6 +10,7 @@ use egui_plot::{Legend, Line, LineStyle, Plot, PlotPoints, VLine};
 use mousedrive::config::Tuning;
 use mousedrive::control::Shared;
 use mousedrive::disk::{DiskWriter, JobState, Pending};
+use mousedrive::ioerr::IoFailure;
 use mousedrive::telemetry::{Marker, Sample, decimate_min_max};
 use mousedrive::{fsutil, log};
 
@@ -51,7 +52,7 @@ pub struct Monitor {
     window_s: u32,
     changed_at_ms: Option<f64>,
     export: Option<Pending<io::Result<PathBuf>>>,
-    exported: Option<Result<PathBuf, String>>,
+    exported: Option<Result<PathBuf, IoFailure>>,
 }
 
 impl Default for Monitor {
@@ -254,8 +255,8 @@ impl Monitor {
         };
         self.exported = match pending.state() {
             JobState::Running => return,
-            JobState::Done(result) => Some(result.map_err(|e| e.to_string())),
-            JobState::Lost => Some(Err(io::Error::from(io::ErrorKind::Interrupted).to_string())),
+            JobState::Done(result) => Some(result.map_err(IoFailure::from)),
+            JobState::Lost => Some(Err(IoFailure::from_kind(io::ErrorKind::Interrupted))),
         };
         self.export = None;
     }
@@ -265,7 +266,7 @@ impl Monitor {
             None => {}
             Some(Ok(path)) => saved_line(ui, cx, path),
             Some(Err(error)) => {
-                let text = fill(cx.s.csv_failed, &[("error", error)]);
+                let text = fill(cx.s.csv_failed, &[("error", &cx.s.io_failure(*error))]);
                 ui.label(RichText::new(text).color(ui.visuals().error_fg_color));
             }
         }

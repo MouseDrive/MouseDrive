@@ -268,8 +268,10 @@ impl ProfileStore {
         if let Some(found) = self.find(wanted)? {
             return Ok(Some(found));
         }
-        if let Some(default) = self.find(DEFAULT_PROFILE)? {
-            return Ok(Some(default));
+        match self.find(DEFAULT_PROFILE) {
+            Ok(Some(default)) => return Ok(Some(default)),
+            Ok(None) | Err(ProfileError::Ambiguous { .. }) => {}
+            Err(e) => return Err(e),
         }
         Ok(self.list()?.into_iter().next())
     }

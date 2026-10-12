@@ -1,3 +1,5 @@
+use mousedrive::ioerr;
+
 use super::Strings;
 
 #[cfg(windows)]
@@ -291,6 +293,9 @@ const BASE: Strings = Strings {
     dev_skip_denied: "izin yok",
     dev_skip_open_failed: "açılamadı: {error}",
     dev_list_columns: ["Cihaz", "VID:PID", "Veri yolu", "Sınıf", "Durum", "Ad"],
+    io_reasons: ioerr::REASONS_TR,
+    io_unknown: ioerr::UNKNOWN_TR,
+    io_code: ioerr::CODE_TR,
     dev_list_empty: "Girdi cihazı bulunamadı.",
 
     profile: "Profil",
@@ -324,6 +329,8 @@ const BASE: Strings = Strings {
     err_profile_delete: "Profil silinemedi: {error}",
     err_profile_list: "Profiller okunamadı: {error}",
     err_profile_backup: "Okunamayan profilin yedeği alınamadı: {error}",
+    profile_not_found: "“{name}” adlı profil yok",
+    profile_last: "son kalan profil silinemez",
     profile_ambiguous: "Büyük/küçük harf ayrımı gözetilmezse “{name}” adına birden fazla profil uyuyor ({names}). Adlar yalnızca harf büyüklüğüyle ayrılmasın diye profiller klasöründeki bu dosyalardan birini yeniden adlandırın.",
     profile_corrected: "“{name}” profilinde sınır dışı değerler düzeltildi: {fields}",
     ab_start: "A/B",
@@ -546,7 +553,7 @@ const BASE: Strings = Strings {
     notice_backup_failed: "Özgün dosya yedeklenemedi ({error}). Dosyaya dokunulmaması için bu oturumda ayarlar kaydedilmeyecek.",
     notice_newer: "config.toml daha yeni bir MouseDrive sürümüyle yazılmış (ayar biçimi {version}; bu sürüm {current} kullanıyor). Bu sürüm kaydettiğinde tanımadığı ayarlar silinir.",
     notice_unknown_keys: "config.toml'da bu sürümün tanımadığı ayarlar var: {keys}. Bu sürüm kaydettiğinde bunlar silinir.",
-    notice_foreign: "config.toml bir MouseDrive ayar dosyasına benzemiyor; varsayılan ayarlar kullanılıyor.",
+    notice_foreign: "config.toml bir MouseDrive ayar dosyasına benzemiyor; varsayılan ayarlar kullanılıyor. Bir ayarı değiştirene kadar dosyaya dokunulmaz; kaydedildiğinde yerini MouseDrive ayarları alır.",
     notice_portable_unmarked: "MouseDrive'ın yanındaki config.toml kullanılmadı. Taşınabilir mod artık {dir} klasöründe {marker} adlı boş bir dosya istiyor; ayarlarınızı orada tutmak için bu dosyayı oluşturun.",
     notice_portable_foreign: "{dir} klasöründe {marker} var, ancak oradaki config.toml bir MouseDrive ayar dosyasına benzemiyor; bu yüzden taşınabilir mod kapalı ve dosyaya dokunulmadı. Taşınabilir modu kullanmak için MouseDrive'ı ayrı bir klasöre koyun.",
     notice_updated: "MouseDrive v{from} sürümünden v{to} sürümüne güncellendi.",

@@ -125,7 +125,10 @@ impl ProfilesUi {
         };
         match store.list() {
             Ok(names) => self.names = names,
-            Err(e) => notices.error(fill(s.err_profile_list, &[("error", &e.to_string())])),
+            Err(e) => notices.error(fill(
+                s.err_profile_list,
+                &[("error", &profile_error_text(&e, s))],
+            )),
         }
     }
 
@@ -260,7 +263,7 @@ impl ProfilesUi {
         let result =
             std::fs::create_dir_all(store.dir()).and_then(|()| open_in_file_manager(store.dir()));
         if let Err(e) = result {
-            notices.error(fill(s.err_launch, &[("error", &e.to_string())]));
+            notices.error(fill(s.err_launch, &[("error", &s.io_error(&e))]));
         }
     }
 
@@ -670,7 +673,10 @@ pub fn profile_error_text(e: &ProfileError, s: &Strings) -> String {
             s.profile_ambiguous,
             &[("name", name), ("names", &matches.join(", "))],
         ),
-        other => other.to_string(),
+        ProfileError::NotFound(name) => fill(s.profile_not_found, &[("name", name)]),
+        ProfileError::LastProfile => s.profile_last.to_string(),
+        ProfileError::Io(e) => s.io_error(e),
+        ProfileError::Config(e) => s.config_error(e),
     }
 }
 

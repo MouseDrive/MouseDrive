@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use mousedrive::config::{
     self, Backup, CURRENT_CONFIG_VERSION, Config, LoadNotice, PORTABLE_MARKER, Portable,
+    ReadFailure,
 };
 use mousedrive::profiles::{ProfileError, ProfileStore};
 
@@ -98,7 +99,14 @@ fn load_notice(notice: &LoadNotice, s: &Strings) -> Notice {
             Notice::new(Level::Warn, text)
         }
         LoadNotice::Unreadable { error, .. } => {
-            Notice::new(Level::Error, fill(s.notice_unreadable, &[("error", error)]))
+            let error = match error {
+                ReadFailure::Io(failure) => s.io_failure(*failure),
+                ReadFailure::Text(text) => text.clone(),
+            };
+            Notice::new(
+                Level::Error,
+                fill(s.notice_unreadable, &[("error", &error)]),
+            )
         }
         LoadNotice::Newer { version, .. } => {
             let text = fill(
@@ -130,7 +138,7 @@ fn backup_result_notice(notice: &LoadNotice, backup: &Backup, s: &Strings) -> No
         }
         Err(error) => Notice::new(
             Level::Error,
-            fill(s.notice_backup_failed, &[("error", error)]),
+            fill(s.notice_backup_failed, &[("error", &s.io_failure(*error))]),
         ),
     }
 }
@@ -198,7 +206,7 @@ fn migrate_profiles(store: &ProfileStore, config: &Config, s: &Strings) -> Vec<N
     let failed = report.failed.iter().map(|(name, e)| {
         let text = fill(
             s.err_deadzone_reset,
-            &[("name", name), ("error", &e.to_string())],
+            &[("name", name), ("error", &profile_error_text(e, s))],
         );
         Notice::new(Level::Error, text)
     });

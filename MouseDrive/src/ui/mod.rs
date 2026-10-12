@@ -632,8 +632,10 @@ impl App {
             Ok(()) => self.session.disk_written(write.config),
             Err(e) => {
                 self.session.disk_write_failed(now_ms);
-                self.notices
-                    .error(fill(cx.s.err_config_save, &[("error", &e.to_string())]));
+                self.notices.error(fill(
+                    cx.s.err_config_save,
+                    &[("error", &cx.s.config_error(&e))],
+                ));
             }
         }
     }

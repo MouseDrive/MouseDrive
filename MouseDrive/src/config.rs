@@ -7,6 +7,7 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 
 use crate::curve::Curve;
+use crate::ioerr::IoFailure;
 use crate::logic::filters::{MAX_SMOOTHING_MS, tau_from_legacy_alpha};
 
 mod portable;
@@ -469,12 +470,36 @@ impl fmt::Display for ConfigError {
 
 impl std::error::Error for ConfigError {}
 
-pub type Backup = Result<PathBuf, String>;
+pub type Backup = Result<PathBuf, IoFailure>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ReadFailure {
+    Io(IoFailure),
+    Text(String),
+}
+
+impl ReadFailure {
+    pub fn text_tr(&self) -> String {
+        match self {
+            ReadFailure::Io(failure) => failure.text_tr(),
+            ReadFailure::Text(text) => text.clone(),
+        }
+    }
+}
+
+impl From<&ConfigError> for ReadFailure {
+    fn from(e: &ConfigError) -> Self {
+        match e {
+            ConfigError::Io(io) => ReadFailure::Io(IoFailure::from(io)),
+            other => ReadFailure::Text(other.to_string()),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LoadNotice {
     Corrected(Vec<&'static str>),
-    Unreadable { error: String, backup: Backup },
+    Unreadable { error: ReadFailure, backup: Backup },
     Newer { version: i64, backup: Backup },
     UnknownKeys { keys: Vec<String>, backup: Backup },
     Foreign { backup: Backup },
@@ -532,7 +557,7 @@ pub fn load_startup(path: Option<&Path>) -> Loaded {
         }
         Err(e) => {
             let notice = LoadNotice::Unreadable {
-                error: e.to_string(),
+                error: ReadFailure::from(&e),
                 backup: backup_config(path),
             };
             Loaded::new(Config::default(), vec![notice], false)
@@ -576,7 +601,7 @@ fn loaded_from(path: &Path, parsed: Parsed) -> Loaded {
 }
 
 fn backup_config(path: &Path) -> Backup {
-    crate::fsutil::backup_once(path).map_err(|e| e.to_string())
+    crate::fsutil::backup_once(path).map_err(IoFailure::from)
 }
 
 fn log_load(path: &Path, loaded: &Loaded) {
@@ -586,7 +611,8 @@ fn log_load(path: &Path, loaded: &Loaded) {
             None => crate::log::warn(&what),
             Some(Ok(backup)) => crate::log::warn(&format!("{what}; yedek: {}", backup.display())),
             Some(Err(e)) => crate::log::error(&format!(
-                "{what}; yedek alınamadı ({e}), bu oturumda {} yazılmayacak",
+                "{what}; yedek alınamadı ({}), bu oturumda {} yazılmayacak",
+                e.text_tr(),
                 path.display()
             )),
         }
@@ -596,14 +622,17 @@ fn log_load(path: &Path, loaded: &Loaded) {
 fn load_summary(notice: &LoadNotice) -> String {
     match notice {
         LoadNotice::Corrected(fields) => format!("config düzeltildi: {}", fields.join(", ")),
-        LoadNotice::Unreadable { error, .. } => format!("config okunamadı ({error})"),
+        LoadNotice::Unreadable { error, .. } => format!("config okunamadı ({})", error.text_tr()),
         LoadNotice::Newer { version, .. } => {
             format!("config daha yeni bir sürümle yazılmış (config_version {version})")
         }
         LoadNotice::UnknownKeys { keys, .. } => {
             format!("config'te bilinmeyen anahtarlar var: {}", keys.join(", "))
         }
-        LoadNotice::Foreign { .. } => "config mousedrive'a ait görünmüyor".to_string(),
+        LoadNotice::Foreign { .. } => {
+            "config mousedrive'a ait görünmüyor; ilk kayıtta dosyanın yerini mousedrive ayarları alacak"
+                .to_string()
+        }
     }
 }
 

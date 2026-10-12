@@ -3,7 +3,9 @@
 mod en;
 mod tr;
 
+use mousedrive::config::ConfigError;
 use mousedrive::input::{Class, Skip};
+use mousedrive::ioerr::{IoFailure, REASON_COUNT};
 use mousedrive::priority::ThreadPriority;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -313,6 +315,9 @@ pub struct Strings {
     pub dev_skip_open_failed: &'static str,
     pub dev_list_columns: [&'static str; 6],
     pub dev_list_empty: &'static str,
+    pub io_reasons: [&'static str; REASON_COUNT],
+    pub io_unknown: &'static str,
+    pub io_code: &'static str,
 
     pub profile: &'static str,
     pub btn_save: &'static str,
@@ -346,6 +351,8 @@ pub struct Strings {
     pub err_profile_list: &'static str,
     pub err_profile_backup: &'static str,
     pub profile_ambiguous: &'static str,
+    pub profile_not_found: &'static str,
+    pub profile_last: &'static str,
     pub profile_corrected: &'static str,
     pub ab_start: &'static str,
     pub ab_end: &'static str,
@@ -635,7 +642,7 @@ impl Strings {
             ThreadPriority::High => self.prio_high.into(),
             ThreadPriority::Demoted => self.prio_demoted.into(),
             ThreadPriority::Failed(code) => {
-                let error = std::io::Error::from_raw_os_error(code).to_string();
+                let error = self.io_failure_with_code(IoFailure::from_os(code));
                 fill(self.prio_failed, &[("error", &error)])
             }
         }
@@ -649,8 +656,39 @@ impl Strings {
             Skip::GamepadTouchpad => self.dev_skip_gamepad_touchpad.into(),
             Skip::PermissionDenied => self.dev_skip_denied.into(),
             Skip::OpenFailed(kind) => {
-                fill(self.dev_skip_open_failed, &[("error", &kind.to_string())])
+                let error = self.io_failure(IoFailure::from_kind(kind));
+                fill(self.dev_skip_open_failed, &[("error", &error)])
             }
+        }
+    }
+
+    pub fn io_failure(&self, failure: IoFailure) -> String {
+        match (failure.reason(), failure.code) {
+            (Some(reason), _) => self.io_reasons[reason.index()].into(),
+            (None, Some(code)) => fill(self.io_code, &[("code", &code.to_string())]),
+            (None, None) => self.io_unknown.into(),
+        }
+    }
+
+    fn io_failure_with_code(&self, failure: IoFailure) -> String {
+        let text = self.io_failure(failure);
+        match (failure.reason(), failure.code) {
+            (Some(_), Some(code)) => format!(
+                "{text}, {}",
+                fill(self.io_code, &[("code", &code.to_string())])
+            ),
+            _ => text,
+        }
+    }
+
+    pub fn io_error(&self, error: &std::io::Error) -> String {
+        self.io_failure(IoFailure::from(error))
+    }
+
+    pub fn config_error(&self, error: &ConfigError) -> String {
+        match error {
+            ConfigError::Io(e) => self.io_error(e),
+            other => other.to_string(),
         }
     }
 }

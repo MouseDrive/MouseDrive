@@ -589,7 +589,7 @@ fn skip_reason(skip: Skip) -> String {
         Skip::Gamepad => "oyun kolu".into(),
         Skip::GamepadTouchpad => "oyun kolunun touchpad'i".into(),
         Skip::PermissionDenied => "okuma izni yok".into(),
-        Skip::OpenFailed(kind) => format!("açılamadı ({kind})"),
+        Skip::OpenFailed(kind) => format!("açılamadı ({})", crate::ioerr::kind_tr(kind)),
     }
 }
 
