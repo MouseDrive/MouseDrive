@@ -241,7 +241,10 @@ fn run_window(
             None => viewport,
         },
         event_loop_builder: event_loop_hook(launch.backend),
-        vsync: !wayland,
+        glow_options: eframe::egui_glow::GlowConfiguration {
+            vsync: !wayland,
+            ..Default::default()
+        },
         ..Default::default()
     };
     eframe::run_native(

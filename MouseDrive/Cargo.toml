@@ -12,9 +12,9 @@ repository = "https://github.com/MouseDrive/MouseDrive"
 [dependencies]
 libloading = "0.8"
 log = "0.4"
-eframe = "0.31"
-egui = "0.31"
-egui_plot = "0.31"
+eframe = { version = "0.36", default-features = false, features = ["glow", "wayland", "x11", "accesskit", "default_fonts", "links"] }
+egui = "0.36"
+egui_plot = "0.37"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 
@@ -46,8 +46,8 @@ windows = { version = "0.61", features = [
 [target.'cfg(target_os = "linux")'.dependencies]
 evdev = "0.13"
 libc = "0.2"
-winit = { version = "0.30", default-features = false, features = ["wayland", "x11"] }
-zbus = { version = "4.4", default-features = false, features = ["async-io"] }
+winit = { version = "0.30", default-features = false, features = ["wayland", "wayland-dlopen", "wayland-csd-adwaita", "x11"] }
+zbus = { version = "5.19", default-features = false, features = ["async-io", "blocking-api"] }
 rustls-native-certs = { version = "0.8", optional = true }
 webpki-roots = { version = "1", optional = true }
 

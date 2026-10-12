@@ -118,15 +118,14 @@ fn cut_plot(ui: &mut Ui, cx: &Cx, t: &Tuning, steer_abs: f64) {
         .y_axis_formatter(move |m, _| lang.pct(m.value, 0))
         .show(ui, |plot| {
             plot.line(
-                Line::new(PlotPoints::new(points))
+                Line::new("", PlotPoints::new(points))
                     .color(cx.pal.throttle)
                     .width(2.0_f32),
             );
             plot.points(
-                Points::new(vec![now])
+                Points::new(cx.s.now_marker, vec![now])
                     .radius(4.0_f32)
-                    .color(cx.pal.accent)
-                    .name(cx.s.now_marker),
+                    .color(cx.pal.accent),
             );
         });
 }

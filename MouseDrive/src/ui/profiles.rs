@@ -220,7 +220,7 @@ impl ProfilesUi {
             for (label, action) in actions {
                 if ui.button(label).clicked() {
                     self.open_name_dialog(action, &active);
-                    ui.close_menu();
+                    ui.close();
                 }
             }
             if ui
@@ -228,17 +228,17 @@ impl ProfilesUi {
                 .clicked()
             {
                 self.dialog = Some(Dialog::Delete);
-                ui.close_menu();
+                ui.close();
             }
             ui.separator();
             let revert = ui.add_enabled(env.session.is_dirty(), Button::new(s.btn_revert));
             if revert.on_hover_text(s.tip_revert).clicked() {
                 env.session.revert_to_saved();
-                ui.close_menu();
+                ui.close();
             }
             if ui.button(s.btn_open_folder).clicked() {
                 self.open_folder(s, env.notices);
-                ui.close_menu();
+                ui.close();
             }
         });
     }

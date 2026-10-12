@@ -30,6 +30,8 @@ const VJOY_DEFAULT_DIR: &str = r"C:\Program Files\vJoy\x64";
 #[cfg(target_os = "linux")]
 const SETUP_LINK_URL: &str = "https://github.com/MouseDrive/MouseDrive/tree/linux#linux";
 
+const SETUP_WINDOW_WIDTH: f32 = 560.0;
+const SETUP_WINDOW_HEIGHT: f32 = 520.0;
 const SHOW_VERSIONS: bool = cfg!(windows);
 const SHOW_DEVICE_NUMBER: bool = cfg!(windows);
 
@@ -266,7 +268,7 @@ impl SetupUi {
             .open(&mut open)
             .collapsible(false)
             .vscroll(true)
-            .default_width(560.0)
+            .default_size([SETUP_WINDOW_WIDTH, SETUP_WINDOW_HEIGHT])
             .show(ctx, |ui| {
                 ui.label(cx.s.setup_intro);
                 ui.add_space(6.0);

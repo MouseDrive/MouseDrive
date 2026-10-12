@@ -4,8 +4,8 @@ use std::sync::atomic::Ordering;
 
 use eframe::egui::{Context, Id, Modal, RichText, ViewportCommand};
 
-use super::App;
 use super::widgets::Cx;
+use super::{App, window_hidden};
 use crate::lang::{Strings, fill};
 
 const CLOSE_DIALOG_WIDTH: f32 = 400.0;
@@ -56,6 +56,13 @@ fn restart_decision(due: bool, closing: bool, dirty: bool, focused: bool) -> Res
         (true, false, _) => RestartDecision::Hold,
         (true, true, true) => RestartDecision::Confirm,
         (true, true, false) => RestartDecision::Restart,
+    }
+}
+
+fn reveal(ctx: &Context) {
+    if window_hidden(ctx) {
+        ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
+        ctx.send_viewport_cmd(ViewportCommand::Focus);
     }
 }
 
@@ -126,6 +133,7 @@ impl App {
                 CloseDecision::Confirm => {
                     ctx.send_viewport_cmd(ViewportCommand::CancelClose);
                     self.close.confirm = Some(CloseReason::Quit);
+                    reveal(ctx);
                 }
                 CloseDecision::Wait => ctx.send_viewport_cmd(ViewportCommand::CancelClose),
             }
@@ -135,6 +143,9 @@ impl App {
         {
             self.quit(ctx, reason);
         }
+    }
+
+    pub(super) fn close_dialogs(&mut self, ctx: &Context, cx: &Cx) {
         if let Some(reason) = self.close.confirm {
             self.close_dialog(ctx, cx, reason);
         } else if let Some(reason) = self.close.after_install {
@@ -225,6 +236,7 @@ impl App {
                 after_install: Some(reason),
                 ..CloseState::default()
             };
+            reveal(ctx);
             return;
         }
         self.close_now(ctx, reason);

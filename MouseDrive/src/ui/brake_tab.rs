@@ -144,17 +144,17 @@ impl BrakeTab {
                 let points = PlotPoints::new(timeline.points.clone());
                 let style = LineStyle::dashed_loose();
                 plot.line(
-                    Line::new(points)
+                    Line::new("", points)
                         .color(cx.pal.brake)
                         .width(2.0_f32)
                         .style(style),
                 );
-                plot.vline(VLine::new(timeline.release_ms).name(cx.s.release_marker));
+                plot.vline(VLine::new(cx.s.release_marker, timeline.release_ms));
                 if let Some(point) = live {
-                    let marker = Points::new(vec![point])
+                    let marker = Points::new(cx.s.now_marker, vec![point])
                         .radius(4.0_f32)
                         .color(cx.pal.accent);
-                    plot.points(marker.name(cx.s.now_marker));
+                    plot.points(marker);
                 }
             });
     }
@@ -164,10 +164,12 @@ fn span_polygon<'a>(span: &PhaseSpan, cx: &Cx) -> Polygon<'a> {
     let (a, b) = (span.start_ms, span.end_ms);
     let corners = vec![[a, 0.0], [b, 0.0], [b, 1.0], [a, 1.0]];
     let tint = phase_tint(span.phase);
-    Polygon::new(PlotPoints::new(corners))
-        .fill_color(tint)
-        .stroke((0.0, tint))
-        .name(cx.s.phase_names[phase_index(span.phase)])
+    Polygon::new(
+        cx.s.phase_names[phase_index(span.phase)],
+        PlotPoints::new(corners),
+    )
+    .fill_color(tint)
+    .stroke((0.0, tint))
 }
 
 fn response(ui: &mut Ui, cx: &Cx, t: &mut Tuning, d: &Tuning) {

@@ -56,7 +56,7 @@ pub fn lockup(ui: &mut Ui, background: Color32) {
             TextFormat::simple(FontId::proportional(WORD_SIZE), color),
         );
     }
-    let galley = ui.fonts(|fonts| fonts.layout_job(job));
+    let galley = ui.fonts_mut(|fonts| fonts.layout_job(job));
     let mark = vec2(width_for(MARK_HEIGHT), MARK_HEIGHT);
     let bold = 1.0 / ui.ctx().pixels_per_point();
     let word = galley.size() + vec2(bold, 0.0);

@@ -415,29 +415,28 @@ fn button_trace<'a>(
 fn traces<'a>(samples: &[Sample], window: (f64, f64), cx: &Cx, weak: Color32) -> Vec<Line<'a>> {
     let s = cx.s;
     vec![
-        Line::new(trace(samples, window, |x| x.steering_raw))
-            .color(weak)
-            .name(s.tr_steer_raw),
-        Line::new(trace(samples, window, |x| x.steering_out))
+        Line::new(s.tr_steer_raw, trace(samples, window, |x| x.steering_raw)).color(weak),
+        Line::new(s.tr_steer_out, trace(samples, window, |x| x.steering_out))
             .color(cx.pal.accent)
-            .width(1.5_f32)
-            .name(s.tr_steer_out),
-        Line::new(trace(samples, window, |x| x.throttle_out))
+            .width(1.5_f32),
+        Line::new(s.tr_throttle, trace(samples, window, |x| x.throttle_out))
             .color(cx.pal.throttle)
-            .width(1.5_f32)
-            .name(s.tr_throttle),
-        Line::new(trace(samples, window, |x| x.brake_out))
+            .width(1.5_f32),
+        Line::new(s.tr_brake, trace(samples, window, |x| x.brake_out))
             .color(cx.pal.brake)
             .width(1.5_f32)
-            .style(LineStyle::dashed_loose())
-            .name(s.tr_brake),
-        Line::new(button_trace(samples, window, |x| x.throttle_pressed, LMB_Y))
-            .color(cx.pal.throttle)
-            .name(s.tr_lmb),
-        Line::new(button_trace(samples, window, |x| x.brake_pressed, RMB_Y))
-            .color(cx.pal.brake)
-            .style(LineStyle::dashed_loose())
-            .name(s.tr_rmb),
+            .style(LineStyle::dashed_loose()),
+        Line::new(
+            s.tr_lmb,
+            button_trace(samples, window, |x| x.throttle_pressed, LMB_Y),
+        )
+        .color(cx.pal.throttle),
+        Line::new(
+            s.tr_rmb,
+            button_trace(samples, window, |x| x.brake_pressed, RMB_Y),
+        )
+        .color(cx.pal.brake)
+        .style(LineStyle::dashed_loose()),
     ]
 }
 
@@ -454,6 +453,6 @@ fn markers(samples: &[Sample], latest: f64, cx: &Cx) -> Vec<VLine> {
     samples
         .iter()
         .filter_map(|s| marker_name(s.marker, cx).map(|name| (s.t_ms, name)))
-        .map(|(t, name)| VLine::new((t - latest) / 1000.0).name(name))
+        .map(|(t, name)| VLine::new(name, (t - latest) / 1000.0))
         .collect()
 }

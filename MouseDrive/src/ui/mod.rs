@@ -32,8 +32,8 @@ use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
 use eframe::egui::{
-    Align, CentralPanel, Context, Frame, Key, Layout, Margin, Modifiers, RichText, ScrollArea,
-    SidePanel, TopBottomPanel, Ui,
+    Align, CentralPanel, Context, Frame, Key, Layout, Margin, Modifiers, Panel, RichText,
+    ScrollArea, Ui,
 };
 #[cfg(target_os = "linux")]
 use eframe::egui::{OpenUrl, OutputCommand};
@@ -266,10 +266,6 @@ impl App {
         if self.view == Some(wanted) || (dragging && self.view.is_some()) {
             return;
         }
-        #[cfg(target_os = "linux")]
-        if self.view.is_none() {
-            theme::match_window_theme(ctx);
-        }
         theme::apply(ctx, wanted.1);
         self.view = Some(wanted);
     }
@@ -302,7 +298,7 @@ impl App {
     }
 
     fn shortcuts(&mut self, ctx: &Context, cx: &Cx) {
-        if ctx.wants_keyboard_input() || self.keybind.listening() {
+        if ctx.egui_wants_keyboard_input() || self.keybind.listening() {
             return;
         }
         self.zoom_keys(ctx);
@@ -324,14 +320,14 @@ impl App {
         }
     }
 
-    fn top_panel(&mut self, ctx: &Context, cx: &Cx, now_ms: f64) {
-        TopBottomPanel::top("top")
+    fn top_panel(&mut self, ui: &mut Ui, cx: &Cx, now_ms: f64) {
+        Panel::top("top")
             .frame(
                 Frame::new()
                     .fill(theme::SURFACE)
                     .inner_margin(Margin::symmetric(22, 10)),
             )
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 let action = status_bar::show(
                     ui,
                     cx,
@@ -383,8 +379,8 @@ impl App {
         }
     }
 
-    fn bottom_panel(&mut self, ctx: &Context, cx: &Cx, now_ms: f64) {
-        TopBottomPanel::bottom("diag").show(ctx, |ui| {
+    fn bottom_panel(&mut self, ui: &mut Ui, cx: &Cx, now_ms: f64) {
+        Panel::bottom("diag").show(ui, |ui| {
             let facts = (&self.snap, &self.setup.info, self.session.config());
             self.diag.show(ui, cx, facts, now_ms);
         });
@@ -418,19 +414,19 @@ impl App {
         }
     }
 
-    fn side_panel(&mut self, ctx: &Context, cx: &Cx) {
-        if ctx.available_rect().width() < WIDE_LAYOUT {
+    fn side_panel(&mut self, ui: &mut Ui, cx: &Cx) {
+        if ui.available_width() < WIDE_LAYOUT {
             return;
         }
-        SidePanel::left("navigation")
-            .exact_width(NAV_WIDTH)
+        Panel::left("navigation")
+            .exact_size(NAV_WIDTH)
             .resizable(false)
             .frame(
                 Frame::new()
                     .fill(theme::SURFACE)
                     .inner_margin(Margin::same(14)),
             )
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.label(RichText::new(cx.s.nav_hint).small().color(theme::MUTED));
                 ui.add_space(8.0);
                 self.navigation(ui, cx, false);
@@ -445,17 +441,17 @@ impl App {
                 });
             });
         if !matches!(self.tab, Tab::Overview | Tab::Monitor)
-            && ctx.available_rect().width() >= LIVE_PANEL_ROOM
+            && ui.available_width() >= LIVE_PANEL_ROOM
         {
-            SidePanel::right("live_output")
-                .exact_width(LIVE_PANEL_WIDTH)
+            Panel::right("live_output")
+                .exact_size(LIVE_PANEL_WIDTH)
                 .resizable(false)
                 .frame(
                     Frame::new()
                         .fill(theme::BACKGROUND)
                         .inner_margin(Margin::same(16)),
                 )
-                .show(ctx, |ui| {
+                .show(ui, |ui| {
                     ScrollArea::vertical()
                         .id_salt("live_scroll")
                         .show(ui, |ui| {
@@ -502,15 +498,15 @@ impl App {
         }
     }
 
-    fn central_panel(&mut self, ctx: &Context, cx: &Cx, now_ms: f64) {
+    fn central_panel(&mut self, ui: &mut Ui, cx: &Cx, now_ms: f64) {
         CentralPanel::default()
             .frame(
                 Frame::new()
                     .fill(theme::BACKGROUND)
                     .inner_margin(Margin::same(24)),
             )
-            .show(ctx, |ui| {
-                if ctx.screen_rect().width() < WIDE_LAYOUT {
+            .show(ui, |ui| {
+                if ui.ctx().content_rect().width() < WIDE_LAYOUT {
                     self.navigation(ui, cx, true);
                     ui.add_space(14.0);
                 }
@@ -536,11 +532,11 @@ impl App {
             });
     }
 
-    fn render_panels(&mut self, ctx: &Context, cx: &Cx, now_ms: f64) {
-        self.top_panel(ctx, cx, now_ms);
-        self.bottom_panel(ctx, cx, now_ms);
-        self.side_panel(ctx, cx);
-        self.central_panel(ctx, cx, now_ms);
+    fn render_panels(&mut self, ui: &mut Ui, cx: &Cx, now_ms: f64) {
+        self.top_panel(ui, cx, now_ms);
+        self.bottom_panel(ui, cx, now_ms);
+        self.side_panel(ui, cx);
+        self.central_panel(ui, cx, now_ms);
     }
 
     fn run_dashboard_action(&mut self, action: dashboard::Action) {
@@ -588,10 +584,10 @@ impl App {
     }
 
     fn push(&mut self, ctx: &Context, now_ms: f64) {
-        let text = ctx.wants_keyboard_input();
+        let text = ctx.egui_wants_keyboard_input();
         self.shared
             .set_gui_keyboard(keyboard_flags(text, self.keybind.listening()));
-        let interacting = text || ctx.input(|i| i.pointer.any_down());
+        let interacting = !window_hidden(ctx) && (text || ctx.input(|i| i.pointer.any_down()));
         self.session.sync_out(&*self.shared, interacting);
         self.write_disk(now_ms, interacting);
     }
@@ -739,8 +735,12 @@ fn take_url_commands(ctx: &Context) -> Vec<OpenUrl> {
     })
 }
 
+fn window_hidden(ctx: &Context) -> bool {
+    ctx.input(|i| i.viewport().visible()) == Some(false)
+}
+
 impl eframe::App for App {
-    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+    fn logic(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         self.pacer.pace();
         let now_ms = self.now_ms();
         #[cfg(target_os = "linux")]
@@ -750,16 +750,27 @@ impl eframe::App for App {
         let cx = self.cx();
         self.collect_writes(&cx, now_ms);
         self.poll_keybind(ctx);
-        self.shortcuts(ctx, &cx);
-        self.render_panels(ctx, &cx, now_ms);
-        self.windows(ctx, &cx, now_ms);
-        self.push(ctx, now_ms);
         self.handle_close(ctx, &cx, now_ms);
         #[cfg(feature = "updater")]
         self.handle_restart(ctx);
+        if window_hidden(ctx) {
+            self.push(ctx, now_ms);
+            self.schedule_repaint(ctx, now_ms);
+        }
+    }
+
+    fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        let now_ms = self.now_ms();
+        let cx = self.cx();
+        self.shortcuts(&ctx, &cx);
+        self.render_panels(ui, &cx, now_ms);
+        self.windows(&ctx, &cx, now_ms);
+        self.close_dialogs(&ctx, &cx);
+        self.push(&ctx, now_ms);
         #[cfg(target_os = "linux")]
-        open_requested_urls(ctx, URL_OPENER);
-        self.schedule_repaint(ctx, now_ms);
+        open_requested_urls(&ctx, URL_OPENER);
+        self.schedule_repaint(&ctx, now_ms);
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {

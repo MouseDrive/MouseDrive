@@ -209,6 +209,6 @@ impl Calibration {
 }
 
 fn finish_key_pressed(ui: &Ui) -> bool {
-    !ui.ctx().wants_keyboard_input()
+    !ui.ctx().egui_wants_keyboard_input()
         && ui.input(|i| i.key_pressed(Key::Space) || i.key_pressed(Key::Enter))
 }

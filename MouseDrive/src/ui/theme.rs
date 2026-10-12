@@ -6,8 +6,6 @@ use eframe::egui::{
     Button, Color32, Context, CornerRadius, FontId, Frame, KeyboardShortcut, Margin, Response,
     RichText, Stroke, Style, TextStyle, Theme, Ui, Vec2, Visuals, pos2, vec2,
 };
-#[cfg(target_os = "linux")]
-use eframe::egui::{SystemTheme, ViewportCommand};
 use mousedrive::config::{Config, UI_ZOOM_RANGE};
 use mousedrive::status::{AppStatus, status_rgb};
 
@@ -89,24 +87,15 @@ pub fn status_color(status: AppStatus) -> Color32 {
 }
 
 pub fn apply(ctx: &Context, zoom: f64) {
-    ctx.options_mut(|o| o.zoom_with_keyboard = false);
+    ctx.options_mut(|o| {
+        o.zoom_with_keyboard = false;
+        o.quit_shortcuts = Vec::new();
+        o.sync_window_theme = cfg!(target_os = "linux");
+    });
     ctx.set_theme(APP_THEME);
     ctx.set_visuals(visuals());
-    ctx.style_mut(spacing_and_text);
+    ctx.global_style_mut(spacing_and_text);
     ctx.set_zoom_factor(zoom as f32);
-}
-
-#[cfg(target_os = "linux")]
-fn window_theme(theme: Theme) -> SystemTheme {
-    match theme {
-        Theme::Dark => SystemTheme::Dark,
-        Theme::Light => SystemTheme::Light,
-    }
-}
-
-#[cfg(target_os = "linux")]
-pub fn match_window_theme(ctx: &Context) {
-    ctx.send_viewport_cmd(ViewportCommand::SetTheme(window_theme(APP_THEME)));
 }
 
 pub fn zoom_shortcut(ctx: &Context) -> Option<ZoomKey> {
