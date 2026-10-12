@@ -215,7 +215,7 @@ const BASE: Strings = Strings {
     #[cfg(target_os = "linux")]
     keyboard_tier_why: "MouseDrive reads the capture key, the A/B key and the gear keys from the keyboard; without this step they do not work (mouse side buttons still do). Skip it if you do not use keyboard keys.",
     #[cfg(target_os = "linux")]
-    step_keyboard_rule: "Let your login session read keyboards.",
+    step_keyboard_rule: "Let your login session read keyboards and media-key devices.",
     #[cfg(target_os = "linux")]
     step_keyboard_apply: "Apply it at once. To undo it later, delete the file, run these two commands again and restart the computer.",
     #[cfg(target_os = "linux")]

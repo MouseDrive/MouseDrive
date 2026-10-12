@@ -154,6 +154,10 @@ pub struct KeyboardAccess {
     pub needed: bool,
 }
 
+fn is_key_class(class: Class) -> bool {
+    matches!(class, Class::Keyboard | Class::OtherKeys)
+}
+
 fn denied_labels(devices: &[DeviceReport], wanted: fn(Class) -> bool) -> Vec<String> {
     devices
         .iter()
@@ -176,7 +180,7 @@ pub fn keyboard_access(devices: &[DeviceReport], needed: bool) -> KeyboardAccess
             .iter()
             .filter(|d| d.class == Some(Class::Keyboard) && d.skip.is_none())
             .count(),
-        denied: denied_labels(devices, |c| c == Class::Keyboard),
+        denied: denied_labels(devices, is_key_class),
         needed,
     }
 }
@@ -348,7 +352,7 @@ pub enum DeviceTone {
 fn setup_grants(class: Option<Class>) -> bool {
     matches!(
         class,
-        Some(Class::Mouse | Class::AbsolutePointer | Class::Keyboard)
+        Some(Class::Mouse | Class::AbsolutePointer | Class::Keyboard | Class::OtherKeys)
     )
 }
 

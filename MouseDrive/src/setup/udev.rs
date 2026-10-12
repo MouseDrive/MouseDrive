@@ -20,7 +20,7 @@ pub const UINPUT_RULE: &str =
 pub const MOUSE_RULE: &str =
     r#"SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_MOUSE}=="1", TAG+="uaccess""#;
 pub const KEYBOARD_RULE: &str =
-    r#"SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEYBOARD}=="1", TAG+="uaccess""#;
+    r#"SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEY}=="1", TAG+="uaccess""#;
 const DATA_DIR: &str = "/run/udev/data";
 const RULES_SUFFIX: &str = ".rules";
 const JOYSTICK_PROPERTY: &str = "E:ID_INPUT_JOYSTICK=1";

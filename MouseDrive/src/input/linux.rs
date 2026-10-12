@@ -128,17 +128,9 @@ pub fn devices() -> Vec<DeviceReport> {
 }
 
 pub fn denied_mice() -> Vec<String> {
-    denied(Class::is_pointer)
-}
-
-pub fn denied_keyboards() -> Vec<String> {
-    denied(|class| class == Class::Keyboard)
-}
-
-fn denied(wanted: impl Fn(Class) -> bool + Copy) -> Vec<String> {
     devices()
         .iter()
-        .filter(|r| r.denied_as(wanted))
+        .filter(|r| r.denied_as(Class::is_pointer))
         .map(DeviceReport::label)
         .collect()
 }
@@ -530,17 +522,36 @@ fn note_motion(open: &mut Open, selected_ids: Option<(u16, u16)>) {
 }
 
 fn log_changes(logged: &Verdicts, reports: &[DeviceReport]) -> Verdicts {
+    change_lines(logged, reports)
+        .iter()
+        .for_each(|line| crate::log::info(line));
     reports
         .iter()
-        .map(|r| {
-            let node = PathBuf::from(&r.node);
-            let verdict = (r.class, r.skip);
-            if logged.get(&node) != Some(&verdict) {
-                crate::log::info(&describe(r));
-            }
-            (node, verdict)
-        })
+        .map(|r| (PathBuf::from(&r.node), (r.class, r.skip)))
         .collect()
+}
+
+fn change_lines(logged: &Verdicts, reports: &[DeviceReport]) -> Vec<String> {
+    let summary = logged.is_empty().then(|| summarize(reports));
+    let changes = reports
+        .iter()
+        .filter(|r| logged.get(&PathBuf::from(&r.node)) != Some(&(r.class, r.skip)))
+        .filter(|r| !is_irrelevant(r))
+        .map(describe);
+    summary.into_iter().chain(changes).collect()
+}
+
+fn is_irrelevant(report: &DeviceReport) -> bool {
+    matches!(report.skip, Some(Skip::NotPointerNoKeys | Skip::OwnDevice))
+}
+
+fn summarize(reports: &[DeviceReport]) -> String {
+    let used = reports.iter().filter(|r| r.skip.is_none()).count();
+    format!(
+        "girdi cihazları tarandı: {} düğüm, {used} kullanılıyor, {} kullanılmıyor",
+        reports.len(),
+        reports.len() - used
+    )
 }
 
 fn describe(r: &DeviceReport) -> String {

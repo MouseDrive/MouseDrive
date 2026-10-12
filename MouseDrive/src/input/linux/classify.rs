@@ -7,7 +7,7 @@ use super::super::{Class, Skip};
 use crate::keys::linux as keys;
 
 const OWN_DEVICE_PREFIX: &str = "MouseDrive";
-const VIRTUAL_DEVICES: &str = "/devices/virtual/";
+const UINPUT_DEVICES: &str = "/devices/virtual/input/";
 const PHYS_INPUT: &str = "/input";
 const WORD_BITS: usize = libc::c_ulong::BITS as usize;
 const BUS_VIRTUAL: u16 = BusType::BUS_VIRTUAL.0;
@@ -54,9 +54,7 @@ impl DeviceCaps {
             props: bits("properties"),
             phys: text("phys"),
             uniq: text("uniq"),
-            synthetic: dir
-                .canonicalize()
-                .is_ok_and(|p| p.to_string_lossy().contains(VIRTUAL_DEVICES)),
+            synthetic: dir.canonicalize().is_ok_and(|p| is_synthetic_path(&p)),
         })
     }
 
@@ -100,6 +98,10 @@ impl DeviceCaps {
         let same_uniq = !uniq.is_empty() && uniq.eq_ignore_ascii_case(other.uniq.trim());
         same_uniq || phys_parent(&self.phys).is_some_and(|p| phys_parent(&other.phys) == Some(p))
     }
+}
+
+pub(super) fn is_synthetic_path(path: &Path) -> bool {
+    path.to_string_lossy().contains(UINPUT_DEVICES)
 }
 
 pub(super) fn classify(caps: &DeviceCaps) -> Result<Class, Skip> {

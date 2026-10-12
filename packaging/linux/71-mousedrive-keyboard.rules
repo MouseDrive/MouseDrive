@@ -1,5 +1,6 @@
 # MouseDrive, optional keyboard access: needed only when the capture key,
-# the A/B key or the gear keys are keyboard keys.
+# the A/B key or the gear keys are keyboard keys. It covers keyboards and
+# other devices with keys, such as media-key and consumer-control nodes.
 #
 # Warning: this lets MouseDrive AND every other program in your session read
 # all keystrokes, passwords included, inject key presses and grab keyboards.
@@ -9,4 +10,4 @@
 #   sudo udevadm trigger --subsystem-match=input
 # To disable it, delete /etc/udev/rules.d/71-mousedrive-keyboard.rules, run the
 # last two commands again and restart the computer.
-SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEYBOARD}=="1", TAG+="uaccess"
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEY}=="1", TAG+="uaccess"

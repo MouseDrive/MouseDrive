@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicIsize, AtomicU8, AtomicU64, Ordering};
-use std::sync::{Mutex, PoisonError};
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU8, AtomicU64, Ordering};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 
 use crate::logic::{COUNT_ACCUM_LIMIT, accumulate_counts};
@@ -16,7 +16,7 @@ use linux as sys;
 use win as sys;
 
 #[cfg(target_os = "linux")]
-pub use linux::{denied_keyboards, denied_mice, devices};
+pub use linux::{denied_mice, devices};
 
 const RI_MOUSE_LEFT_BUTTON_DOWN: u16 = 0x0001;
 const RI_MOUSE_LEFT_BUTTON_UP: u16 = 0x0002;
@@ -125,9 +125,21 @@ fn twin_moves_alone(now_ns: u64, selected_ns: u64, twin_ns: u64) -> bool {
         && now_ns.saturating_sub(selected_ns) >= SELECTED_SILENT_NS
 }
 
+#[derive(Clone, Copy)]
+struct PendingMotion {
+    counts: i64,
+    oldest_ns: u64,
+}
+
+impl PendingMotion {
+    const EMPTY: Self = Self {
+        counts: 0,
+        oldest_ns: 0,
+    };
+}
+
 pub struct InputState {
-    counts_x: AtomicI64,
-    move_time_ns: AtomicU64,
+    pending: Mutex<PendingMotion>,
     left: ButtonLatch,
     right: ButtonLatch,
     middle_clicked: AtomicBool,
@@ -152,8 +164,7 @@ pub struct InputState {
 impl InputState {
     pub const fn new() -> Self {
         Self {
-            counts_x: AtomicI64::new(0),
-            move_time_ns: AtomicU64::new(0),
+            pending: Mutex::new(PendingMotion::EMPTY),
             left: ButtonLatch::new(),
             right: ButtonLatch::new(),
             middle_clicked: AtomicBool::new(false),
@@ -199,12 +210,7 @@ impl InputState {
         if report.absolute {
             self.absolute_events.fetch_add(1, Ordering::Relaxed);
         } else if moved {
-            let _ = self
-                .counts_x
-                .try_update(Ordering::Relaxed, Ordering::Relaxed, |acc| {
-                    Some(accumulate_counts(acc, report.dx))
-                });
-            self.note_move_time(report.time_ns);
+            self.add_motion(report.dx, report.time_ns);
             self.move_events.fetch_add(1, Ordering::Relaxed);
         }
         self.apply_buttons(report.buttons);
@@ -239,23 +245,23 @@ impl InputState {
         self.device_generation.fetch_add(1, Ordering::AcqRel);
     }
 
-    fn note_move_time(&self, time_ns: u64) {
-        if time_ns != 0 {
-            let _ =
-                self.move_time_ns
-                    .compare_exchange(0, time_ns, Ordering::AcqRel, Ordering::Relaxed);
+    fn pending(&self) -> MutexGuard<'_, PendingMotion> {
+        self.pending.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn add_motion(&self, dx: i32, time_ns: u64) {
+        let mut pending = self.pending();
+        pending.counts = accumulate_counts(pending.counts, dx);
+        if pending.oldest_ns == 0 {
+            pending.oldest_ns = time_ns;
         }
     }
 
     fn take_motion(&self) -> Motion {
-        let time_ns = self.move_time_ns.swap(0, Ordering::AcqRel);
-        let counts = self
-            .counts_x
-            .swap(0, Ordering::Relaxed)
-            .clamp(-COUNT_ACCUM_LIMIT, COUNT_ACCUM_LIMIT);
+        let taken = std::mem::replace(&mut *self.pending(), PendingMotion::EMPTY);
         Motion {
-            counts,
-            oldest_ns: (time_ns != 0).then_some(time_ns),
+            counts: taken.counts.clamp(-COUNT_ACCUM_LIMIT, COUNT_ACCUM_LIMIT),
+            oldest_ns: (taken.oldest_ns != 0).then_some(taken.oldest_ns),
         }
     }
 
@@ -342,8 +348,7 @@ impl InputState {
     }
 
     fn clear(&self) {
-        self.counts_x.store(0, Ordering::Relaxed);
-        self.move_time_ns.store(0, Ordering::Release);
+        *self.pending() = PendingMotion::EMPTY;
         self.left.clear();
         self.right.clear();
         self.middle_clicked.store(false, Ordering::Release);

@@ -32,7 +32,8 @@ after it:
   and mice only. Keyboards, touchpads and game controllers are no longer
   included. Keyboard access, which the capture key, the A/B key and the gear
   keys need, is a separate optional rule that Setup labels with its risk: every
-  program in your session can then read all keystrokes. The README explains
+  program in your session can then read all keystrokes; it also covers media-key
+  devices, so media keys can be bound. The README explains
   what the rules allow (read, inject, grab) and how to set them up on NixOS and
   without systemd-logind.
 - **Setup shows the commands.** The Linux Setup window lists the commands as
@@ -77,9 +78,10 @@ after it:
   selected mouse is missing and exactly one mouse of the same model shows up
   on another port, that mouse is read and a *Save* button keeps it selected; a
   warning appears when input-remapper, keyd or evsieve has grabbed the
-  selected mouse. Mouse lists refresh by themselves when devices are plugged
-  in or out. More keys are recognised (Brazilian and Japanese layout keys,
-  browser and launch keys).
+  selected mouse. Virtual devices created by other programs are treated as
+  injected whatever bus they claim. Mouse lists refresh by themselves when
+  devices are plugged in or out. More keys are recognised (Brazilian and
+  Japanese layout keys, browser and launch keys).
 - **Thread priority on Linux.** The control and input threads use real-time
   scheduling where the system allows it (with a CPU-time budget so a runaway
   thread cannot freeze the desktop), otherwise a lower nice value, otherwise

@@ -123,11 +123,11 @@ sudo udevadm trigger --subsystem-match=misc --subsystem-match=input
 
 ### Optional: keyboard access
 
-MouseDrive reads the capture key, the A/B key and the gear keys from the keyboard. Without keyboard access those keys do nothing; mouse side buttons still work, so you can bind the capture key to one of them instead. The **Keyboard access** row in Setup shows the state. This step lets MouseDrive **and every program in your session read all keystrokes, passwords included**, inject key presses and grab the keyboard. Add it only if you use keyboard keys:
+MouseDrive reads the capture key, the A/B key and the gear keys from the keyboard. Without keyboard access those keys do nothing; mouse side buttons still work, so you can bind the capture key to one of them instead. The **Keyboard access** row in Setup shows the state. This step lets MouseDrive **and every program in your session read all keystrokes, passwords included**, inject key presses and grab the keyboard. The rule covers keyboards and other devices with keys, such as media-key nodes, so media keys can be bound too. Add it only if you use keyboard keys:
 
 ```sh
 printf '%s\n' \
-  'SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEYBOARD}=="1", TAG+="uaccess"' \
+  'SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEY}=="1", TAG+="uaccess"' \
   | sudo tee /etc/udev/rules.d/71-mousedrive-keyboard.rules
 sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=input

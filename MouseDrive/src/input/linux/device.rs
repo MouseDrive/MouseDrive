@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 
 use evdev::raw_stream::RawDevice;
-use evdev::{AttributeSetRef, BusType, KeyCode};
+use evdev::{AttributeSetRef, KeyCode};
 
 use super::super::{
     Class, DeviceReport, Found, RI_MOUSE_LEFT_BUTTON_UP, RI_MOUSE_RIGHT_BUTTON_UP, Report, STATE,
@@ -88,11 +88,7 @@ pub(super) struct Open {
 impl Open {
     pub(super) fn new(dev: RawDevice, node: PathBuf, caps: DeviceCaps, class: Class) -> Self {
         let clock_switched_at = use_monotonic_clock(dev.as_raw_fd()).then(now_ns);
-        let handle = if caps.bus == BusType::BUS_VIRTUAL.0 {
-            0
-        } else {
-            NEXT_HANDLE.fetch_add(1, Ordering::Relaxed)
-        };
+        let handle = handle_for(&caps);
         let path = identity(
             caps.vendor,
             caps.product,
@@ -301,6 +297,14 @@ fn pointer_report(report: Report, class: Class) -> Report {
     Report {
         absolute: report.absolute && class != Class::Touchpad,
         ..report
+    }
+}
+
+fn handle_for(caps: &DeviceCaps) -> isize {
+    if caps.is_virtual() {
+        0
+    } else {
+        NEXT_HANDLE.fetch_add(1, Ordering::Relaxed)
     }
 }
 

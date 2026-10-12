@@ -215,7 +215,7 @@ const BASE: Strings = Strings {
     #[cfg(target_os = "linux")]
     keyboard_tier_why: "MouseDrive yakalama tuşunu, A/B tuşunu ve vites tuşlarını klavyeden okur; bu adım olmadan bunlar çalışmaz (farenin yan tuşları çalışır). Klavye tuşu kullanmıyorsanız bu adımı atlayın.",
     #[cfg(target_os = "linux")]
-    step_keyboard_rule: "Oturumunuzun klavyeleri okumasına izin verir.",
+    step_keyboard_rule: "Oturumunuzun klavyeleri ve medya tuşu aygıtlarını okumasına izin verir.",
     #[cfg(target_os = "linux")]
     step_keyboard_apply: "Hemen uygular. Daha sonra geri almak için dosyayı silin, bu iki komutu yeniden çalıştırın ve bilgisayarı yeniden başlatın.",
     #[cfg(target_os = "linux")]
