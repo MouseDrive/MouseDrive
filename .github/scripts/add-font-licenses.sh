@@ -75,5 +75,10 @@ awk -v marker="$marker" -v section="$section" '
     $0 == marker { while ((getline line < section) > 0) print line; next }
     { print }
 ' "$html" >"$output"
+! grep -qxF "$marker" "$output" || fail "the marker $marker is still in the generated file"
+for text in "${texts[@]}"; do
+    grep -qF "<h3>$(basename "$text")</h3>" "$output" || fail "the license text $(basename "$text") is missing from the generated file"
+done
+[[ -z $cantarell_font ]] || grep -qF 'id="cantarell"' "$output" || fail "the Cantarell notice is missing from the generated file"
 cat "$output" >"$html"
 echo "added ${#texts[@]} font license texts of $crate $version${cantarell_font:+ and the Cantarell notice} to $html"
