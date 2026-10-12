@@ -7,8 +7,12 @@ on:
   pull_request:
     branches: [main, beta, linux]
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
+  GLIBC_MAX: "2.35"
 
 jobs:
   lint:
@@ -16,14 +20,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-22.04]
+        os: [windows-latest, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -35,123 +38,295 @@ jobs:
       - name: Clippy
         shell: bash
         run: |
-          cargo clippy --manifest-path MouseDrive/Cargo.toml --all-targets --all-features -- -D warnings
-          cargo clippy --manifest-path MouseDrive/Cargo.toml --all-targets --no-default-features -- -D warnings
+          cargo clippy --locked --manifest-path MouseDrive/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo clippy --locked --manifest-path MouseDrive/Cargo.toml --all-targets --no-default-features -- -D warnings
 
-  build-windows:
-    name: Build (Windows)
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: lint
-    runs-on: windows-latest
+  test:
+    name: Test (Linux)
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: MouseDrive
 
-      - name: Set version from tag
-        shell: pwsh
+      - name: Test
         run: |
-          $version = "${{ github.ref_name }}".TrimStart("v")
-          if ($version -notmatch '^\d+\.\d+\.\d+$') {
-            Write-Error "Gecersiz tag formati: ${{ github.ref_name }} (beklenen: vX.Y.Z)"
-            exit 1
-          }
-          $toml = Get-Content MouseDrive/Cargo.toml
-          $toml = $toml -replace '^version = ".*"$', "version = `"$version`""
-          Set-Content MouseDrive/Cargo.toml $toml -Encoding utf8
-          Write-Host "Cargo.toml version -> $version"
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/xdg-config" XDG_STATE_HOME="$RUNNER_TEMP/xdg-state"
+          mkdir -p "$XDG_CONFIG_HOME" "$XDG_STATE_HOME"
+          cargo test --locked --manifest-path MouseDrive/Cargo.toml
+          cargo test --locked --manifest-path MouseDrive/Cargo.toml --no-default-features
+
+  deny:
+    name: Dependencies (cargo-deny)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: MouseDrive
+          key: cargo-deny
+
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny@0.20.2
+
+      - name: Advisories, licenses, bans, sources
+        run: cargo deny --manifest-path MouseDrive/Cargo.toml --locked check
+
+  packaging:
+    name: Packaging files
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validators
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends appstream desktop-file-utils
+
+      - name: Desktop file, metainfo, udev rules, scripts
+        run: bash .github/scripts/check-packaging.sh
+
+      - name: Release zip layout
+        run: |
+          stage="$RUNNER_TEMP/stage"
+          mkdir -p "$stage"
+          printf '#!/bin/sh\n' >"$stage/mousedrive"
+          printf '<!DOCTYPE html>\n' >"$stage/licenses.html"
+          bash .github/scripts/stage-linux.sh v0.0.0 "$stage/mousedrive" "$stage/licenses.html" "$stage/dist"
+          bash .github/scripts/check-zip.sh "$stage/dist/MouseDrive-v0.0.0-linux-x64.zip" v0.0.0
+
+  version:
+    name: Version check
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - name: Tag matches Cargo.toml and metainfo
+        run: bash .github/scripts/check-version.sh "$GITHUB_REF_NAME"
+
+  licenses:
+    name: Third-party licenses
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: MouseDrive
+          key: cargo-about
+
+      - name: Install cargo-about
+        run: cargo install --locked --features cli cargo-about@0.9.2
+
+      - name: Generate THIRD_PARTY_LICENSES.html
+        run: >-
+          cargo about generate --locked --fail --all-features
+          --manifest-path MouseDrive/Cargo.toml
+          --output-file THIRD_PARTY_LICENSES.html
+          MouseDrive/about.hbs
+
+      - name: Add the bundled font licenses
+        run: bash .github/scripts/add-font-licenses.sh THIRD_PARTY_LICENSES.html MouseDrive/Cargo.toml
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: licenses
+          path: THIRD_PARTY_LICENSES.html
+          if-no-files-found: error
+
+  build-windows:
+    name: Build (Windows)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [lint, test, deny, packaging, version, licenses]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: MouseDrive
 
       - name: Build release
-        run: cargo build --release --manifest-path MouseDrive/Cargo.toml
+        run: cargo build --release --locked --manifest-path MouseDrive/Cargo.toml
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: licenses
 
       - name: Package
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          $zipName = "MouseDrive-$tag-windows-x64.zip"
-          New-Item -ItemType Directory dist | Out-Null
-          Copy-Item MouseDrive/target/release/mousedrive.exe dist/
-          Copy-Item README.md, LICENSE dist/
-          Compress-Archive -Path dist/* -DestinationPath $zipName
+          $tag = $env:GITHUB_REF_NAME
+          $stage = Join-Path dist "MouseDrive-$tag"
+          New-Item -ItemType Directory $stage -Force | Out-Null
+          Copy-Item MouseDrive/target/release/mousedrive.exe, README.md, LICENSE, CHANGELOG.md, THIRD_PARTY_LICENSES.html $stage
+          Compress-Archive -Path $stage -DestinationPath "MouseDrive-$tag-windows-x64.zip"
           Copy-Item MouseDrive/target/release/mousedrive.exe .
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows
+          if-no-files-found: error
           path: |
             MouseDrive-*-windows-x64.zip
             mousedrive.exe
 
   build-linux:
-    name: Build (Linux)
+    name: Build (Linux, Ubuntu 22.04 container)
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: lint
-    runs-on: ubuntu-22.04
+    needs: [lint, test, deny, packaging, version, licenses]
+    runs-on: ubuntu-24.04
+    container: ubuntu:22.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
     steps:
+      - name: System packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends binutils build-essential ca-certificates curl git pkg-config unzip zip
+
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: MouseDrive
 
-      - name: Set version from tag
-        shell: bash
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Gecersiz tag formati: $GITHUB_REF_NAME (beklenen: vX.Y.Z)" >&2
-            exit 1
-          fi
-          sed -i "s/^version = \".*\"$/version = \"$version\"/" MouseDrive/Cargo.toml
-          echo "Cargo.toml version -> $version"
-
       - name: Build release
-        run: cargo build --release --manifest-path MouseDrive/Cargo.toml
+        run: cargo build --release --locked --manifest-path MouseDrive/Cargo.toml
 
-      - name: Package
-        shell: bash
+      - name: glibc gate
+        run: bash .github/scripts/check-glibc.sh MouseDrive/target/release/mousedrive "$GLIBC_MAX"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: licenses
+
+      - name: Package zip
         run: |
-          zip_name="MouseDrive-${GITHUB_REF_NAME}-linux-x64.zip"
-          mkdir dist
-          cp MouseDrive/target/release/mousedrive README.md LICENSE dist/
-          (cd dist && zip -r "../$zip_name" .)
+          bash .github/scripts/stage-linux.sh "$GITHUB_REF_NAME" MouseDrive/target/release/mousedrive THIRD_PARTY_LICENSES.html dist
+          bash .github/scripts/check-zip.sh "dist/MouseDrive-$GITHUB_REF_NAME-linux-x64.zip" "$GITHUB_REF_NAME"
+
+      - name: Build package binary (no auto-updater)
+        run: cargo build --release --locked --no-default-features --manifest-path MouseDrive/Cargo.toml
+
+      - name: glibc gate (package binary)
+        run: bash .github/scripts/check-glibc.sh MouseDrive/target/release/mousedrive "$GLIBC_MAX"
+
+      - name: Install packaging tools
+        run: cargo install --locked cargo-deb@3.8.0 cargo-generate-rpm@0.21.0
+
+      - name: Build .deb and .rpm
+        working-directory: MouseDrive
+        run: |
+          cargo deb --no-build --locked --output ../dist/
+          cargo generate-rpm --output ../dist/
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux
-          path: MouseDrive-*-linux-x64.zip
+          if-no-files-found: error
+          path: |
+            dist/MouseDrive-*-linux-x64.zip
+            dist/*.deb
+            dist/*.rpm
 
   release:
     name: Release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [build-windows, build-linux]
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
+      id-token: write
+      attestations: write
+    env:
+      HAS_MINISIGN_KEY: ${{ secrets.MINISIGN_SECRET_KEY != '' }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
       - uses: actions/download-artifact@v4
         with:
-          merge-multiple: true
+          name: windows
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: dist
 
       - name: Checksums
-        shell: bash
+        working-directory: dist
         run: |
-          sha256sum MouseDrive-*-windows-x64.zip mousedrive.exe MouseDrive-*-linux-x64.zip > SHA256SUMS.txt
+          sha256sum MouseDrive-*-windows-x64.zip mousedrive.exe MouseDrive-*-linux-x64.zip *.deb *.rpm > SHA256SUMS.txt
           cat SHA256SUMS.txt
+
+      - name: Install minisign
+        if: env.HAS_MINISIGN_KEY == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends minisign
+
+      - name: Sign checksums
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: bash .github/scripts/sign-sums.sh dist/SHA256SUMS.txt "$GITHUB_REF_NAME"
+
+      - name: AUR PKGBUILD
+        run: bash .github/scripts/render-pkgbuild.sh "$GITHUB_REF_NAME" dist/SHA256SUMS.txt aur
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aur
+          path: aur/
+          if-no-files-found: error
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/MouseDrive-*-windows-x64.zip
+            dist/mousedrive.exe
+            dist/MouseDrive-*-linux-x64.zip
+            dist/*.deb
+            dist/*.rpm
+            dist/SHA256SUMS.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            MouseDrive-*-windows-x64.zip
-            mousedrive.exe
-            MouseDrive-*-linux-x64.zip
-            SHA256SUMS.txt
+            dist/MouseDrive-*-windows-x64.zip
+            dist/mousedrive.exe
+            dist/MouseDrive-*-linux-x64.zip
+            dist/*.deb
+            dist/*.rpm
+            dist/SHA256SUMS.txt
+            dist/SHA256SUMS.txt.minisig
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}

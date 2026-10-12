@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MouseDrive third-party licenses</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; padding: 0 16px; }
+        main { max-width: 860px; margin: 0 auto; }
+        .used-by { margin-top: 0; }
+        .license-text { white-space: pre-wrap; max-height: 240px; overflow-y: auto; background: #f4f4f4; padding: 8px; }
+        @media (prefers-color-scheme: dark) {
+            body { background: #1e1e1e; color: #e6e6e6; }
+            a { color: #8cc4ff; }
+            .license-text { background: #2a2a2a; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Third-party licenses</h1>
+    <p>MouseDrive is licensed under the GNU General Public License v3.0 or later (see LICENSE). It is built from the Rust crates below, which are used under these licenses. The fonts that egui bundles into the program come with their own license texts, listed at the end.</p>
+
+    <h2>Overview</h2>
+    <ul>
+        {{#each overview}}
+        <li><a href="#{{id}}">{{name}}</a> ({{count}})</li>
+        {{/each}}
+    </ul>
+
+    <h2>License texts</h2>
+    {{#each licenses}}
+    <section>
+        {{#if first_of_kind}}<h3 id="{{id}}">{{name}}</h3>{{/if}}
+        <h4 id="{{id}}-{{@index}}">{{name}}</h4>
+        <p>Used by:</p>
+        <ul class="used-by">
+            {{#each used_by}}
+            <li><a href="{{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}}">{{crate.name}} {{crate.version}}</a></li>
+            {{/each}}
+        </ul>
+        <pre class="license-text">{{text}}</pre>
+    </section>
+    {{/each}}
+<!-- font-licenses -->
+</main>
+</body>
+</html>

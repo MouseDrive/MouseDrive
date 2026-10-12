@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.MouseDrive.MouseDrive</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>MouseDrive</name>
+  <summary>Drive racing games with your mouse</summary>
+  <summary xml:lang="tr">Yarış oyunlarını fareyle sürün</summary>
+  <developer id="io.github.mousedrive">
+    <name>MouseDrive</name>
+  </developer>
+  <description>
+    <p>
+      MouseDrive turns mouse and keyboard input into a virtual wheel for racing
+      simulators. On Linux it reads mice through evdev and creates a joystick
+      through the kernel's uinput, so games see it like any other wheel,
+      including Windows games under Proton or Wine.
+    </p>
+    <ul>
+      <li>Steering from mouse movement with five modes, from linear to adaptive filtering</li>
+      <li>Throttle and brake on the mouse buttons with editable envelope curves</li>
+      <li>Profiles per car and track, undo and an A/B comparison while driving</li>
+      <li>A Setup window that checks every requirement and shows the commands that fix it</li>
+    </ul>
+    <p>
+      The one-time setup installs a udev rule that lets the user of the active
+      session use /dev/uinput and read mice.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.MouseDrive.MouseDrive.desktop</launchable>
+  <url type="homepage">https://github.com/MouseDrive/MouseDrive</url>
+  <url type="bugtracker">https://github.com/MouseDrive/MouseDrive/issues</url>
+  <url type="vcs-browser">https://github.com/MouseDrive/MouseDrive</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Overview with the live output of steering, throttle and brake</caption>
+      <image>https://raw.githubusercontent.com/MouseDrive/MouseDrive/main/MouseDrive/image/MainPage.png</image>
+    </screenshot>
+  </screenshots>
+  <categories>
+    <category>Game</category>
+  </categories>
+  <keywords>
+    <keyword>wheel</keyword>
+    <keyword>steering</keyword>
+    <keyword>racing</keyword>
+    <keyword>joystick</keyword>
+  </keywords>
+  <provides>
+    <binary>mousedrive</binary>
+  </provides>
+  <recommends>
+    <control>pointing</control>
+  </recommends>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.7.0" date="2026-10-03">
+      <url type="details">https://github.com/MouseDrive/MouseDrive/releases/tag/v0.7.0</url>
+    </release>
+  </releases>
+</component>

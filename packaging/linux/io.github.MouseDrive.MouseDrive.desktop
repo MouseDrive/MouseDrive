@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=MouseDrive
+GenericName=Mouse steering wheel
+GenericName[tr]=Fare direksiyonu
+Comment=Drive racing games with your mouse through a virtual wheel
+Comment[tr]=Yarış oyunlarını sanal bir direksiyonla fareyle sürün
+Exec=mousedrive
+Icon=io.github.MouseDrive.MouseDrive
+Terminal=false
+Categories=Game;
+Keywords=wheel;steering;racing;joystick;mouse;uinput;
+Keywords[tr]=direksiyon;yarış;joystick;fare;uinput;
+StartupWMClass=io.github.MouseDrive.MouseDrive

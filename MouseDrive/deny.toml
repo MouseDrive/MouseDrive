@@ -1,0 +1,45 @@
+[graph]
+targets = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+all-features = true
+
+[advisories]
+unmaintained = "all"
+yanked = "deny"
+ignore = [
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.30 comes only through eframe 0.31 -> accesskit -> atspi -> zbus-lockstep, which parses the bundled AT-SPI interface XML, never untrusted input; it goes away with the eframe upgrade" },
+    { id = "RUSTSEC-2026-0195", reason = "same quick-xml 0.30 path as RUSTSEC-2026-0194: only bundled AT-SPI interface XML is parsed" },
+    { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained but only a compile-time macro of accesskit_windows (eframe 0.31); no safe upgrade exists" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained; egui uses it through ab_glyph only for the fonts bundled in the binary; no safe upgrade exists" },
+]
+
+[licenses]
+confidence-threshold = 0.93
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "GPL-3.0-or-later",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+exceptions = [
+    { crate = "epaint_default_fonts", allow = ["OFL-1.1", "Ubuntu-font-1.0"] },
+    { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

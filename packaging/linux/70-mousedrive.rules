@@ -1,0 +1,5 @@
+# MouseDrive: create the virtual wheel through /dev/uinput and read mice.
+# TAG+="uaccess" gives the user of the active local session read and write
+# access to these device nodes, for every program that user runs.
+KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_MOUSE}=="1", TAG+="uaccess"

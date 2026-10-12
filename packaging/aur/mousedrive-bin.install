@@ -1,0 +1,17 @@
+_apply_rules() {
+    udevadm control --reload-rules 2>/dev/null || true
+    udevadm trigger --subsystem-match=misc --subsystem-match=input 2>/dev/null || true
+}
+
+post_install() {
+    modprobe uinput 2>/dev/null || true
+    _apply_rules
+}
+
+post_upgrade() {
+    post_install
+}
+
+post_remove() {
+    _apply_rules
+}

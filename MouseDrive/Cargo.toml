@@ -4,6 +4,10 @@ version = "0.7.0"
 edition = "2024"
 rust-version = "1.95"
 license = "GPL-3.0-or-later"
+publish = false
+description = "Drive racing games with your mouse through a virtual wheel"
+homepage = "https://github.com/MouseDrive/MouseDrive"
+repository = "https://github.com/MouseDrive/MouseDrive"
 
 [dependencies]
 libloading = "0.8"
@@ -59,6 +63,68 @@ updater = [
     "dep:webpki-roots",
     "dep:zip",
 ]
+
+[package.metadata.deb]
+maintainer = "Toxpox <102536497+Toxpox@users.noreply.github.com>"
+copyright = "MouseDrive contributors"
+license-file = ["../LICENSE", "0"]
+extended-description = """\
+MouseDrive turns mouse and keyboard input into a virtual wheel for racing \
+simulators. It reads mice through evdev and creates a joystick through uinput, \
+so games see it like any other wheel, including Windows games under Proton or \
+Wine. The package installs a udev rule that lets the user of the active local \
+session use /dev/uinput and read mice, and loads the uinput module at boot."""
+section = "games"
+priority = "optional"
+default-features = false
+depends = "$auto, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libwayland-egl1, libegl1, libgl1, libx11-6, libx11-xcb1, libxcb1, libxcursor1, libxi6"
+recommends = "libasound2t64 | libasound2"
+maintainer-scripts = "../packaging/linux/scripts/"
+assets = [
+    { source = "target/release/mousedrive", dest = "usr/bin/mousedrive", mode = "755" },
+    { source = "../packaging/linux/70-mousedrive.rules", dest = "usr/lib/udev/rules.d/70-mousedrive.rules", mode = "644" },
+    { source = "../packaging/linux/mousedrive.conf", dest = "usr/lib/modules-load.d/mousedrive.conf", mode = "644" },
+    { source = "../packaging/linux/io.github.MouseDrive.MouseDrive.desktop", dest = "usr/share/applications/io.github.MouseDrive.MouseDrive.desktop", mode = "644" },
+    { source = "image/icon.png", dest = "usr/share/icons/hicolor/256x256/apps/io.github.MouseDrive.MouseDrive.png", mode = "644" },
+    { source = "../packaging/linux/io.github.MouseDrive.MouseDrive.metainfo.xml", dest = "usr/share/metainfo/io.github.MouseDrive.MouseDrive.metainfo.xml", mode = "644" },
+    { source = "../packaging/linux/71-mousedrive-keyboard.rules", dest = "usr/share/doc/mousedrive/71-mousedrive-keyboard.rules", mode = "644" },
+    { source = "../README.md", dest = "usr/share/doc/mousedrive/README.md", mode = "644" },
+    { source = "../CHANGELOG.md", dest = "usr/share/doc/mousedrive/CHANGELOG.md", mode = "644" },
+    { source = "../THIRD_PARTY_LICENSES.html", dest = "usr/share/doc/mousedrive/THIRD_PARTY_LICENSES.html", mode = "644" },
+]
+
+[package.metadata.generate-rpm]
+post_install_script = "../packaging/linux/scripts/postinst"
+post_uninstall_script = "../packaging/linux/scripts/postrm"
+assets = [
+    { source = "target/release/mousedrive", dest = "/usr/bin/mousedrive", mode = "755" },
+    { source = "../packaging/linux/70-mousedrive.rules", dest = "/usr/lib/udev/rules.d/70-mousedrive.rules", mode = "644" },
+    { source = "../packaging/linux/mousedrive.conf", dest = "/usr/lib/modules-load.d/mousedrive.conf", mode = "644" },
+    { source = "../packaging/linux/io.github.MouseDrive.MouseDrive.desktop", dest = "/usr/share/applications/io.github.MouseDrive.MouseDrive.desktop", mode = "644" },
+    { source = "image/icon.png", dest = "/usr/share/icons/hicolor/256x256/apps/io.github.MouseDrive.MouseDrive.png", mode = "644" },
+    { source = "../packaging/linux/io.github.MouseDrive.MouseDrive.metainfo.xml", dest = "/usr/share/metainfo/io.github.MouseDrive.MouseDrive.metainfo.xml", mode = "644" },
+    { source = "../packaging/linux/71-mousedrive-keyboard.rules", dest = "/usr/share/doc/mousedrive/71-mousedrive-keyboard.rules", mode = "644", doc = true },
+    { source = "../README.md", dest = "/usr/share/doc/mousedrive/README.md", mode = "644", doc = true },
+    { source = "../CHANGELOG.md", dest = "/usr/share/doc/mousedrive/CHANGELOG.md", mode = "644", doc = true },
+    { source = "../THIRD_PARTY_LICENSES.html", dest = "/usr/share/doc/mousedrive/THIRD_PARTY_LICENSES.html", mode = "644", doc = true },
+    { source = "../LICENSE", dest = "/usr/share/licenses/mousedrive/LICENSE", mode = "644", doc = true },
+]
+
+[package.metadata.generate-rpm.requires]
+"libxkbcommon.so.0()(64bit)" = "*"
+"libxkbcommon-x11.so.0()(64bit)" = "*"
+"libwayland-client.so.0()(64bit)" = "*"
+"libwayland-egl.so.1()(64bit)" = "*"
+"libEGL.so.1()(64bit)" = "*"
+"libGL.so.1()(64bit)" = "*"
+"libX11.so.6()(64bit)" = "*"
+"libX11-xcb.so.1()(64bit)" = "*"
+"libxcb.so.1()(64bit)" = "*"
+"libXcursor.so.1()(64bit)" = "*"
+"libXi.so.6()(64bit)" = "*"
+
+[package.metadata.generate-rpm.recommends]
+"libasound.so.2()(64bit)" = "*"
 
 [profile.release]
 opt-level = 3

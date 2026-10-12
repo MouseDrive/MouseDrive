@@ -30,7 +30,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 
 > **Windows:** extract `MouseDrive-vX.Y.Z-windows-x64.zip`, place `vJoyInterface.dll` next to `mousedrive.exe`, and run. Each release also has `mousedrive.exe` on its own.
 >
-> **Linux:** extract `MouseDrive-vX.Y.Z-linux-x64.zip`, run `./mousedrive` and follow the one-time [Linux setup](#linux).
+> **Linux:** extract `MouseDrive-vX.Y.Z-linux-x64.zip`, run `./mousedrive` in the `MouseDrive-vX.Y.Z` folder and follow the one-time [Linux setup](#linux). The `.deb` (Debian, Ubuntu) and `.rpm` (Fedora, openSUSE) packages install the setup rule, the `uinput` module setting, the menu entry and the icon for you and are updated by the package manager; see [packaging/README.md](packaging/README.md).
 >
 > `SHA256SUMS.txt` lists the checksums of every file.
 
@@ -231,13 +231,24 @@ cargo build --release --manifest-path MouseDrive/Cargo.toml
 cargo build --release --manifest-path MouseDrive/Cargo.toml --no-default-features
 ```
 
-Checks run by CI (see `.github/workflows/ci.yml`):
+Checks run by CI (see `.github/workflows/ci.yml`) with the pinned toolchain; every command that resolves dependencies uses `--locked`:
 
 ```powershell
 cargo fmt --manifest-path MouseDrive/Cargo.toml --check
-cargo clippy --manifest-path MouseDrive/Cargo.toml --all-targets --all-features -- -D warnings
-cargo clippy --manifest-path MouseDrive/Cargo.toml --all-targets --no-default-features -- -D warnings
+cargo clippy --locked --manifest-path MouseDrive/Cargo.toml --all-targets --all-features -- -D warnings
+cargo clippy --locked --manifest-path MouseDrive/Cargo.toml --all-targets --no-default-features -- -D warnings
 ```
+
+On Linux it also runs:
+
+```sh
+cargo test --locked --manifest-path MouseDrive/Cargo.toml
+cargo test --locked --manifest-path MouseDrive/Cargo.toml --no-default-features
+cargo deny --manifest-path MouseDrive/Cargo.toml --locked check
+bash .github/scripts/check-packaging.sh
+```
+
+`cargo deny` checks security advisories, licenses and crate sources (`MouseDrive/deny.toml` lists the accepted advisories with reasons). A release tag must match the version in `MouseDrive/Cargo.toml` and the newest release in the AppStream metainfo. The Linux release is built in an Ubuntu 22.04 container and fails if the binary needs a glibc newer than 2.35. Packaging files and the `.deb`/`.rpm` setup are described in [packaging/README.md](packaging/README.md).
 
 ## Configuration
 
@@ -274,6 +285,8 @@ Unknown options are reported on stderr and in the log, then ignored.
 ```
 MouseDrive/
 ├── build.rs               # Embeds the app icon and version info in mousedrive.exe
+├── deny.toml              # cargo-deny policy: advisories, licenses, sources
+├── about.toml, about.hbs  # cargo-about: THIRD_PARTY_LICENSES.html shipped with releases
 ├── image/                 # Logo, app icon (.svg / .png / .ico), screenshot
 └── src/
     ├── main.rs            # App binary: startup/shutdown order, eframe window

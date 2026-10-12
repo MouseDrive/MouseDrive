@@ -1,0 +1,30 @@
+# Maintainer: Toxpox <102536497+Toxpox@users.noreply.github.com>
+
+pkgname=mousedrive-bin
+pkgver=0.7.0
+pkgrel=1
+pkgdesc='Drive racing games with your mouse through a virtual wheel'
+arch=('x86_64')
+url='https://github.com/MouseDrive/MouseDrive'
+license=('GPL-3.0-or-later')
+depends=('glibc' 'gcc-libs' 'libxkbcommon' 'libxkbcommon-x11' 'wayland' 'libglvnd' 'libx11' 'libxcb' 'libxcursor' 'libxi')
+optdepends=('alsa-lib: status sounds')
+provides=('mousedrive')
+conflicts=('mousedrive')
+options=('!debug')
+install=mousedrive-bin.install
+source=("https://github.com/MouseDrive/MouseDrive/releases/download/v${pkgver}/MouseDrive-v${pkgver}-linux-x64.zip")
+sha256sums=('SKIP')
+
+package() {
+    cd "MouseDrive-v${pkgver}"
+    install -Dm755 mousedrive "$pkgdir/usr/bin/mousedrive"
+    install -Dm644 packaging/linux/70-mousedrive.rules "$pkgdir/usr/lib/udev/rules.d/70-mousedrive.rules"
+    install -Dm644 packaging/linux/mousedrive.conf "$pkgdir/usr/lib/modules-load.d/mousedrive.conf"
+    install -Dm644 packaging/linux/io.github.MouseDrive.MouseDrive.desktop "$pkgdir/usr/share/applications/io.github.MouseDrive.MouseDrive.desktop"
+    install -Dm644 packaging/linux/io.github.MouseDrive.MouseDrive.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/io.github.MouseDrive.MouseDrive.png"
+    install -Dm644 packaging/linux/io.github.MouseDrive.MouseDrive.metainfo.xml "$pkgdir/usr/share/metainfo/io.github.MouseDrive.MouseDrive.metainfo.xml"
+    install -Dm644 packaging/linux/71-mousedrive-keyboard.rules -t "$pkgdir/usr/share/doc/$pkgname/"
+    install -Dm644 README.md CHANGELOG.md THIRD_PARTY_LICENSES.html -t "$pkgdir/usr/share/doc/$pkgname/"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
