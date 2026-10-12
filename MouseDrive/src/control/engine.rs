@@ -22,6 +22,7 @@ use super::{Command, Options, Shared, Snapshot};
 const HEALTH_WINDOW_MS: f64 = 1000.0;
 const LOOP_STATS_WINDOW: usize = 1000;
 const NANOS_PER_MS: f64 = 1_000_000.0;
+const RESUME_SETTLE_MS: f64 = 1500.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AbSide {
@@ -72,6 +73,7 @@ pub(crate) struct Engine {
     guard_elapsed_ms: f64,
     desktop: DesktopWatch,
     session: SessionState,
+    settle_left_ms: f64,
     stuck_releases: u64,
     telemetry_dropped: u64,
     conn: ConnectionManager,
@@ -143,6 +145,7 @@ impl Engine {
             guard_elapsed_ms: 0.0,
             desktop: DesktopWatch::default(),
             session: SessionState::Active,
+            settle_left_ms: 0.0,
             stuck_releases: 0,
             telemetry_dropped: 0,
             conn,
@@ -204,7 +207,7 @@ impl Engine {
         let frame = self.next_frame(input, dt_ms, io);
         self.conn.write(&frame, now_ms);
         self.update_health(dt_ms, io);
-        self.update_status(now_ms, io);
+        self.update_status(dt_ms, now_ms, io);
         self.push_telemetry(shared, now_ms, input, &frame);
         shared.store_snapshot(self.snapshot(&frame, input, now_ms));
     }
@@ -276,7 +279,7 @@ impl Engine {
     }
 
     fn apply_pending(&mut self, shared: &Shared, io: &mut impl ControlIo, input: &TickInput) {
-        if self.capture && !self.state.pedals_idle(input) {
+        if !self.session.is_active() || (self.capture && !self.state.pedals_idle(input)) {
             return;
         }
         let Some(pending) = self.pending.take() else {
@@ -354,8 +357,13 @@ impl Engine {
         let was_active = self.session.is_active();
         self.session = session;
         crate::log::info(session_change_note(session));
-        if was_active != session.is_active() {
-            self.restart_input(io);
+        if was_active == session.is_active() {
+            return;
+        }
+        self.restart_input(io);
+        if session.is_active() {
+            self.settle_left_ms = RESUME_SETTLE_MS;
+            io.request_register();
         }
     }
 
@@ -472,9 +480,6 @@ impl Engine {
     }
 
     fn check_stuck_buttons(&mut self, dt_ms: f64, io: &mut impl ControlIo) {
-        if !self.session.is_active() {
-            return;
-        }
         self.guard_elapsed_ms += dt_ms;
         if self.guard_elapsed_ms < CHECK_INTERVAL_MS {
             return;
@@ -484,6 +489,9 @@ impl Engine {
             for button in [MouseButton::Left, MouseButton::Right] {
                 self.release_stuck(button, "girdi masaüstü değişti", io);
             }
+            return;
+        }
+        if !self.session.is_active() {
             return;
         }
         let (left, right) = io.buttons();
@@ -604,8 +612,21 @@ impl Engine {
         }
     }
 
-    fn update_status(&mut self, now_ms: f64, io: &mut impl ControlIo) {
+    fn settling(&mut self, dt_ms: f64, io: &impl ControlIo) -> bool {
+        if self.settle_left_ms <= 0.0 || !self.session.is_active() {
+            return false;
+        }
+        self.settle_left_ms -= dt_ms;
+        if self.settle_left_ms > 0.0 {
+            return true;
+        }
+        self.registration_ok = io.registration_ok();
+        false
+    }
+
+    fn update_status(&mut self, dt_ms: f64, now_ms: f64, io: &mut impl ControlIo) {
         self.device_filter = io.device_filter();
+        let settling = self.settling(dt_ms, io);
         let sink = self.config.input_sink_enabled;
         let inputs = StatusInputs {
             connection: self.conn.connection(),
@@ -614,8 +635,8 @@ impl Engine {
             binding: self.bind.is_some(),
             input_sink_enabled: sink,
             app_foreground: !sink && io.app_foreground(),
-            mouse_missing: self.device_filter == DeviceFilter::SelectedMissing,
-            pointer_readable: self.registration_ok,
+            mouse_missing: !settling && self.device_filter == DeviceFilter::SelectedMissing,
+            pointer_readable: settling || self.registration_ok,
             session: self.session,
             health: self.health,
         };

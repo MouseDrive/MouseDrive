@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
-use zbus::blocking::Connection;
+use zbus::blocking::{Connection, connection::Builder};
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 
 use crate::status::SessionState;
@@ -12,7 +12,9 @@ const CGROUP_FILE: &str = "/proc/self/cgroup";
 const SESSION_ENV: &str = "XDG_SESSION_ID";
 const MAX_ID_LEN: usize = 64;
 const REFRESH: Duration = Duration::from_secs(1);
-const BUS_RETRY: Duration = Duration::from_secs(10);
+const BUS_RETRY: Duration = Duration::from_secs(5);
+const METHOD_TIMEOUT: Duration = Duration::from_secs(2);
+const LOCK_HOLD: Duration = Duration::from_secs(30);
 
 const LOGIN1: &str = "org.freedesktop.login1";
 const LOGIN1_PATH: &str = "/org/freedesktop/login1";
@@ -51,7 +53,7 @@ fn run() {
         return;
     };
     crate::log::info(&format!("logind oturumu izleniyor: {id}"));
-    let mut watcher = Watcher::new(run_dir, id, BusLock::default());
+    let mut watcher = Watcher::new(run_dir, id, BusLock::default(), LOCK_HOLD);
     loop {
         CURRENT.store(encode(watcher.refresh()), Ordering::Release);
         std::thread::sleep(REFRESH);
@@ -153,25 +155,63 @@ struct Watcher<L> {
     id: String,
     lock: L,
     unreadable: bool,
+    hold: Duration,
+    locked_at: Option<Instant>,
+    holding: bool,
 }
 
 impl<L: LockHint> Watcher<L> {
-    fn new(run_dir: &Path, id: String, lock: L) -> Self {
+    fn new(run_dir: &Path, id: String, lock: L, hold: Duration) -> Self {
         Self {
             file: run_dir.join("sessions").join(&id),
             id,
             lock,
             unreadable: false,
+            hold,
+            locked_at: None,
+            holding: false,
         }
     }
 
     fn refresh(&mut self) -> SessionState {
         let active = self.read_active();
         let locked = match active {
-            Some(false) => None,
-            _ => self.lock.locked(&self.id),
+            Some(false) => {
+                self.locked_at = None;
+                self.holding = false;
+                None
+            }
+            _ => self.lock_state(),
         };
         combine(active, locked)
+    }
+
+    fn lock_state(&mut self) -> Option<bool> {
+        let now = Instant::now();
+        if let Some(locked) = self.lock.locked(&self.id) {
+            self.locked_at = locked.then_some(now);
+            self.holding = false;
+            return Some(locked);
+        }
+        let held = self
+            .locked_at
+            .is_some_and(|at| now.saturating_duration_since(at) < self.hold);
+        self.note_hold(held);
+        held.then_some(true)
+    }
+
+    fn note_hold(&mut self, held: bool) {
+        if held == self.holding {
+            return;
+        }
+        self.holding = held;
+        if held {
+            crate::log::warn(
+                "ekran kilidi durumu okunamadı; son bilinen durum (kilitli) korunuyor",
+            );
+        } else {
+            crate::log::warn("ekran kilidi durumu uzun süredir okunamıyor; oturum etkin sayılıyor");
+        }
     }
 
     fn read_active(&mut self) -> Option<bool> {
@@ -243,8 +283,14 @@ impl LockHint for BusLock {
     }
 }
 
+fn open(builder: Builder<'_>) -> zbus::Result<Connection> {
+    builder.method_timeout(METHOD_TIMEOUT).build()
+}
+
 fn connect(session: &str) -> Result<(Connection, OwnedObjectPath), String> {
-    let conn = Connection::system().map_err(|e| format!("sistem D-Bus'ına bağlanılamadı: {e}"))?;
+    let conn = Builder::system()
+        .and_then(open)
+        .map_err(|e| format!("sistem D-Bus'ına bağlanılamadı: {e}"))?;
     let reply = conn
         .call_method(
             Some(LOGIN1),
