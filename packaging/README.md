@@ -5,7 +5,7 @@ Files for installing MouseDrive on Linux. The release zip carries this folder as
 | File | Installed as | Purpose |
 |------|--------------|---------|
 | `linux/70-mousedrive.rules` | `/usr/lib/udev/rules.d/` | Lets the user of the active local session use `/dev/uinput` and read mice — the same rule as the **Setup** window |
-| `linux/71-mousedrive-keyboard.rules` | not installed (documentation) | Optional keyboard access for keyboard hotkeys and gear keys. Every program in the session can then read all keystrokes; read the comments in the file first |
+| `linux/71-mousedrive-keyboard.rules` | the package's documentation folder only (`/usr/share/doc/…`), not active | Optional keyboard access for keyboard hotkeys and gear keys. Every program in the session can then read all keystrokes; read the comments in the file first |
 | `linux/mousedrive.conf` | `/usr/lib/modules-load.d/` | Loads `uinput` at boot |
 | `linux/io.github.MouseDrive.MouseDrive.desktop` | `/usr/share/applications/` | Menu entry; `StartupWMClass` matches the window's app ID |
 | `linux/io.github.MouseDrive.MouseDrive.png` (zip only; `MouseDrive/image/icon.png` in the source) | `/usr/share/icons/hicolor/256x256/apps/` | 256 px icon |

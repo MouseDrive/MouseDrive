@@ -30,7 +30,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 
 > **Windows:** extract `MouseDrive-vX.Y.Z-windows-x64.zip`, place `vJoyInterface.dll` next to `mousedrive.exe`, and run. Each release also has `mousedrive.exe` on its own.
 >
-> **Linux:** extract `MouseDrive-vX.Y.Z-linux-x64.zip`, run `./mousedrive` in the `MouseDrive-vX.Y.Z` folder and follow the one-time [Linux setup](#linux). The `.deb` (Debian, Ubuntu) and `.rpm` (Fedora, openSUSE) packages install the setup rule, the `uinput` module setting, the menu entry and the icon for you and are updated by the package manager; see [packaging/README.md](packaging/README.md).
+> **Linux:** extract `MouseDrive-vX.Y.Z-linux-x64.zip`, run `./mousedrive` in the `MouseDrive-vX.Y.Z` folder and follow the one-time [Linux setup](#linux). The `.deb` (Debian, Ubuntu) and `.rpm` (Fedora, openSUSE) packages, and the AUR package `mousedrive-bin`, install the mouse and `/dev/uinput` rule (not the optional keyboard rule), the `uinput` module setting, the menu entry and the icon for you and are updated by the package manager; see [packaging/README.md](packaging/README.md).
 >
 > `SHA256SUMS.txt` lists the checksums of every file.
 
@@ -39,7 +39,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 **Driving**
 
 - **Steering** — Mouse X movement mapped to the virtual X axis with 5 modes: *Linear*, *Expo* (soft centre), *Smoothed* (time constant in ms), *Self-centering* and *Adaptive* (One Euro filter: smooth when slow, little lag when fast). Filters are time-based, so the feel does not change with the loop rate.
-- **Lossless mouse counts** — Raw counts are accumulated without rounding or per-event caps (only a ±16.7 million count safety limit between ticks); an optional *spike filter* (maximum steering rate, %/s) limits single-event jumps and counts what it clips.
+- **Lossless mouse counts** — Raw counts are accumulated without rounding or per-event caps (only a ±16.7 million count safety limit between ticks); an optional *steering speed limit* (%/s of full lock, off by default) caps how fast the wheel may move. Movement above the limit is delayed, never dropped: the wheel catches up afterwards. Limited ticks are counted in diagnostics.
 - **Steering speed in cm** — Shows how many centimetres of mouse travel give full lock; type a distance to set the speed. A built-in *DPI measure* tool finds your mouse DPI with a ruler; the measurement ends by itself when the mouse rests, so moving back to the window is not counted.
 - **Throttle** — Left mouse button with rise/drop times, envelope curves and an optional *throttle cut in corners* summarised as a sentence and a mini chart.
 - **Brake** — Right mouse button with a five-phase envelope (fill, full pressure, decay while held, short hold after release, release), an optional trail floor that rises with steering, and a **brake ceiling** (max output %) that scales every phase. A live timeline simulated by the real logic shows what the game will receive.
@@ -54,19 +54,19 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 
 **Feedback and diagnostics**
 
-- **One clear status** — ACTIVE, PAUSED, SETUP REQUIRED, DEVICE BUSY, CONNECTION LOST, MOUSE NOT READ, DEGRADED or BINDING, each with a sentence and a one-click action. Derived on the control thread, so it is correct even while minimised.
+- **One clear status** — ACTIVE, PAUSED, SETUP REQUIRED, DEVICE BUSY, CONNECTION LOST, MOUSE NOT READ, DEGRADED or BINDING, each with a sentence and a one-click action. Derived on the control thread, so it is correct even while minimised. On Linux, SETUP REQUIRED also appears when no mouse can be read, and PAUSED while the screen is locked or another user's session is in front: nothing you type or click reaches the game, pedals are released, and MouseDrive continues by itself afterwards.
 - **Status sounds** — Distinct tones for capture on/off, warnings, connection lost/restored, profile change. Work in exclusive fullscreen and VR.
 - **Input monitor** — Scrolling 5/10/30 s chart of mouse input against the values sent to the game, with capture and profile markers and a freeze button. *Save last 30 s as CSV* writes every sample to a file in the log folder, headed by the app version and the active profile settings.
 - **Setup and health check** — ✔/⚠/✖ list (Windows: DLL, driver, version match, device, axes, buttons; Linux: uinput, permissions, virtual wheel, whether games can read it, mouse access, keyboard access) with a "how to fix" for every failure, a live axis test and next steps. On Linux it also shows the setup commands, each step explained in one sentence.
 - **Axis bind helper** — Countdown, then only the chosen axis or button moves, so the game binds the right one.
 - **Automatic reconnect** — Retries when the virtual device is fixed or re-plugged; a vJoy removal notice or repeated write failures switch to CONNECTION LOST and it recovers on its own.
-- **Stuck-button guard** — If Windows swallows a button release (UAC prompt, Ctrl+Alt+Del, lock screen), the pedal is released automatically.
-- **Diagnostics line** — The output, measured loop rate and p99 at a glance; write failures and reconnects appear only when they happen. *Connection details* adds write counts, clipped events and mouse rate, and *Copy diagnostics* puts a bug-report summary on the clipboard.
-- **Mouse selection** — Read all mice or only one device ("pick the last moved mouse"). If the selected mouse is not found, no mouse is read until it is back, you pick it again or you choose *Use all mice* (this clears the selection).
+- **Stuck-button guard** — If Windows swallows a button release (UAC prompt, Ctrl+Alt+Del, lock screen), the pedal is released automatically. On Linux the input thread re-reads the buttons from the kernel about every 100 ms while a pedal is held and after the kernel reports lost events, and releases a pedal whose release it missed; diagnostics count both cases.
+- **Diagnostics line** — The output, measured loop rate and p99 at a glance; write failures and reconnects appear only when they happen. *Connection details* adds write counts, speed-limited ticks, mouse rate, thread priority and timing (wake-up delay, tick work, input age: median, p99, maximum), and *Copy diagnostics* puts a bug-report summary on the clipboard. On Linux the summary also names the distribution, kernel, glibc, desktop and session type, every input device with its class and why it is not used, lost-event and released-button counts, and whether the single-instance lock is held, portable mode is on and the test options are set; Bluetooth addresses are masked.
+- **Mouse selection** — Read all mice or only one device ("pick the last moved mouse"). If the selected mouse is not found, no mouse is read until it is back, you pick it again or you choose *Use all mice* (this clears the selection). On Linux, when the selected mouse is missing and exactly one mouse of the same model shows up on another port, MouseDrive reads that mouse and offers a **Save** button to keep it selected (two identical mice are not guessed between), and it warns when a tool such as input-remapper, keyd or evsieve has grabbed the selected mouse. Touchpad movement does not steer, and the touchpad of a game controller (DualShock, DualSense) is skipped, so its clicks no longer act as throttle.
 
 **App**
 
-- **Decoupled control loop** — A dedicated high-priority 250 Hz thread owns the virtual device and writes all axes in **one report per tick** (no torn frames); the window can be minimised or stall without affecting the output.
+- **Decoupled control loop** — A dedicated high-priority 250 Hz thread (on Linux real-time where the system allows it, see [Priority and timing](#using-it)) owns the virtual device and writes all axes in **one report per tick** (no torn frames); the window can be minimised or stall without affecting the output.
 - **Safe config** — Config and profile saves are atomic (`.tmp` then rename) and run in order on a background thread, so a slow disk never freezes the window; whatever is still waiting is written before MouseDrive quits. Out-of-range values are corrected and reported by name, unreadable files backed up (a plain copy) instead of overwritten.
 - **Accessibility** — Colour-blind palette (Okabe-Ito), brake always dashed in charts, screen-reader labels on custom widgets, status changes announced by screen readers (urgently for SETUP REQUIRED and CONNECTION LOST), rebindable hotkeys (including mouse side buttons; click the key button again or press Esc to cancel, listening stops after 10 s), interface scale 75–200 % (also Ctrl+Plus, Ctrl+Minus and Ctrl+0, saved like the slider).
 - **Auto-update** — Background check against GitHub releases with one-click self-update for the matching OS and CPU (download → SHA-256 check, plus the minisign signature once releases are signed → test run with `--version` → replace, keeping the previous binary as `mousedrive.old` (`mousedrive.exe.old` on Windows) until the new version has started → restart; if the new version does not start, the previous one is put back). Package-manager installs (under `/usr` except `/usr/local`, or `/nix/store`) and AppImages only get a link to the release page; a folder MouseDrive cannot write to is reported before anything is downloaded. HTTPS goes through the HTTP proxy named in `https_proxy`, `all_proxy` or `http_proxy` (SOCKS proxies are not supported; hosts in `no_proxy` are reached directly) and, on Linux, also trusts the system certificates. The restart asks first about unsaved profile changes and never happens while another window, such as the game, is in front.
@@ -168,6 +168,9 @@ services.udev.packages = [
 - **Closing from outside:** `SIGTERM`, `SIGINT` (Ctrl+C) and `SIGHUP` quit MouseDrive cleanly, even when the close button only minimizes it: app settings are saved and the virtual wheel is removed; unsaved profile changes are not saved. A second signal, or a quit that takes longer than 5 s, ends it at once.
 - **Close button without minimize:** with *Exit on close* off, × minimizes the window. Compositors that cannot minimize (sway, Hyprland) leave it open; press × a second time within 3 s to quit.
 - **Window identity:** the window uses `io.github.MouseDrive.MouseDrive` as its app ID (Wayland) and `WM_CLASS` class (X11), and asks for a dark title bar to match the app.
+- **Priority and timing:** the control and input threads ask for more priority at start, in this order. With a real-time limit (`RLIMIT_RTPRIO` above 0, for example from the `realtime` or `audio` group), they run as `SCHED_RR` at priority 10 or your limit, whichever is lower, with a CPU-time budget (`RLIMIT_RTTIME`, 200 ms) so that a thread that never sleeps cannot freeze the desktop: such a thread is moved back to normal priority and diagnostics says so. Without that, the nice value goes down to -10 or as far as `RLIMIT_NICE` allows. If neither works, MouseDrive asks rtkit (RealtimeKit, present on most desktops) over D-Bus. *Connection details* shows the result for both threads, and the wake-up delay, tick work and input age of the control loop. MouseDrive also works without extra priority.
+- **Lock screen and user switching:** while systemd-logind reports the session as locked or not in the foreground, MouseDrive reads no mouse or key, sends neutral values and shows PAUSED; it continues by itself when you unlock. A desktop that locks without telling logind may not be detected.
+- **See what MouseDrive reads:** `mousedrive --list-devices` prints every input device with its node, vendor and product ID, bus, class (mouse, absolute pointer, touchpad, keyboard, other keys) and either *in use* or the reason it is not used, for example *no permission* or *game controller*. It opens no window and needs no setup: devices your session may not open are listed as *no permission*.
 - **Sounds** use ALSA (`libasound.so.2`, also routed through PipeWire or PulseAudio). Without it MouseDrive runs silently.
 - **Check what the game receives:** `evtest` (pick *MouseDrive Virtual Wheel*) or `jstest-gtk` shows the raw axes; step by step in [In-game settings](#in-game-settings).
 
@@ -263,6 +266,7 @@ Settings are stored as TOML in one folder:
 | `profiles\<name>.toml` | Driving settings of one profile — copy it to share a setup |
 | `mousedrive.log` | Event log: UTC time in milliseconds, level, thread; repeated lines are folded, rotated at 1 MB into `mousedrive.log.old`. Written by a background thread, so the control loop never waits for the disk. On Linux it lives in `~/.local/state/mousedrive/` (`$XDG_STATE_HOME` is honoured; next to the exe in portable mode); a log left in `~/.config/mousedrive/` by an older version is moved there on start |
 | `last_crash.txt` | Next to the log: thread, location, message and backtrace of a crash. The next start shows a notice and renames it to `last_crash.old.txt` — attach it to a bug report |
+| `mousedrive-monitor-<time>.csv` | *Save last 30 s as CSV* in the input monitor writes it to the log folder; the first lines are `#` comments with the app version and the profile settings |
 | `mousedrive.lock` | Empty single-instance lock, released when MouseDrive exits. On Linux it lives in `$XDG_RUNTIME_DIR` (the config folder only when that is not set); on Windows in `%APPDATA%\MouseDrive\`, also in portable mode |
 
 Changes are saved automatically for app settings; profiles are saved with **Save** (Ctrl+S). Saves are atomic (`.tmp` then rename, the folder is flushed on Linux); a symlinked `config.toml` or profile stays a symlink and keeps its permissions. Backups and duplicated profiles are plain copies. Out-of-range values are corrected on load and reported by name; a file that cannot be read is backed up as `<file>.<timestamp>.bak` (once per content); for config.toml the defaults are used, for the active profile the last saved settings stay in use. A `config.toml` from a newer MouseDrive, or one with settings this version does not know, is backed up the same way before anything is written; if that backup fails, settings are not saved in that session. Profile names are matched exactly first and then ignoring letter case; when two profile files differ only in case (`Hypercar.toml`, `hypercar.toml`), a name that matches both is refused instead of guessing. In-game recommendations: [In-game settings](#in-game-settings).
@@ -274,6 +278,7 @@ Changes are saved automatically for app settings; profiles are saved with **Save
 | `--help`, `-h` | Print the options and exit |
 | `--version`, `-V` | Print the version and exit |
 | `--x11` / `--wayland` | Linux: open the window through X11 (XWayland) or Wayland instead of the automatic choice |
+| `--list-devices` | Linux: list the input devices, their class and why any are not used, then exit |
 | `--test-counter` | Write a test pattern to the axes instead of the mouse input |
 | `--allow-injected` | With a selected mouse, also accept input generated by software |
 | `--allow-root` | Linux: start even when run as root (not recommended) |
@@ -300,23 +305,24 @@ MouseDrive/
     ├── lib.rs             # Library: all modules below, no GUI
     ├── logic.rs, logic/   # Pure driving logic (steering, throttle, brake) + filters
     ├── curve.rs           # Envelope curve model (PCHIP eval/inverse, point editing, presets)
-    ├── control/           # Control thread: engine (tick), connection/reconnect, stuck-button guard, IO seam
+    ├── control/           # Control thread: engine (tick), connection/reconnect, stuck-button guard, absolute-deadline clock, IO seam
     ├── output.rs          # OutputBackend trait + normalised OutputFrame
     ├── vjoy.rs            # Windows output: vJoy backend (runtime DLL loading, single-report writes, removal callback)
     ├── uinput.rs          # Linux output: uinput virtual wheel
-    ├── input.rs, input/   # Input thread: lossless counts, buttons, mouse selection (Raw Input / evdev)
-    ├── keys.rs, keys/     # Key state and names (GetAsyncKeyState / evdev)
-    ├── config.rs          # Config + Tuning, validation, migration, atomic IO
+    ├── input.rs, input/   # Input thread: lossless counts, buttons, mouse selection (Raw Input / evdev); Linux: device classes and skip reasons, overflow recovery, hotplug
+    ├── keys.rs, keys/     # Key state and names (GetAsyncKeyState / evdev); Linux: logind lock and session state
+    ├── config.rs, config/ # Config + Tuning, validation, migration, atomic IO, portable-mode detection
     ├── profiles.rs        # Profile files
     ├── session.rs         # GUI editing session: epochs, undo history, save state
     ├── status.rs          # Status model and sound cue planning
-    ├── setup.rs           # Setup/health check report
+    ├── setup.rs, setup/   # Setup/health check report; Linux: udev rule scan
     ├── telemetry.rs       # Preallocated ring buffer for the input monitor (the control thread skips a sample rather than wait for it)
     ├── diagnostics.rs     # Loop timing, mouse rate, bug-report text
     ├── preview.rs         # Offline simulation for the brake timeline and throttle chart
     ├── bind.rs            # Axis bind helper
     ├── ergonomics.rs      # cm per full lock
     ├── sound.rs, sound/   # Status tones (PlaySound / ALSA)
+    ├── priority.rs        # Thread priority outcome and RLIMIT_RTTIME budget (Linux details in platform/linux/: SCHED_RR, nice, rtkit)
     ├── platform.rs, platform/ # Thread priority, timer resolution or slack, signals, alerts, child processes
     ├── instance.rs        # Single-instance lock
     ├── fsutil.rs          # Atomic writes, timestamped backups
@@ -325,7 +331,7 @@ MouseDrive/
     └── log.rs, log/       # Event log: background writer, repeat folding, bridge for the `log` crate
 ```
 
-Release history in [CHANGELOG.md](CHANGELOG.md).
+Packaging and release files are in `packaging/` and `.github/` ([packaging/README.md](packaging/README.md)). Release history in [CHANGELOG.md](CHANGELOG.md).
 
 ## Troubleshooting
 
@@ -341,10 +347,14 @@ Start with the **Setup** window: it checks every requirement and says how to fix
 | MOUSE NOT READ | Turn on **Read mouse while the game has focus** in **App settings → Mouse**. If the selected mouse is not found, plug it back in, pick it again or click **Use all mice**. On Linux, check **Mouse access** in the Setup window |
 | Linux: uinput, permission or mouse access row fails | Run the setup commands shown in the **Setup** window ([Linux setup](#one-time-setup)); they apply within seconds |
 | Linux: the capture key or the gear keys do nothing | Keyboard access is optional; see [keyboard access](#optional-keyboard-access), or bind the capture key to a mouse side button |
+| Linux: the wheel is off-centre after the system was busy, or *Some mouse input was lost* appears | The kernel dropped mouse events because MouseDrive was not scheduled in time; middle-click to recentre. Held pedals are checked again at once. *Connection details* counts the cases; if it keeps happening, check *Thread priority* there |
+| Linux: *Another tool has grabbed the selected mouse* | input-remapper, keyd or evsieve took the mouse and only its virtual copy moves. Exclude the mouse in that tool, or close it |
+| Linux: *found on a new port* | The selected mouse is missing and the same model appeared on another port; MouseDrive reads it there for now. Click **Save** to keep it selected, otherwise the old port stays saved |
+| Linux: a game controller's touchpad or a laptop touchpad does not steer | By design: touchpads are not read for steering. `mousedrive --list-devices` shows what is used and why |
 | Linux: the game does not list the wheel or binds the wrong brake axis | Check *Games can read the virtual wheel* in the Setup window. Under Proton/Wine the brake is the **Z** axis |
 | Linux: the window does not open | MouseDrive names missing system libraries in a notification and on stderr ([requirements](#requirements)). If the Wayland window fails, MouseDrive retries once through XWayland; `mousedrive --x11` forces X11. The log (`~/.local/state/mousedrive/mousedrive.log`) has the error |
 | "MouseDrive is already running" | Only one MouseDrive runs per user. Use the open window (it may be minimized) or close it first |
-| PAUSED | Press the capture key (default **F8**) |
+| PAUSED | Press the capture key (default **F8**). On Linux, PAUSED with a message about a locked screen or a session that is not in the foreground ends by itself when you unlock or switch back |
 | The game binds the wrong axis | Use the **Axis bind helper** |
 | Steering feels laggy or has a deadzone | Set the game's deadzone to 0, linearity to 1, filtering off — [in-game settings](#in-game-settings) |
 | **Brake or throttle stays pressed after MouseDrive crashed or was killed** | vJoy keeps the last values when the feeding process dies (measured with vJoy 2.2.2.0). Start MouseDrive again: it writes neutral values as soon as it takes the device. A normal exit always leaves neutral values. |
@@ -357,5 +367,7 @@ Copyright (c) 2025-2026 [Toxpox](https://github.com/Toxpox).
 MouseDrive is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](https://github.com/MouseDrive/MouseDrive/blob/main/LICENSE) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
 Releases up to v0.5.0 were published under the MIT License and remain available under it.
+
+The licenses of the libraries and fonts built into a release are listed in `THIRD_PARTY_LICENSES.html`, which is part of every release zip and package.
 
 The license grants no rights to the MouseDrive name or logo (GPL-3.0 section 7(e)). Modified versions must not be presented as the original MouseDrive (section 7(c)).
