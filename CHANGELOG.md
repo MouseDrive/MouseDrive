@@ -112,6 +112,11 @@ after it:
 
 ### Changed
 
+- **The brake lets go at once by default.** *Hold after release* now defaults
+  to 0 %, so releasing the brake button drops the brake straight to zero instead
+  of holding 6 % for half a second. A `config.toml` that already has a value
+  keeps it; *Reset this page to defaults* on the brake tab applies the new
+  default.
 - **The steering speed limit delays instead of dropping.** The optional limit
   (maximum steering rate, formerly called *spike filter*) used to discard mouse
   movement above the limit. Now the surplus is kept and applied on the

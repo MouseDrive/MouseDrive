@@ -109,7 +109,7 @@ impl Default for Tuning {
             brake_min_ratio_max: 0.55,
             brake_curve_exp: 2.0,
             brake_trail_enabled: false,
-            brake_after_release_hold_ratio: 0.06,
+            brake_after_release_hold_ratio: 0.0,
             brake_after_release_hold_ms: 500,
 
             throttle_rise_curve: Curve::default(),
