@@ -387,15 +387,46 @@ extern "C" fn on_cpu_limit(_signal: c_int) {
     let errno = unsafe { libc::__errno_location() };
     // SAFETY: errno işaretçisi thread ömrü boyunca geçerlidir.
     let saved = unsafe { *errno };
-    let param = sched_param(0);
-    let policy = libc::SCHED_OTHER | libc::SCHED_RESET_ON_FORK;
-    // SAFETY: pid 0 yalnız sınırı aşan (çağıran) thread'i normal zamanlamaya döndürür;
-    // SCHED_RESET_ON_FORK yetkisiz kaldırılamadığı için korunur.
-    if unsafe { libc::sched_setscheduler(0, policy, &param) } == 0 {
-        mark_demoted(current_tid());
+    let tid = current_tid();
+    if is_realtime(tid) {
+        demote(tid);
+    } else {
+        demote_guarded();
     }
     // SAFETY: aynı thread'in errno konumuna önceki değer yazılır.
     unsafe { *errno = saved };
+}
+
+pub(super) fn is_realtime_policy(policy: c_int) -> bool {
+    matches!(
+        policy & !libc::SCHED_RESET_ON_FORK,
+        libc::SCHED_RR | libc::SCHED_FIFO
+    )
+}
+
+fn is_realtime(tid: libc::pid_t) -> bool {
+    // SAFETY: sched_getscheduler yalnız verilen thread'in ilkesini okur; hata -1 döner.
+    is_realtime_policy(unsafe { libc::sched_getscheduler(tid) })
+}
+
+fn demote(tid: libc::pid_t) {
+    let param = sched_param(0);
+    let policy = libc::SCHED_OTHER | libc::SCHED_RESET_ON_FORK;
+    // SAFETY: tid bu süreçteki bir thread'i seçer; param yerel ve geçerli. Süre sınırını
+    // yalnız gerçek zamanlı bir thread aşabilir; SCHED_RESET_ON_FORK yetkisiz
+    // kaldırılamadığı için korunur.
+    if unsafe { libc::sched_setscheduler(tid, policy, &param) } == 0 {
+        mark_demoted(tid);
+    }
+}
+
+fn demote_guarded() {
+    for entry in &GUARDED {
+        let tid = entry.tid.load(Ordering::Acquire);
+        if tid > 0 && is_realtime(tid) {
+            demote(tid);
+        }
+    }
 }
 
 fn mark_demoted(tid: libc::pid_t) {
