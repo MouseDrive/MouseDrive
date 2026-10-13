@@ -1,6 +1,6 @@
 # Packaging
 
-Files for installing MouseDrive on Linux. The release zip carries this folder as `packaging/`; the `.deb` and `.rpm` packages and the AUR package `mousedrive-bin` install the same files.
+Files for installing MouseDrive on Linux. The release zip carries this folder as `packaging/`; the `.deb` and `.rpm` packages install the same files, and so does the AUR package `mousedrive-bin` built from `aur/PKGBUILD` (not on the AUR yet).
 
 | File | Installed as | Purpose |
 |------|--------------|---------|
@@ -11,7 +11,7 @@ Files for installing MouseDrive on Linux. The release zip carries this folder as
 | `linux/io.github.MouseDrive.MouseDrive.png` (zip only; `MouseDrive/image/icon.png` in the source) | `/usr/share/icons/hicolor/256x256/apps/` | 256 px icon |
 | `linux/io.github.MouseDrive.MouseDrive.metainfo.xml` | `/usr/share/metainfo/` | AppStream data for software centres |
 | `linux/scripts/postinst`, `postrm` | package scripts | Load `uinput`, reload the udev rules and apply them to existing devices |
-| `aur/PKGBUILD` | — | AUR package `mousedrive-bin`; each release workflow writes `pkgver` and `sha256sums` into the `aur` artifact |
+| `aur/PKGBUILD` | — | AUR package `mousedrive-bin` (not published yet); each release workflow writes `pkgver` and `sha256sums` into the `aur` artifact |
 
 Packages are built without the auto-updater (`--no-default-features`): the package manager updates them.
 

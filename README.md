@@ -30,7 +30,7 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 
 > **Windows:** extract `MouseDrive-vX.Y.Z-windows-x64.zip`, place `vJoyInterface.dll` next to `mousedrive.exe`, and run. Each release also has `mousedrive.exe` on its own.
 >
-> **Linux:** extract `MouseDrive-vX.Y.Z-linux-x64.zip`, run `./mousedrive` in the `MouseDrive-vX.Y.Z` folder and follow the one-time [Linux setup](#linux). The `.deb` (Debian, Ubuntu) and `.rpm` (Fedora, openSUSE) packages, and the AUR package `mousedrive-bin`, install the mouse and `/dev/uinput` rule (not the optional keyboard rule), the `uinput` module setting, the menu entry and the icon for you and are updated by the package manager; see [packaging/README.md](packaging/README.md).
+> **Linux:** extract `MouseDrive-vX.Y.Z-linux-x64.zip`, run `./mousedrive` in the `MouseDrive-vX.Y.Z` folder and follow the one-time [Linux setup](#linux). The `.deb` (Debian, Ubuntu) and `.rpm` (Fedora, openSUSE) packages install the mouse and `/dev/uinput` rule (not the optional keyboard rule), the `uinput` module setting, the menu entry and the icon for you and are updated by the package manager; see [packaging/README.md](packaging/README.md). A PKGBUILD for an AUR package, `mousedrive-bin`, is in `packaging/aur/`; the package is not on the AUR yet.
 >
 > `SHA256SUMS.txt` lists the checksums of every file.
 
@@ -38,11 +38,11 @@ Or browse all versions at [Releases](https://github.com/MouseDrive/MouseDrive/re
 
 **Driving**
 
-- **Steering** — Mouse X movement mapped to the virtual X axis with 5 modes: *Linear*, *Expo* (soft centre), *Smoothed* (time constant in ms), *Self-centering* and *Adaptive* (One Euro filter: smooth when slow, little lag when fast). Filters are time-based, so the feel does not change with the loop rate.
+- **Steering** — Mouse X movement mapped to the virtual X axis with 5 modes: *Linear*, *Expo* (soft centre; *centre response* sets how much of the curve stays straight, so the wheel can turn from the first count), *Smoothed* (time constant in ms), *Self-centering* and *Adaptive* (One Euro filter: smooth when slow, little lag when fast). Filters are time-based, so the feel does not change with the loop rate.
 - **Lossless mouse counts** — Raw counts are accumulated without rounding or per-event caps (only a ±16.7 million count safety limit between ticks); an optional *steering speed limit* (%/s of full lock, off by default) caps how fast the wheel may move. Movement above the limit is delayed, never dropped: the wheel catches up afterwards. Limited ticks are counted in diagnostics.
 - **Steering speed in cm** — Shows how many centimetres of mouse travel give full lock; type a distance to set the speed. A built-in *DPI measure* tool finds your mouse DPI with a ruler; the measurement ends by itself when the mouse rests, so moving back to the window is not counted.
 - **Throttle** — Left mouse button with rise/drop times, envelope curves and an optional *throttle cut in corners* summarised as a sentence and a mini chart.
-- **Brake** — Right mouse button with a five-phase envelope (fill, full pressure, decay while held, short hold after release, release), an optional trail floor that rises with steering, and a **brake ceiling** (max output %) that scales every phase. A live timeline simulated by the real logic shows what the game will receive.
+- **Brake** — Right mouse button with a five-phase envelope (fill, full pressure, decay while held, optional short hold after release — off by default, release), an optional trail floor that rises with steering, and a **brake ceiling** (max output %) that scales every phase. A live timeline simulated by the real logic shows what the game will receive.
 - **Graphical curve editors** — Drag-point envelope editors (2–8 points, linear or smooth/monotone-cubic) with presets, a live marker, numeric entry and full keyboard control.
 - **Gear buttons** — Configurable keys (default W/S) mapped to virtual buttons 1/2.
 
