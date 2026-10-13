@@ -380,6 +380,8 @@ pub struct Strings {
     pub mode_desc: [&'static str; 5],
     pub expo: &'static str,
     pub tip_expo: &'static str,
+    pub expo_linear: &'static str,
+    pub tip_expo_linear: &'static str,
     pub smoothing: &'static str,
     pub tip_smoothing: &'static str,
     pub spring: &'static str,

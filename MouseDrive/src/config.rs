@@ -42,6 +42,7 @@ pub struct Tuning {
     pub mouse_sens: f64,
     pub steering_mode: i32,
     pub steering_expo: f64,
+    pub steering_expo_linear: f64,
     pub steering_smoothing_ms: f64,
     pub steering_adaptive_min_cutoff_hz: f64,
     pub steering_adaptive_beta: f64,
@@ -83,6 +84,7 @@ impl Default for Tuning {
             mouse_sens: 3.0,
             steering_mode: 0,
             steering_expo: 1.5,
+            steering_expo_linear: 0.0,
             steering_smoothing_ms: 13.9,
             steering_adaptive_min_cutoff_hz: 5.0,
             steering_adaptive_beta: 5.0,
@@ -230,6 +232,7 @@ impl Tuning {
         clamp_f!(self, d, out, mouse_sens, 0.5, 10.0);
         clamp_i!(self, out, steering_mode, 0, 4);
         clamp_f!(self, d, out, steering_expo, 0.5, 3.0);
+        clamp_f!(self, d, out, steering_expo_linear, 0.0, 1.0);
         clamp_f!(self, d, out, steering_smoothing_ms, 0.0, MAX_SMOOTHING_MS);
         clamp_f!(self, d, out, steering_adaptive_min_cutoff_hz, 0.5, 30.0);
         clamp_f!(self, d, out, steering_adaptive_beta, 0.0, 50.0);

@@ -377,6 +377,8 @@ const BASE: Strings = Strings {
     ],
     expo: "Centre softness (expo)",
     tip_expo: "1 is linear. Higher softens the centre and speeds up the ends.",
+    expo_linear: "Centre response (%)",
+    tip_expo_linear: "Straight share of the curve. 0 keeps the centre fully soft, so small movements build up before the wheel turns; higher turns the wheel from the first count.",
     smoothing: "Smoothing (ms)",
     tip_smoothing: "Time constant: the output reaches 63% of the target in this time. Higher is smoother but adds latency. 0 = off.",
     spring: "Centering speed (1/s)",

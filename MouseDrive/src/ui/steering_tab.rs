@@ -102,6 +102,14 @@ fn mode_rows(ui: &mut Ui, cx: &Cx, t: &mut Tuning, d: &Tuning, mode: SteeringMod
         SteeringMode::Expo => {
             let p = Param::new(s.expo, s.tip_expo, d.steering_expo, 0.5..=3.0, Fmt::Num(2));
             param_row(ui, cx, &p, &mut t.steering_expo);
+            let linear = Param::new(
+                s.expo_linear,
+                s.tip_expo_linear,
+                d.steering_expo_linear,
+                0.0..=1.0,
+                Fmt::PCT0,
+            );
+            param_row(ui, cx, &linear, &mut t.steering_expo_linear);
         }
         SteeringMode::Filtered => {
             let p = Param::new(
@@ -193,6 +201,7 @@ pub fn steering_defaults(t: &Tuning) -> Tuning {
         mouse_sens: d.mouse_sens,
         steering_mode: d.steering_mode,
         steering_expo: d.steering_expo,
+        steering_expo_linear: d.steering_expo_linear,
         steering_smoothing_ms: d.steering_smoothing_ms,
         steering_adaptive_min_cutoff_hz: d.steering_adaptive_min_cutoff_hz,
         steering_adaptive_beta: d.steering_adaptive_beta,

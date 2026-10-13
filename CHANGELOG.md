@@ -28,6 +28,10 @@ after it:
 
 ### Added
 
+- **Centre response for Expo steering.** A new *Centre response (%)* setting
+  mixes a straight line into the Expo curve, so the wheel starts turning from
+  the first mouse count instead of after a numb stretch around the centre. It
+  is 0 % by default, which keeps the previous curve.
 - **Narrower device access on Linux.** The setup rule now covers `/dev/uinput`
   and mice only. Keyboards, touchpads and game controllers are no longer
   included. Keyboard access, which the capture key, the A/B key and the gear

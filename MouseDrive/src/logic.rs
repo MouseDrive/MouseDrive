@@ -140,6 +140,10 @@ fn all_finite(values: &[f64]) -> bool {
     values.iter().all(|v| v.is_finite())
 }
 
+pub fn expo_curve(norm: f64, exponent: f64, linear: f64) -> f64 {
+    linear * norm + (1.0 - linear) * norm.powf(exponent)
+}
+
 fn decay_shape_changed(old: &Tuning, new: &Tuning) -> bool {
     old.brake_posthold_curve != new.brake_posthold_curve
         || old.brake_release_total_ms != new.brake_release_total_ms
@@ -430,7 +434,8 @@ impl MouseDriveState {
         match mode {
             SteeringMode::Expo => {
                 let norm = (target.abs() / sat_range).clamp(0.0, 1.0);
-                target.signum() * norm.powf(t.steering_expo) * sat_range
+                let shaped = expo_curve(norm, t.steering_expo, t.steering_expo_linear);
+                target.signum() * shaped * sat_range
             }
             SteeringMode::Filtered => {
                 let alpha = ema_alpha(dt_ms, t.steering_smoothing_ms);

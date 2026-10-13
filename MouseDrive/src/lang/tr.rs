@@ -371,6 +371,8 @@ const BASE: Strings = Strings {
     ],
     expo: "Merkez yumuşaklığı (expo)",
     tip_expo: "1 doğrusaldır. Artırınca merkez yumuşar, uçlar hızlanır.",
+    expo_linear: "Merkez tepkisi (%)",
+    tip_expo_linear: "Eğrinin doğrusal payı. 0'da merkez tamamen yumuşaktır, küçük hareketler direksiyon dönmeden önce birikir; artırınca direksiyon ilk sayımdan itibaren döner.",
     smoothing: "Yumuşatma (ms)",
     tip_smoothing: "Zaman sabiti: çıkış, hedefin %63'üne bu sürede ulaşır. Artırınca daha yumuşak ama daha gecikmeli olur. 0 = kapalı.",
     spring: "Merkeze dönüş hızı (1/s)",
