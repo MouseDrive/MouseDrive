@@ -32,13 +32,20 @@ const RI_MOUSE_LEFT_BUTTON_UP: u16 = 0x0002;
 const RI_MOUSE_RIGHT_BUTTON_DOWN: u16 = 0x0004;
 const RI_MOUSE_RIGHT_BUTTON_UP: u16 = 0x0008;
 const RI_MOUSE_MIDDLE_BUTTON_DOWN: u16 = 0x0010;
+const RI_MOUSE_BUTTON_4_DOWN: u16 = 0x0040;
+const RI_MOUSE_BUTTON_4_UP: u16 = 0x0080;
+const RI_MOUSE_BUTTON_5_DOWN: u16 = 0x0100;
+const RI_MOUSE_BUTTON_5_UP: u16 = 0x0200;
 
 const WM_APP_REGISTER: u32 = WM_APP + 1;
 const WM_APP_FILTER: u32 = WM_APP + 2;
 
 pub struct InputState {
     counts_x: AtomicI64,
+    counts_y: AtomicI64,
     left: AtomicBool,
+    button4: AtomicBool,
+    button5: AtomicBool,
     right: AtomicBool,
     middle_clicked: AtomicBool,
     move_events: AtomicU64,
@@ -58,7 +65,10 @@ impl InputState {
     pub const fn new() -> Self {
         Self {
             counts_x: AtomicI64::new(0),
+            counts_y: AtomicI64::new(0),
             left: AtomicBool::new(false),
+            button4: AtomicBool::new(false),
+            button5: AtomicBool::new(false),
             right: AtomicBool::new(false),
             middle_clicked: AtomicBool::new(false),
             move_events: AtomicU64::new(0),
@@ -99,6 +109,11 @@ impl InputState {
                 .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |acc| {
                     Some(accumulate_counts(acc, dx))
                 });
+            let _ = self
+                .counts_y
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |acc| {
+                    Some(accumulate_counts(acc, dy))
+                });
             self.move_events.fetch_add(1, Ordering::Relaxed);
             self.last_device.store(device, Ordering::Relaxed);
         }
@@ -111,6 +126,10 @@ impl InputState {
             (RI_MOUSE_LEFT_BUTTON_UP, &self.left, false),
             (RI_MOUSE_RIGHT_BUTTON_DOWN, &self.right, true),
             (RI_MOUSE_RIGHT_BUTTON_UP, &self.right, false),
+            (RI_MOUSE_BUTTON_4_DOWN, &self.button4, true),
+            (RI_MOUSE_BUTTON_4_UP, &self.button4, false),
+            (RI_MOUSE_BUTTON_5_DOWN, &self.button5, true),
+            (RI_MOUSE_BUTTON_5_UP, &self.button5, false),
         ];
         for (mask, flag, value) in updates {
             if bf & mask != 0 {
@@ -188,6 +207,22 @@ pub fn take_counts() -> i64 {
         .clamp(-COUNT_ACCUM_LIMIT, COUNT_ACCUM_LIMIT)
 }
 
+/// Returns accumulated vertical mouse movement, resetting the accumulator.
+pub fn take_counts_y() -> i64 {
+    STATE
+        .counts_y
+        .swap(0, Ordering::Relaxed)
+        .clamp(-COUNT_ACCUM_LIMIT, COUNT_ACCUM_LIMIT)
+}
+
+/// State of the two additional mouse buttons (typically XButton1 and XButton2).
+pub fn extra_buttons() -> (bool, bool) {
+    (
+        STATE.button4.load(Ordering::Acquire),
+        STATE.button5.load(Ordering::Acquire),
+    )
+}
+
 pub fn buttons() -> (bool, bool) {
     (
         STATE.left.load(Ordering::Acquire),
@@ -210,7 +245,10 @@ pub fn force_release(button: MouseButton) -> bool {
 
 pub fn clear() {
     STATE.counts_x.store(0, Ordering::Relaxed);
+    STATE.counts_y.store(0, Ordering::Relaxed);
     STATE.left.store(false, Ordering::Release);
+    STATE.button4.store(false, Ordering::Release);
+    STATE.button5.store(false, Ordering::Release);
     STATE.right.store(false, Ordering::Release);
     STATE.middle_clicked.store(false, Ordering::Release);
 }
