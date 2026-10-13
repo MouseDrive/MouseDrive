@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="MouseDrive/image/logo-dark.png">
-    <img src="MouseDrive/image/logo-light.png" alt="MouseDrive" width="334">
-  </picture>
+  <img src="MouseDrive/image/banner.png" alt="MouseDrive: turn your mouse into a racing wheel. The main window shows the live steering, throttle and brake output.">
 </p>
 
 # MouseDrive (Rust) — v0.7.0
@@ -17,10 +14,6 @@
 MouseDrive converts mouse and keyboard input into virtual joystick signals for racing simulators: through [vJoy](https://github.com/BrunnerInnovation/vJoy) on Windows and through the kernel's uinput on [Linux](#linux).
 
 [Old C++ version](https://github.com/Toxpox/MouseDrive-old-cpp)
-
-<p align="center">
-  <img src="MouseDrive/image/MainPage.png" width="700"/>
-</p>
 
 ## Download
 
@@ -292,7 +285,7 @@ MouseDrive/
 ├── build.rs               # Embeds the app icon and version info in mousedrive.exe
 ├── deny.toml              # cargo-deny policy: advisories, licenses, sources
 ├── about.toml, about.hbs  # cargo-about: THIRD_PARTY_LICENSES.html shipped with releases
-├── image/                 # Logo, app icon (.svg / .png / .ico), screenshot
+├── image/                 # Logo, app icon (.svg / .png / .ico), README banner, screenshot (also used by the AppStream metainfo)
 └── src/
     ├── main.rs            # App binary: startup/shutdown order, eframe window
     ├── cli.rs             # Command-line options (--help, --version, --x11, --wayland, …)
