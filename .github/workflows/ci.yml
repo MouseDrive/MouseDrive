@@ -264,8 +264,6 @@ jobs:
       contents: write
       id-token: write
       attestations: write
-    env:
-      HAS_MINISIGN_KEY: ${{ secrets.MINISIGN_SECRET_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -286,18 +284,6 @@ jobs:
         run: |
           sha256sum MouseDrive-*-windows-x64.zip mousedrive.exe MouseDrive-*-linux-x64.zip *.deb *.rpm > SHA256SUMS.txt
           cat SHA256SUMS.txt
-
-      - name: Install minisign
-        if: env.HAS_MINISIGN_KEY == 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends minisign
-
-      - name: Sign checksums
-        env:
-          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
-        run: bash .github/scripts/sign-sums.sh dist/SHA256SUMS.txt "$GITHUB_REF_NAME"
 
       - name: AUR PKGBUILD
         run: bash .github/scripts/render-pkgbuild.sh "$GITHUB_REF_NAME" dist/SHA256SUMS.txt aur
@@ -328,5 +314,4 @@ jobs:
             dist/*.deb
             dist/*.rpm
             dist/SHA256SUMS.txt
-            dist/SHA256SUMS.txt.minisig
           generate_release_notes: true
