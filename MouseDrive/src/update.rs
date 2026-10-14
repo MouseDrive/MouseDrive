@@ -4,7 +4,6 @@ mod error;
 mod install;
 mod net;
 mod relaunch;
-mod signature;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -19,9 +18,7 @@ pub use self::relaunch::{Relaunch, forget_backup_later, relaunch};
 const RELEASES_API: &str = "https://api.github.com/repos/MouseDrive/MouseDrive/releases/latest";
 const MAX_ZIP_BYTES: u64 = 100 * 1024 * 1024;
 const MAX_SUMS_BYTES: u64 = 64 * 1024;
-const MAX_SIG_BYTES: u64 = 4 * 1024;
 const SUMS_NAME: &str = "SHA256SUMS.txt";
-const SIG_NAME: &str = "SHA256SUMS.txt.minisig";
 const ZIP_PREFIX: &str = "MouseDrive-";
 const SELF_TEST_TIMEOUT: Duration = Duration::from_secs(15);
 const EXE_SUFFIX: &str = std::env::consts::EXE_SUFFIX;
@@ -48,7 +45,6 @@ pub struct ReleaseInfo {
     pub html_url: String,
     pub zip_url: Option<String>,
     pub sums_url: Option<String>,
-    pub sig_url: Option<String>,
     pub zip_name: String,
 }
 
@@ -251,7 +247,6 @@ fn parse_release_json(body: &str, zip_suffix: &str) -> Option<ReleaseInfo> {
 
     let mut zip_url = None;
     let mut sums_url = None;
-    let mut sig_url = None;
     let mut zip_name = String::new();
     if let Some(assets) = v.get("assets").and_then(|a| a.as_array()) {
         for asset in assets {
@@ -265,8 +260,6 @@ fn parse_release_json(body: &str, zip_suffix: &str) -> Option<ReleaseInfo> {
                 zip_name = name.to_string();
             } else if name == SUMS_NAME {
                 sums_url = Some(url.to_string());
-            } else if name == SIG_NAME {
-                sig_url = Some(url.to_string());
             }
         }
     }
@@ -276,7 +269,6 @@ fn parse_release_json(body: &str, zip_suffix: &str) -> Option<ReleaseInfo> {
         html_url,
         zip_url,
         sums_url,
-        sig_url,
         zip_name,
     })
 }
@@ -300,12 +292,6 @@ fn run_update(
     install::remove_leftovers(&dir);
 
     let sums = net::download(sums_url, MAX_SUMS_BYTES)?;
-    signature::check(
-        signature::policy(),
-        &sums,
-        || fetch_signature(info.sig_url.as_deref()),
-        &info.version,
-    )?;
     let zip_bytes = net::download(zip_url, MAX_ZIP_BYTES)?;
     verify_checksum(&sums, &info.zip_name, &zip_bytes)?;
     let exe_bytes = extract_exe(&zip_bytes)?;
@@ -313,12 +299,6 @@ fn run_update(
     let staged = install::stage(&dir, exe, &exe_bytes)?;
     install::self_test(staged.path(), &info.version, SELF_TEST_TIMEOUT)?;
     gate.run(|| install::swap_in(exe, staged))
-}
-
-fn fetch_signature(url: Option<&str>) -> Result<String, UpdateError> {
-    let url = url.ok_or_else(|| UpdateError::Signature(format!("{SIG_NAME} yayında yok")))?;
-    let bytes = net::download(url, MAX_SIG_BYTES)?;
-    String::from_utf8(bytes).map_err(|_| UpdateError::Signature(format!("{SIG_NAME} metin değil")))
 }
 
 fn verify_checksum(sums: &[u8], zip_name: &str, zip_bytes: &[u8]) -> Result<(), UpdateError> {

@@ -28,7 +28,6 @@ pub enum UpdateError {
     Malformed(String),
     NoAsset,
     Checksum(String),
-    Signature(String),
     Archive(String),
     NoExe(io::Error),
     NotWritable {
@@ -50,9 +49,7 @@ impl UpdateError {
     pub fn reason(&self) -> FailReason {
         match self {
             UpdateError::Network { .. } | UpdateError::TooLarge { .. } => FailReason::Network,
-            UpdateError::Checksum(_) | UpdateError::Signature(_) | UpdateError::Archive(_) => {
-                FailReason::Verify
-            }
+            UpdateError::Checksum(_) | UpdateError::Archive(_) => FailReason::Verify,
             UpdateError::NotWritable { .. } => FailReason::NotWritable,
             UpdateError::SelfTest(_) => FailReason::SelfTest,
             UpdateError::Write { .. } | UpdateError::Replace(_) => FailReason::Replace,
@@ -75,7 +72,6 @@ impl fmt::Display for UpdateError {
             UpdateError::Malformed(detail) => write!(f, "beklenmeyen yanıt: {detail}"),
             UpdateError::NoAsset => f.write_str("bu sistem için indirilebilir paket yok"),
             UpdateError::Checksum(detail) => write!(f, "sağlama toplamı tutmuyor: {detail}"),
-            UpdateError::Signature(detail) => write!(f, "imza doğrulanamadı: {detail}"),
             UpdateError::Archive(detail) => write!(f, "arşiv okunamadı: {detail}"),
             UpdateError::NoExe(e) => write!(f, "çalışan programın yolu bulunamadı: {e}"),
             UpdateError::NotWritable { dir, source } => {
