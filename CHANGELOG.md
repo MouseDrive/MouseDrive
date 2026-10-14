@@ -108,11 +108,8 @@ after it:
   rule, and are updated by the package manager. The
   window has the app ID `io.github.MouseDrive.MouseDrive`, so desktops match it
   to the menu entry and icon.
-- **Signed checksums.** Releases carry build provenance attestations and, when
-  a signing key is configured, a minisign signature of `SHA256SUMS.txt` that
-  names the release version. The updater checks the signature once a public
-  key is embedded in a release; until then a missing signature is only
-  logged.
+- **Build provenance.** Releases carry build provenance attestations for every
+  download and for `SHA256SUMS.txt`.
 
 ### Changed
 

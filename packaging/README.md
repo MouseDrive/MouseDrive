@@ -47,13 +47,3 @@ cargo generate-rpm
 ## Releasing
 
 Before pushing the tag `vX.Y.Z`, set `version = "X.Y.Z"` in `MouseDrive/Cargo.toml` and add `<release version="X.Y.Z" date="…">` as the first release in the metainfo file. The workflow stops when the tag, the package version and the metainfo disagree, when `cargo deny` finds a new advisory, or when a Linux binary needs a glibc newer than 2.35.
-
-## Signed releases
-
-The release workflow signs `SHA256SUMS.txt` with [minisign](https://jedisct1.github.io/minisign/) when the repository secret `MINISIGN_SECRET_KEY` is set (and `MINISIGN_PASSWORD`, if the key has a password). The trusted comment is `MouseDrive vX.Y.Z SHA256SUMS.txt`; the updater checks that it names the release it installs.
-
-The updater only requires signatures once `RELEASE_PUBLIC_KEY` in `MouseDrive/src/update/signature.rs` holds the public key. Order matters, because every version that embeds the key rejects unsigned updates:
-
-1. Create the key pair (`minisign -G`), keep the secret key and its password safe, and store both as repository secrets.
-2. Publish a release with the secret set and check that `SHA256SUMS.txt.minisig` is attached.
-3. Put the public key into `RELEASE_PUBLIC_KEY`. From then on the workflow refuses to publish a release that it cannot sign or whose signature does not match that key.
