@@ -5,54 +5,57 @@ All notable changes to MouseDrive are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.0] - 2026-10-15
 
-Safer Linux input, narrower device access, a safer updater and proper Linux
-packages.
+Linux support with .deb, .rpm and AUR packages, a redesigned main window and
+safer updates.
 
-### Updating from 0.7.0
+### Updating from 0.6.0
 
-The updater of 0.7.0 installs the next release as before. Two things differ
-after it:
+0.6.0's updater installs this version, so the fixes below apply from the next
+update on. With 0.6.0, MouseDrive restarts as soon as the download finishes
+and does not ask about unsaved changes: save your profile and leave the game
+before you click *Update*.
 
-- **Narrower udev rule (Linux).** The old rule gave your session access to every
-  input device, keyboards and game controllers included. Setup shows a *Setup
-  rule* warning while it is installed; run the setup commands again and restart
-  the computer. Keyboard access is now an optional second rule (see *Added*).
-- **Portable mode needs a marker (Windows and Linux).** An empty file named
-  `mousedrive.portable` next to the program turns it on. A `config.toml` next to
-  the program that MouseDrive wrote itself (it has a `config_version` key)
-  keeps working without the marker. A `config.toml` there without that key is
-  not used and not rewritten; if it holds MouseDrive settings, a notice tells
-  you to add the marker.
+- **Portable mode needs a marker.** An empty file named `mousedrive.portable`
+  next to the program turns it on. A `config.toml` next to the program that
+  MouseDrive wrote itself (it has a `config_version` key) keeps working without
+  the marker. A `config.toml` there without that key is not used and not
+  rewritten; if it holds MouseDrive settings, a notice tells you to add the
+  marker.
+- **Earlier Linux test builds.** Their udev rule gave your session access to
+  every input device, keyboards and game controllers included. Setup shows a
+  *Setup rule* warning while that rule is installed; run the setup commands
+  again and restart the computer.
 
 ### Added
 
-- **Centre response for Expo steering.** A new *Centre response (%)* setting
-  mixes a straight line into the Expo curve, so the wheel starts turning from
-  the first mouse count instead of after a numb stretch around the centre. It
-  is 0 % by default, which keeps the previous curve.
-- **Narrower device access on Linux.** The setup rule now covers `/dev/uinput`
-  and mice only. Keyboards, touchpads and game controllers are no longer
-  included. Keyboard access, which the capture key, the A/B key and the gear
-  keys need, is a separate optional rule that Setup labels with its risk: every
-  program in your session can then read all keystrokes; it also covers media-key
-  devices, so media keys can be bound. The README explains
-  what the rules allow (read, inject, grab) and how to set them up on NixOS and
-  without systemd-logind.
-- **Setup shows the commands.** The Linux Setup window lists the commands as
-  selectable text with one sentence per step, instead of only copying them.
-  They work in bash, zsh and fish. New rows check keyboard access and whether
-  games can read the virtual wheel, and Setup names Steam's own uinput rule
-  when it is the only reason `/dev/uinput` works.
-- **Command-line options.** `--version` and `--help` print and exit before
-  anything else starts. On Linux, `--list-devices` lists every input device
-  with its class and the reason it is not used, `--x11` and `--wayland` choose
-  the window backend and `--allow-root` permits running as root. Unknown
-  options are reported on stderr and in the log, then ignored.
-- **One MouseDrive per user.** A second start says *MouseDrive is already
-  running* and exits. After an update the new version waits a few seconds for
-  the old one to let go.
+- **Linux support.** A native x86-64 build reads mice and keyboards through
+  evdev (hotplug through inotify) and writes to a uinput virtual joystick,
+  *MouseDrive Virtual Wheel* (X, Y, Rz, 8 buttons, vJoy's axis range). Sounds
+  use ALSA and settings live in `~/.config/mousedrive/`.
+- **Narrow device access on Linux.** The setup rule covers `/dev/uinput` and
+  mice only; keyboards, touchpads and game controllers are not included.
+  Keyboard access, which the capture key, the A/B key and the gear keys need,
+  is a separate optional rule that Setup labels with its risk: every program in
+  your session can then read all keystrokes; it also covers media-key devices,
+  so media keys can be bound. The README explains what the rules allow (read,
+  inject, grab) and how to set them up on NixOS and without systemd-logind.
+- **Linux Setup window.** It checks uinput, its permission, mouse and keyboard
+  access and whether games can read the virtual wheel, and lists the one-time
+  commands as selectable text with one sentence per step. They work in bash,
+  zsh and fish. Setup names Steam's own uinput rule when it is the only reason
+  `/dev/uinput` works.
+- **Linux downloads.** Releases include `MouseDrive-vX.Y.Z-linux-x64.zip`, with
+  a `MouseDrive-vX.Y.Z` top folder holding the program, README, LICENSE,
+  CHANGELOG, `THIRD_PARTY_LICENSES.html` and `packaging/` (udev rules, `uinput`
+  module setting, menu entry, icon, AppStream data); auto-update installs the
+  build for the running platform. Releases also include `.deb` and `.rpm`
+  packages, and a PKGBUILD for the AUR package `mousedrive-bin` is provided.
+  The packages install the setup rule for `/dev/uinput` and mice, not the
+  optional keyboard rule, and are updated by the package manager. The window
+  has the app ID `io.github.MouseDrive.MouseDrive`, so desktops match it to the
+  menu entry and icon.
 - **Clear start-up problems on Linux.** MouseDrive refuses to run as root
   (unless `--allow-root`), says so when no desktop session is available, and
   names the missing system libraries with the package to install. Messages
@@ -61,11 +64,6 @@ after it:
 - **Clean shutdown on signals (Linux).** `SIGTERM`, `SIGINT` and `SIGHUP`
   close MouseDrive properly: app settings are saved and the virtual wheel is
   removed.
-- **Event log with timestamps.** Lines carry a UTC time in milliseconds, a
-  level and the thread, and are written by a background thread that never
-  makes the control loop wait. On Linux the log lives in
-  `~/.local/state/mousedrive/`. After a crash the next start shows a notice and
-  keeps the report as `last_crash.old.txt`.
 - **Lost mouse events are detected (Linux).** When the kernel drops events
   because MouseDrive was too slow, held buttons are read again from the kernel
   and released if their release was lost, and the status line suggests
@@ -74,24 +72,49 @@ after it:
   count both cases.
 - **Pause on a locked screen or another user's session (Linux).** Input is
   ignored, neutral values go to the game, held keys are released and the status
-  shows PAUSED with the reason; MouseDrive continues by itself.
+  shows PAUSED with the reason; MouseDrive continues by itself. Input devices
+  whose access is revoked are closed, so a password typed on the lock screen
+  never reaches the capture key or the gear keys.
 - **Device recognition (Linux).** Devices are classified (mouse, absolute
   pointer, touchpad, keyboard, other keys) and every skipped device keeps its
   reason, shown in Setup, in the log and by `--list-devices`. The touchpad of a
-  DualShock or DualSense controller no longer acts as a throttle. When the
+  DualShock or DualSense controller does not act as a throttle. When the
   selected mouse is missing and exactly one mouse of the same model shows up
   on another port, that mouse is read and a *Save* button keeps it selected; a
   warning appears when input-remapper, keyd or evsieve has grabbed the
   selected mouse. Virtual devices created by other programs are treated as
   injected whatever bus they claim. Mouse lists refresh by themselves when
-  devices are plugged in or out. More keys are recognised (Brazilian and
-  Japanese layout keys, browser and launch keys).
+  devices are plugged in or out. Denied and unused input nodes are not reopened
+  on every rescan, only when their permissions change, and a temporary polling
+  error makes the input thread retry; diagnostics say so if the thread does
+  stop. More keys are recognised (Brazilian and Japanese layout keys, browser
+  and launch keys).
 - **Thread priority on Linux.** The control and input threads use real-time
   scheduling where the system allows it (with a CPU-time budget so a runaway
   thread cannot freeze the desktop), otherwise a lower nice value, otherwise
   rtkit. The result, and the wake-up delay, tick work and input age of the
   control loop (median, p99, maximum), appear in *Connection details*. The
   control loop sleeps to absolute deadlines.
+- **Command-line options.** `--version` and `--help` print and exit before
+  anything else starts. On Linux, `--list-devices` lists every input device
+  with its class and the reason it is not used, `--x11` and `--wayland` choose
+  the window backend and `--allow-root` permits running as root. Unknown
+  options are reported on stderr and in the log, then ignored.
+- **Centre response for Expo steering.** A new *Centre response (%)* setting
+  mixes a straight line into the Expo curve, so the wheel starts turning from
+  the first mouse count instead of after a numb stretch around the centre. It
+  is 0 % by default, which keeps the previous curve.
+- **One MouseDrive per user.** A second start says *MouseDrive is already
+  running* and exits. After an update the new version waits a few seconds for
+  the old one to let go.
+- **MouseDrive says when it was updated.** After the restart, a notice names
+  the old and the new version and links the changelog (from the next update
+  on).
+- **Event log with timestamps.** Lines carry a UTC time in milliseconds, a
+  level and the thread, and are written by a background thread that never
+  makes the control loop wait. On Linux the log lives in
+  `~/.local/state/mousedrive/`. After a crash the next start shows a notice and
+  keeps the report as `last_crash.old.txt`.
 - **Bigger diagnostics report.** *Copy diagnostics* adds, on Linux, the
   distribution, kernel, glibc, desktop and session type, mouse access, every
   device with class and reason, ignored and lost events, released buttons,
@@ -99,20 +122,27 @@ after it:
   portable mode. Bluetooth addresses are masked.
 - **Input monitor export.** *Save last 30 s as CSV* writes the samples to the
   log folder, headed by the app version and the active profile settings.
-- **Linux packages.** The release zip has a `MouseDrive-vX.Y.Z` top folder with
-  the program, README, LICENSE, CHANGELOG, `THIRD_PARTY_LICENSES.html` and
-  `packaging/` (udev rules, `uinput` module setting, menu entry, icon,
-  AppStream data). Releases also include `.deb` and `.rpm` packages, and a
-  PKGBUILD for the AUR package `mousedrive-bin` is provided. The packages
-  install the setup rule for `/dev/uinput` and mice, not the optional keyboard
-  rule, and are updated by the package manager. The
-  window has the app ID `io.github.MouseDrive.MouseDrive`, so desktops match it
-  to the menu entry and icon.
 - **Build provenance.** Releases carry build provenance attestations for every
   download and for `SHA256SUMS.txt`.
 
 ### Changed
 
+- **Redesigned main window.** A navigation bar on the left replaces the tabs:
+  *Overview*, *Steering*, *Throttle*, *Brake*, *Input monitor* and *App
+  settings* (formerly *General*). The top bar shows the state, the one action
+  that fixes it and short explanations; settings pages keep a *Live output*
+  panel on the right. The bottom line shows the output, loop rate and p99
+  latency and lists problems only when they happen; *Connection details*
+  opens the full diagnostics and *Copy diagnostics*. *Overview* combines the
+  live gauges with three getting-started steps and tips. In narrow windows the
+  navigation moves above the page.
+- New dark theme (carbon black, cream and red); colorblind mode keeps the
+  Okabe-Ito colours. The top bar shows the MouseDrive logo: the wheel and
+  cursor mark next to a two-tone *MouseDrive* wordmark, in the theme colours.
+  The window opens at 1180×680, so it fits 1366×768 screens.
+- **Steering deadzone is off by default** and marked experimental; it did not
+  help in practice. Profiles still on the old 2 % default are set to 0 once
+  after the update, and a notice lists them; other values are kept.
 - **The brake lets go at once by default.** *Hold after release* now defaults
   to 0 %, so releasing the brake button drops the brake straight to zero instead
   of holding 6 % for half a second. A `config.toml` that already has a value
@@ -127,8 +157,8 @@ after it:
 - **Setup required when no mouse can be read.** The status no longer says
   ACTIVE while capture is on but no mouse can be read, for example on Linux
   without access to the mouse; the top bar's one-click action opens Setup. On
-  Linux, touchpads without relative movement now also appear in the list of
-  denied devices.
+  Linux, touchpads without relative movement also appear in the list of denied
+  devices.
 - **Safer updates.** The release is chosen by operating system and CPU, and a
   build for another CPU is never installed. MouseDrive checks that it can write
   to its own folder before downloading, starts the new program with
@@ -158,9 +188,10 @@ after it:
   quits when the window manager cannot minimise. Ctrl+Plus, Ctrl+Minus and
   Ctrl+0 change the saved interface scale. Screen readers announce status
   changes (urgently for SETUP REQUIRED and CONNECTION LOST). On Linux the
-  window keeps the dark theme and asks for dark window decorations; the *full
-  guide* link opens the Linux README, which now explains `evtest` and
-  `jstest-gtk`.
+  window keeps the dark theme and asks for dark window decorations.
+- **The control loop no longer waits for the input monitor.** While the
+  monitor copies its history, the control thread skips that tick's sample
+  instead of waiting; *Copy diagnostics* shows how many were skipped.
 - **Control loop details.** Steering blends smoothly when the mode is changed
   while driving. The self-centering spring strength is capped at its maximum.
   The brake is never raised when it enters the release hold. A button pressed
@@ -170,87 +201,10 @@ after it:
   neutral axis values, and a Setup recheck keeps a working wheel instead of
   recreating it.
 - **Build.** MouseDrive uses eframe and egui 0.36 (still on the glow renderer),
-  rustls 0.23.45 and the pinned Rust 1.98.0 toolchain; the minimum supported
+  rustls 0.23.46 and the pinned Rust 1.98.0 toolchain; the minimum supported
   Rust version is 1.95. The Linux release is built on Ubuntu 22.04 and checked
   to need no glibc newer than 2.35. CI also runs the tests, a dependency
   audit (`cargo deny`) and a tag-against-version check.
-
-### Fixed
-
-- **A pedal no longer sticks after lost evdev events (Linux).** A burst of
-  mouse input above the kernel's buffer could lose a button release and leave
-  the throttle or brake pressed.
-- **Typing on the lock screen no longer reaches the game (Linux).** A password
-  typed on the lock screen could trigger the capture key or the gear keys, and
-  mouse input reached the game while the screen was locked. Input devices whose
-  access was revoked are now closed, which also releases the keys held on
-  them.
-- **Unreadable devices are not reopened on every rescan (Linux).** Denied and
-  unused input nodes are remembered until their permissions change. A
-  temporary polling error no longer ends the input thread for good; it
-  retries, and diagnostics say so if the thread does stop.
-- **A `config.toml` of another program next to MouseDrive is left alone.** A
-  file next to the program that has none of MouseDrive's settings is neither
-  used nor rewritten.
-- **Interrupted updates leave nothing behind.** Leftover files of an update that
-  was cut off are removed before the next update starts, and the cleanup of an
-  old backup can no longer delete the backup of a newer update.
-
-### Documentation
-
-- The README describes the Linux setup in full: the read, inject and grab risk
-  of the udev rules, the optional keyboard rule, NixOS, systems without
-  systemd-logind, Steam Deck, Wayland and XWayland, priority and timing, and
-  all command-line options.
-- **Proton and Wine show the brake as the Z axis**, not Rz, so controls saved on
-  Windows do not carry over axis by axis; the README and Setup say so.
-
-## [0.7.0] - 2026-10-03
-
-Linux support, a redesigned main window and safer updates.
-
-### Updating from 0.6.0
-
-0.6.0's updater installs this version, so the fixes below apply from the next
-update on. With 0.6.0, MouseDrive restarts as soon as the download finishes
-and does not ask about unsaved changes: save your profile and leave the game
-before you click *Update*.
-
-### Added
-
-- **Linux support.** A native x86-64 build reads mice and keyboards through
-  evdev (hotplug through inotify) and writes to a uinput virtual joystick,
-  *MouseDrive Virtual Wheel* (X, Y, Rz, 8 buttons, vJoy's axis range). Sounds
-  use ALSA and settings live in `~/.config/mousedrive/`. The Setup window
-  checks uinput, its permission and mouse access, and copies the one-time udev
-  commands.
-- Releases include `MouseDrive-vX.Y.Z-linux-x64.zip`; auto-update installs the
-  build for the running platform.
-- **MouseDrive says when it was updated.** After the restart, a notice names
-  the old and the new version and links the changelog (from the next update
-  on).
-
-### Changed
-
-- **Redesigned main window.** A navigation bar on the left replaces the tabs:
-  *Overview*, *Steering*, *Throttle*, *Brake*, *Input monitor* and *App
-  settings* (formerly *General*). The top bar shows the state, the one action
-  that fixes it and short explanations; settings pages keep a *Live output*
-  panel on the right. The bottom line shows the output, loop rate and p99
-  latency and lists problems only when they happen; *Connection details*
-  opens the full diagnostics and *Copy diagnostics*. *Overview* combines the
-  live gauges with three getting-started steps and tips. In narrow windows the
-  navigation moves above the page.
-- New dark theme (carbon black, cream and red); colorblind mode keeps the
-  Okabe-Ito colours. The top bar shows the MouseDrive logo: the wheel and
-  cursor mark next to a two-tone *MouseDrive* wordmark, in the theme colours.
-  The window opens at 1180×680, so it fits 1366×768 screens.
-- **Steering deadzone is off by default** and marked experimental; it did not
-  help in practice. Profiles still on the old 2 % default are set to 0 once
-  after the update, and a notice lists them; other values are kept.
-- **The control loop no longer waits for the input monitor.** While the
-  monitor copies its history, the control thread skips that tick's sample
-  instead of waiting; *Copy diagnostics* shows how many were skipped.
 
 ### Removed
 
@@ -285,10 +239,16 @@ before you click *Update*.
   terminal). The restart uses the path MouseDrive was launched with, which
   also works on Linux, where the running file is gone once the update is
   installed.
+- **Interrupted updates leave nothing behind.** Leftover files of an update that
+  was cut off are removed before the next update starts, and the cleanup of an
+  old backup can no longer delete the backup of a newer update.
 - **Unreadable profiles are backed up.** If the active profile cannot be read
   at startup, or a profile picked from the list cannot be loaded, it is copied
   to `<name>.toml.<timestamp>.bak` before a later Save can overwrite it (once
   per content, not on every start); a failed backup is reported.
+- **A `config.toml` of another program next to MouseDrive is left alone.** A
+  file next to the program that has none of MouseDrive's settings is neither
+  used nor rewritten.
 - **Profile and A/B switches wait until the pedals are really idle.** A
   switch no longer slips through when a pedal is pressed in the same moment,
   or while the throttle is still fading out after release; the new curve
@@ -305,6 +265,17 @@ before you click *Update*.
   input, both pedals are released within about 200 ms (Windows). Before, a
   press made just before the switch, which the stuck-button guard had not yet
   confirmed, could stay held.
+
+### Documentation
+
+- The README describes the Linux setup in full: the read, inject and grab risk
+  of the udev rules, the optional keyboard rule, NixOS, systems without
+  systemd-logind, Steam Deck, Wayland and XWayland, priority and timing, and
+  all command-line options. Checking the virtual wheel with `evtest` and
+  `jstest-gtk` is explained under *In-game settings*, which the *Full guide*
+  button opens on both systems.
+- **Proton and Wine show the brake as the Z axis**, not Rz, so controls saved on
+  Windows do not carry over axis by axis; the README and Setup say so.
 
 ## [0.6.0] - 2026-09-25
 
@@ -550,7 +521,6 @@ The headline of this release is the **decoupled control architecture**: the
 - First public alpha.
 - See the [V0.1.0-alpha release](https://github.com/MouseDrive/MouseDrive/releases/tag/V0.1.0-alpha).
 
-[Unreleased]: https://github.com/MouseDrive/MouseDrive/compare/v0.7.0...HEAD
 [0.7.0]: https://github.com/MouseDrive/MouseDrive/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/MouseDrive/MouseDrive/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/MouseDrive/MouseDrive/compare/v0.4.0...v0.5.0
