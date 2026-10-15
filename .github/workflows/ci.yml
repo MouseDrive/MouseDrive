@@ -23,7 +23,7 @@ jobs:
         os: [windows-latest, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install
@@ -45,7 +45,7 @@ jobs:
     name: Test (Linux)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install
@@ -65,7 +65,7 @@ jobs:
     name: Dependencies (cargo-deny)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install
@@ -85,7 +85,7 @@ jobs:
     name: Packaging files
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Validators
         run: |
@@ -109,7 +109,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install
@@ -121,7 +121,7 @@ jobs:
     name: Third-party licenses
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install
@@ -144,7 +144,7 @@ jobs:
       - name: Add the bundled font licenses
         run: bash .github/scripts/add-font-licenses.sh THIRD_PARTY_LICENSES.html MouseDrive/Cargo.toml
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: licenses
           path: THIRD_PARTY_LICENSES.html
@@ -156,7 +156,7 @@ jobs:
     needs: [lint, test, deny, packaging, version, licenses]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install
@@ -168,7 +168,7 @@ jobs:
       - name: Build release
         run: cargo build --release --locked --manifest-path MouseDrive/Cargo.toml
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: licenses
 
@@ -182,7 +182,7 @@ jobs:
           Compress-Archive -Path $stage -DestinationPath "MouseDrive-$tag-windows-x64.zip"
           Copy-Item MouseDrive/target/release/mousedrive.exe .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           if-no-files-found: error
@@ -204,7 +204,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends binutils build-essential ca-certificates curl git pkg-config unzip zip
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Rust toolchain (rust-toolchain.toml)
         run: |
@@ -222,7 +222,7 @@ jobs:
       - name: glibc gate
         run: bash .github/scripts/check-glibc.sh MouseDrive/target/release/mousedrive "$GLIBC_MAX"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: licenses
 
@@ -246,7 +246,7 @@ jobs:
           cargo deb --no-build --locked --output ../dist/
           cargo generate-rpm --output ../dist/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux
           if-no-files-found: error
@@ -265,16 +265,16 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: windows
           path: dist
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: linux
           path: dist
@@ -288,13 +288,13 @@ jobs:
       - name: AUR PKGBUILD
         run: bash .github/scripts/render-pkgbuild.sh "$GITHUB_REF_NAME" dist/SHA256SUMS.txt aur
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: aur
           path: aur/
           if-no-files-found: error
 
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/MouseDrive-*-windows-x64.zip
@@ -305,7 +305,7 @@ jobs:
             dist/SHA256SUMS.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/MouseDrive-*-windows-x64.zip
