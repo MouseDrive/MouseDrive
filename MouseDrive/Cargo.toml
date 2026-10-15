@@ -10,7 +10,7 @@ homepage = "https://github.com/MouseDrive/MouseDrive"
 repository = "https://github.com/MouseDrive/MouseDrive"
 
 [dependencies]
-libloading = "0.8"
+libloading = "0.9"
 log = "0.4"
 eframe = { version = "0.36", default-features = false, features = ["glow", "wayland", "x11", "accesskit", "default_fonts", "links"] }
 egui = "0.36"
