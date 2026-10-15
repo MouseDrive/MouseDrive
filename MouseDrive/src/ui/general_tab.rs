@@ -16,10 +16,7 @@ use super::widgets::{
 };
 use crate::lang::{Lang, fill};
 
-#[cfg(windows)]
 const GAME_GUIDE_URL: &str = "https://github.com/MouseDrive/MouseDrive#in-game-settings";
-#[cfg(target_os = "linux")]
-const GAME_GUIDE_URL: &str = "https://github.com/MouseDrive/MouseDrive/tree/linux#in-game-settings";
 pub const LOOP_INTERVALS_MS: [i32; 6] = [1, 2, 4, 5, 8, 10];
 const MOUSE_COMBO_WIDTH: f32 = 220.0;
 const SHOW_VJOY_DEVICE: bool = cfg!(windows);

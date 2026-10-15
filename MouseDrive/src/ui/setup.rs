@@ -28,7 +28,7 @@ const VJOY_CONF_EXE: &str = "vJoyConf.exe";
 const VJOY_DEFAULT_DIR: &str = r"C:\Program Files\vJoy\x64";
 
 #[cfg(target_os = "linux")]
-const SETUP_LINK_URL: &str = "https://github.com/MouseDrive/MouseDrive/tree/linux#linux";
+const SETUP_LINK_URL: &str = "https://github.com/MouseDrive/MouseDrive#linux";
 
 const SETUP_WINDOW_WIDTH: f32 = 560.0;
 const SETUP_WINDOW_HEIGHT: f32 = 520.0;
