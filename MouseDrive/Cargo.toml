@@ -16,7 +16,7 @@ eframe = { version = "0.36", default-features = false, features = ["glow", "wayl
 egui = "0.36"
 egui_plot = "0.37"
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
+toml = "1.1"
 
 flate2 = { version = "1", default-features = false, features = ["rust_backend"], optional = true }
 serde_json = { version = "1", optional = true }
