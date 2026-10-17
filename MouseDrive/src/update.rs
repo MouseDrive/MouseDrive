@@ -346,7 +346,7 @@ fn extract_exe(zip_bytes: &[u8]) -> Result<Vec<u8>, UpdateError> {
         zip::ZipArchive::new(std::io::Cursor::new(zip_bytes)).map_err(|e| archive_error(&e))?;
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).map_err(|e| archive_error(&e))?;
-        let name = file.name().to_string();
+        let name = file.name().map_err(|e| archive_error(&e))?.into_owned();
         if name.contains("..") {
             continue;
         }
