@@ -433,7 +433,7 @@ pub fn commands(ui: &mut Ui, cx: &Cx, rows: &LiveRows) {
         .id_salt("setup_nixos")
         .show(ui, |ui| {
             ui.label(s.nixos_note);
-            code_block(ui, Id::new("setup_nixos_code"), &nixos_snippet());
+            code_block(ui, Id::unique("setup_nixos_code"), &nixos_snippet());
         });
 }
 
@@ -441,7 +441,11 @@ fn steps_ui(ui: &mut Ui, salt: &str, steps: &[Step]) {
     for (i, step) in steps.iter().enumerate() {
         ui.add_space(4.0);
         ui.label(format!("{}. {}", i + 1, step.explain));
-        code_block(ui, Id::new((salt, i)), &script(std::slice::from_ref(step)));
+        code_block(
+            ui,
+            Id::unique((salt, i)),
+            &script(std::slice::from_ref(step)),
+        );
     }
 }
 
@@ -461,7 +465,7 @@ fn code_block(ui: &mut Ui, id: Id, text: &str) {
 }
 
 fn copy_row(ui: &mut Ui, cx: &Cx, label: &str, text: &str, salt: &str) {
-    let id = Id::new(salt);
+    let id = Id::unique(salt);
     ui.horizontal_wrapped(|ui| {
         let now = ui.input(|i| i.time);
         if ui.button(label).clicked() {

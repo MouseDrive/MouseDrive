@@ -7,6 +7,9 @@ unmaintained = "all"
 yanked = "deny"
 ignore = [
     { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained; it comes only through winit 0.30 wayland-csd-adwaita -> sctk-adwaita -> ab_glyph, which reads the bundled Cantarell font or the local system font found by fc-match for the Wayland client-side title bar; no maintained alternative exists before winit 0.31" },
+    { id = "RUSTSEC-2026-0370", reason = "zvariant was merged into zbus 6; it comes through zbus 5, which accesskit_unix 0.24 (egui 0.37) and atspi 0.29 still require, so zbus 6 cannot be used before they move" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names was merged into zbus 6; same zbus 5 path as RUSTSEC-2026-0370" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive was merged into zbus 6; same zbus 5 path as RUSTSEC-2026-0370" },
 ]
 
 [licenses]

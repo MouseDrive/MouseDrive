@@ -132,7 +132,7 @@ jobs:
           key: cargo-about
 
       - name: Install cargo-about
-        run: cargo install --locked --features cli cargo-about@0.9.2
+        run: cargo install --locked --features cli cargo-about@0.9.3
 
       - name: Generate THIRD_PARTY_LICENSES.html
         run: >-
@@ -238,7 +238,7 @@ jobs:
         run: bash .github/scripts/check-glibc.sh MouseDrive/target/release/mousedrive "$GLIBC_MAX"
 
       - name: Install packaging tools
-        run: cargo install --locked cargo-deb@3.8.0 cargo-generate-rpm@0.21.0
+        run: cargo install --locked cargo-deb@3.8.0 cargo-generate-rpm@0.21.1
 
       - name: Build .deb and .rpm
         working-directory: MouseDrive

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use eframe::egui::{
-    Button, ComboBox, Context, Id, Key, Modal, RichText, TextEdit, Ui, WidgetInfo, WidgetType,
+    Button, ComboBox, Context, Id, Key, Modal, RichText, Role, TextEdit, Ui, WidgetInfo,
 };
 use mousedrive::config::Tuning;
 use mousedrive::control::{AbSide, Command, Shared, Snapshot};
@@ -428,7 +428,7 @@ impl ProfilesUi {
             NameAction::Rename => s.dlg_rename,
         };
         let mut choice = None;
-        let response = Modal::new(Id::new("profile_name_dialog")).show(ctx, |ui| {
+        let response = Modal::new(Id::unique("profile_name_dialog")).show(ctx, |ui| {
             ui.set_width(DIALOG_WIDTH);
             let label = ui.label(RichText::new(title).strong());
             let edit = ui
@@ -498,7 +498,7 @@ impl ProfilesUi {
         let s = cx.s;
         let active = env.session.config().active_profile.clone();
         let mut choice = None;
-        let response = Modal::new(Id::new("profile_switch_dialog")).show(ctx, |ui| {
+        let response = Modal::new(Id::unique("profile_switch_dialog")).show(ctx, |ui| {
             ui.set_width(DIALOG_WIDTH);
             ui.label(fill(s.switch_unsaved, &[("name", &active)]));
             ui.add_space(6.0);
@@ -524,7 +524,7 @@ impl ProfilesUi {
         let s = cx.s;
         let active = env.session.config().active_profile.clone();
         let mut choice = None;
-        let response = Modal::new(Id::new("profile_delete_dialog")).show(ctx, |ui| {
+        let response = Modal::new(Id::unique("profile_delete_dialog")).show(ctx, |ui| {
             ui.set_width(DIALOG_WIDTH);
             ui.label(fill(s.delete_confirm, &[("name", &active)]));
             ui.add_space(6.0);
@@ -596,14 +596,14 @@ fn history_buttons(ui: &mut Ui, cx: &Cx, session: &mut Session) {
     let undo = ui
         .add_enabled(can_undo, Button::new("⟲"))
         .on_hover_text(cx.s.btn_undo);
-    undo.widget_info(|| WidgetInfo::labeled(WidgetType::Button, can_undo, cx.s.btn_undo));
+    undo.widget_info(|| WidgetInfo::labeled(Role::Button, can_undo, cx.s.btn_undo));
     if undo.clicked() {
         session.undo();
     }
     let redo = ui
         .add_enabled(can_redo, Button::new("⟳"))
         .on_hover_text(cx.s.btn_redo);
-    redo.widget_info(|| WidgetInfo::labeled(WidgetType::Button, can_redo, cx.s.btn_redo));
+    redo.widget_info(|| WidgetInfo::labeled(Role::Button, can_redo, cx.s.btn_redo));
     if redo.clicked() {
         session.redo();
     }

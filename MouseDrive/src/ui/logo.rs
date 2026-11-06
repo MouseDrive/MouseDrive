@@ -4,7 +4,7 @@ use std::f32::consts::{PI, TAU};
 
 use eframe::egui::text::{LayoutJob, TextFormat};
 use eframe::egui::{
-    Color32, FontId, Pos2, Rect, Sense, Shape, Stroke, Ui, Vec2, WidgetInfo, WidgetType, pos2, vec2,
+    Color32, FontId, Pos2, Rect, Role, Sense, Shape, Stroke, Ui, Vec2, WidgetInfo, pos2, vec2,
 };
 
 use super::theme;
@@ -62,7 +62,7 @@ pub fn lockup(ui: &mut Ui, background: Color32) {
     let word = galley.size() + vec2(bold, 0.0);
     let size = vec2(mark.x + MARK_GAP + word.x, mark.y.max(word.y));
     let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
-    response.widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, galley.text()));
+    response.widget_info(|| WidgetInfo::labeled(Role::Label, true, galley.text()));
     if !ui.is_rect_visible(rect) {
         return;
     }

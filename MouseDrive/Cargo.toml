@@ -1,6 +1,6 @@
 [package]
 name = "mousedrive"
-version = "0.7.0"
+version = "0.7.1"
 edition = "2024"
 rust-version = "1.95"
 license = "GPL-3.0-or-later"
@@ -12,9 +12,9 @@ repository = "https://github.com/MouseDrive/MouseDrive"
 [dependencies]
 libloading = "0.9"
 log = "0.4"
-eframe = { version = "0.36", default-features = false, features = ["glow", "wayland", "x11", "accesskit", "default_fonts", "links"] }
-egui = "0.36"
-egui_plot = "0.37"
+eframe = { version = "0.37", default-features = false, features = ["glow", "wayland", "x11", "accesskit", "clipboard", "default_fonts", "links"] }
+egui = { version = "0.37", features = ["monochrome_emoji_fonts"] }
+egui_plot = "0.38"
 serde = { version = "1", features = ["derive"] }
 toml = "1.1"
 

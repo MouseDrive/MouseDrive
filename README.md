@@ -2,7 +2,7 @@
   <img src="MouseDrive/image/banner.png" alt="MouseDrive: turn your mouse into a racing wheel. The main window shows the live steering, throttle and brake output.">
 </p>
 
-# MouseDrive (Rust) — v0.7.0
+# MouseDrive (Rust) — v0.7.1
 
 [![CI](https://github.com/MouseDrive/MouseDrive/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MouseDrive/MouseDrive/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/MouseDrive/MouseDrive)](https://github.com/MouseDrive/MouseDrive/releases/latest)
@@ -219,7 +219,7 @@ MouseDrive already shapes the input (steering mode, smoothing, throttle cut, bra
 
 ## Build
 
-`rust-toolchain.toml` pins the toolchain (Rust 1.98.0 with clippy and rustfmt); rustup installs it on the first `cargo` call. The minimum supported Rust version is 1.95 (`rust-version` in `MouseDrive/Cargo.toml`).
+`rust-toolchain.toml` pins the toolchain (Rust 1.99.1 with clippy and rustfmt); rustup installs it on the first `cargo` call. The minimum supported Rust version is 1.95 (`rust-version` in `MouseDrive/Cargo.toml`).
 
 ```powershell
 cargo build --release --manifest-path MouseDrive/Cargo.toml
