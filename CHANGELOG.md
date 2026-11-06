@@ -5,6 +5,31 @@ All notable changes to MouseDrive are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-11-07
+
+Security and dependency update. There are no new features or settings.
+
+### Security
+
+- **Update archives.** The auto-updater reads release archives with `zip`
+  9.4.1, which fixes GHSA-m665-v7pm-7grj (CVE-2026-115905): earlier versions
+  could see different file names in an archive's central directory and in its
+  local headers. MouseDrive was not exposed in practice. It opens an archive
+  only after its SHA-256 matches `SHA256SUMS.txt`, reads it through the
+  central directory, and takes only the program out of it, which it stages
+  and starts once as a self-test before installing.
+- **Certificate checks.** rustls-webpki 0.103.16 (RUSTSEC-2026-0382) rejects
+  certificate chains through the distrusted emSign intermediates. It checks
+  the update downloads' HTTPS connections.
+
+### Changed
+
+- **Build.** MouseDrive uses eframe and egui 0.37 with egui_plot 0.38, sha2
+  0.11, zip 9, toml 1.1, windows 0.62, libloading 0.9 and the pinned Rust
+  1.99.1 toolchain; the minimum supported Rust version stays 1.95. Yanked
+  `async-executor` and `clipboard-win` releases are replaced. Releases are
+  built with cargo-about 0.9.3 and cargo-generate-rpm 0.21.1.
+
 ## [0.7.0] - 2026-10-15
 
 Linux support with .deb, .rpm and AUR packages, a redesigned main window and
@@ -521,6 +546,7 @@ The headline of this release is the **decoupled control architecture**: the
 - First public alpha.
 - See the [V0.1.0-alpha release](https://github.com/MouseDrive/MouseDrive/releases/tag/V0.1.0-alpha).
 
+[0.7.1]: https://github.com/MouseDrive/MouseDrive/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/MouseDrive/MouseDrive/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/MouseDrive/MouseDrive/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/MouseDrive/MouseDrive/compare/v0.4.0...v0.5.0

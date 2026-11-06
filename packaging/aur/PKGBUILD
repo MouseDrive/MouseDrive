@@ -1,7 +1,7 @@
 # Maintainer: Toxpox <102536497+Toxpox@users.noreply.github.com>
 
 pkgname=mousedrive-bin
-pkgver=0.7.0
+pkgver=0.7.1
 pkgrel=1
 pkgdesc='Drive racing games with your mouse through a virtual wheel'
 arch=('x86_64')
