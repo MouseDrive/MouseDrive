@@ -2,7 +2,7 @@
 
 use eframe::egui::{
     Button, ComboBox, DragValue, EventFilter, Id, Key, Painter, Pos2, Rect, Response, RichText,
-    Sense, Shape, Stroke, StrokeKind, Ui, WidgetInfo, WidgetType, emath, pos2, vec2,
+    Role, Sense, Shape, Stroke, StrokeKind, Ui, WidgetInfo, emath, pos2, vec2,
 };
 use mousedrive::curve::{Curve, CurveMode, CurvePreset};
 
@@ -328,7 +328,7 @@ fn describe(
         Some(p) => format!("{title}. {p}. {}", s.curve_hint),
         None => format!("{title}. {}", s.curve_hint),
     };
-    area.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, &text));
+    area.widget_info(|| WidgetInfo::labeled(Role::Unknown, true, &text));
 }
 
 fn point_fields(

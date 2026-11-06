@@ -3,8 +3,8 @@
 use std::ops::RangeInclusive;
 
 use eframe::egui::{
-    Color32, ComboBox, Frame, Grid, Margin, Rect, Response, RichText, Sense, Slider, Stroke,
-    StrokeKind, Ui, WidgetInfo, WidgetType, pos2, vec2,
+    Color32, ComboBox, Frame, Grid, Margin, Rect, Response, RichText, Role, Sense, Slider, Stroke,
+    StrokeKind, Ui, WidgetInfo, pos2, vec2,
 };
 use mousedrive::config::Config;
 use mousedrive::keys::{KeyLabel, key_label};
@@ -190,7 +190,7 @@ fn reset_cell(ui: &mut Ui, cx: &Cx, differs: bool, default_text: &str) -> bool {
         ui.label(RichText::new("•").color(cx.pal.accent))
             .on_hover_text(cx.s.tip_changed);
         let button = ui.small_button("↺").on_hover_text(&tip);
-        button.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, &tip));
+        button.widget_info(|| WidgetInfo::labeled(Role::Button, true, &tip));
         button.clicked()
     })
     .inner
@@ -253,7 +253,7 @@ pub fn pill(ui: &mut Ui, text: &str, bg: Color32) -> Response {
 }
 
 fn progress_info(label: &str, value: f64) -> WidgetInfo {
-    let mut info = WidgetInfo::labeled(WidgetType::ProgressIndicator, true, label);
+    let mut info = WidgetInfo::labeled(Role::ProgressIndicator, true, label);
     info.value = Some((value * 100.0).round());
     info
 }

@@ -158,7 +158,7 @@ impl App {
         let [title, body, save, discard, cancel] = close_texts(s, reason);
         let name = self.session.config().active_profile.clone();
         let mut choice = None;
-        let response = Modal::new(Id::new("close_dialog")).show(ctx, |ui| {
+        let response = Modal::new(Id::unique("close_dialog")).show(ctx, |ui| {
             ui.set_width(CLOSE_DIALOG_WIDTH);
             ui.label(RichText::new(title).strong());
             ui.label(fill(body, &[("name", &name)]));
@@ -194,7 +194,7 @@ impl App {
 
     fn install_wait_dialog(&mut self, ctx: &Context, cx: &Cx, reason: CloseReason) {
         let s = cx.s;
-        let response = Modal::new(Id::new("install_wait")).show(ctx, |ui| {
+        let response = Modal::new(Id::unique("install_wait")).show(ctx, |ui| {
             ui.set_width(CLOSE_DIALOG_WIDTH);
             ui.horizontal(|ui| {
                 ui.spinner();
