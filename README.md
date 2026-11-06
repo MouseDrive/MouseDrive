@@ -219,7 +219,7 @@ MouseDrive already shapes the input (steering mode, smoothing, throttle cut, bra
 
 ## Build
 
-`rust-toolchain.toml` pins the toolchain (Rust 1.98.0 with clippy and rustfmt); rustup installs it on the first `cargo` call. The minimum supported Rust version is 1.95 (`rust-version` in `MouseDrive/Cargo.toml`).
+`rust-toolchain.toml` pins the toolchain (Rust 1.99.1 with clippy and rustfmt); rustup installs it on the first `cargo` call. The minimum supported Rust version is 1.95 (`rust-version` in `MouseDrive/Cargo.toml`).
 
 ```powershell
 cargo build --release --manifest-path MouseDrive/Cargo.toml
